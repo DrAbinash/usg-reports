@@ -65,3 +65,22 @@ Stage Summary:
 - Port 3090 avoids conflict with MRI app on port 3080
 - Database path: /app/data/db/usg_companion.db (volume mounted to ./data/db)
 - One-command deployment: upload project to NAS, run ./deploy-synology.sh
+
+---
+Task ID: 3
+Agent: Main Orchestrator
+Task: Fix React hydration mismatch error
+
+Work Log:
+- User reported hydration error in browser preview
+- Used VLM to analyze screenshot: "Recoverable Error: Hydration failed because the server rendered text didn't match the client"
+- Searched all source files for `Math.random()` calls — found 4 instances
+- Identified root cause: `Math.random()` in `src/lib/mock-data.ts` line 27 (`createImages` function) generates different `qualityScore` values during SSR vs client hydration
+- The mock data is imported at module level by the Zustand store, so `Math.random()` executes during both server rendering and client hydration, producing different values
+- Fixed by replacing `Math.random()` with deterministic formula: `0.7 + (((i * 17 + 7) % 11) / 11) * 0.3`
+- Verified: other `Math.random()` calls are in sidebar.tsx (not rendered) and API routes (server-only), so no additional fixes needed
+- Server compiled and served GET / 200 successfully with no hydration error
+
+Stage Summary:
+- Hydration error fixed by eliminating non-deterministic `Math.random()` in SSR render path
+- Quality scores now deterministic but still produce varied values (0.70–1.00 range)

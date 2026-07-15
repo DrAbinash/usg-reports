@@ -24,7 +24,7 @@ const createImages = (prefix: string, count: number): DicomImage[] =>
     sopUid: `${prefix}-sop-${i}`,
     instanceNumber: i + 1,
     imageType: ['BPD', 'HC', 'AC', 'FL', 'PLACENTA', 'CERVIX', 'DOPPLER', 'BODY', 'SPINE', 'HEART'][i % 10],
-    qualityScore: 0.7 + Math.random() * 0.3,
+    qualityScore: 0.7 + (((i * 17 + 7) % 11) / 11) * 0.3,
     aiLabel: ['Fetal Head', 'Fetal Head', 'Fetal Abdomen', 'Fetal Femur', 'Placenta', 'Cervix', 'Umbilical Artery Doppler', 'Fetal Body', 'Fetal Spine', 'Fetal Heart'][i % 10],
     isKeyImage: i < 4,
     isApproved: i < 2,

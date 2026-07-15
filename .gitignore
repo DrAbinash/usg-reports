@@ -1,0 +1,56 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Build output
+.next
+out
+dist
+build
+
+# Environment files (contain secrets)
+.env
+.env.local
+.env.production
+
+# Database files (persisted via volume on Synology)
+db/*.db
+db/*.db-journal
+db/*.db-wal
+data/
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+server.log
+dev.log
+
+# Tool artifacts
+tool-results
+download
+upload
+mini-services
+examples
+
+# Prisma migration history (schema + generate is enough for fresh deploy)
+prisma/migrations
+
+# Sandbox environment files (not part of the app)
+.zscripts
+skills
+Caddyfile
+.zscripts/
+upload/
+download/
+tool-results/

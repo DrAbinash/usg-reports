@@ -1,0 +1,192 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Patient {
+  id          String   @id @default(cuid())
+  name        String
+  age         Int
+  sex         String
+  phone       String?
+  address     String?
+  uhid        String   @unique
+  referringDoctor String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  studies     Study[]
+  pcpndtForms PcpndtForm[]
+}
+
+model Study {
+  id            String        @id @default(cuid())
+  studyUid      String        @unique
+  studyDate     DateTime
+  studyType     String        // OB, PELVIS, ABDOMEN, THYROID, BREAST, SCROTUM, DOPPLER, etc.
+  studyDesc     String?
+  machine       String        @default("GE Voluson E9")
+  status        String        @default("pending") // pending, in-progress, reporting, qa, signed
+  patientId     String
+  patient       Patient       @relation(fields: [patientId], references: [id])
+  series        Series[]
+  measurements  Measurement[]
+  report        Report?
+  aiSuggestions AiSuggestion[]
+  keyImages     KeyImage[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Series {
+  id            String        @id @default(cuid())
+  seriesUid     String
+  seriesDesc    String?
+  seriesNumber  Int
+  modality      String        @default("US")
+  studyId       String
+  study         Study         @relation(fields: [studyId], references: [id])
+  images        DicomImage[]
+  createdAt     DateTime      @default(now())
+}
+
+model DicomImage {
+  id            String        @id @default(cuid())
+  sopUid        String        @unique
+  sopClassUid   String?
+  instanceNumber Int
+  seriesId      String
+  series        Series        @relation(fields: [seriesId], references: [id])
+  imageType     String?       // BPD, HC, AC, FL, PLACENTA, CERVIX, DOPPLER, etc.
+  qualityScore  Float?
+  aiLabel       String?
+  thumbnailPath String?
+  filePath      String?
+  isKeyImage    Boolean       @default(false)
+  isApproved    Boolean       @default(false)
+  frameNumber   Int?
+  createdAt     DateTime      @default(now())
+}
+
+model Measurement {
+  id            String        @id @default(cuid())
+  studyId       String
+  study         Study         @relation(fields: [studyId], references: [id])
+  name          String        // BPD, HC, AC, FL, CRL, EFW, etc.
+  value         Float
+  unit          String        // mm, cm, g, weeks, bpm, etc.
+  category      String        // OB, PELVIS, ABDOMEN, DOPPLER, etc.
+  gestationalAge String?      // calculated GA if applicable
+  percentile    Float?
+  source        String        @default("dicom_sr") // dicom_sr, dicom_tag, ge_private, ai, ocr, manual
+  confidence    Float?
+  sopUid        String?
+  seriesUid     String?
+  frameNumber   Int?
+  isVerified    Boolean       @default(false)
+  isEdited      Boolean       @default(false)
+  originalValue Float?
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Report {
+  id            String        @id @default(cuid())
+  studyId       String        @unique
+  study         Study         @relation(fields: [studyId], references: [id])
+  clinicalInfo  String?
+  findings      String
+  impression    String
+  recommendation String?
+  technique     String?
+  comparison    String?
+  reportStatus  String        @default("draft") // draft, reviewed, signed
+  signedBy      String?
+  signedAt      DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model AiSuggestion {
+  id            String        @id @default(cuid())
+  studyId       String
+  study         Study         @relation(fields: [studyId], references: [id])
+  category      String        // finding, alert, quality, missing, comparison
+  message       String
+  severity      String        @default("info") // info, warning, critical
+  isDismissed   Boolean       @default(false)
+  isAccepted    Boolean?
+  source        String?       // measurement, image, report, qa
+  createdAt     DateTime      @default(now())
+}
+
+model KeyImage {
+  id            String        @id @default(cuid())
+  studyId       String
+  study         Study         @relation(fields: [studyId], references: [id])
+  imageId       String?
+  category      String        // BPD, HC, AC, FL, PLACENTA, CERVIX, DOPPLER, etc.
+  rank          Int           @default(1)
+  isApproved    Boolean       @default(false)
+  aiScore       Float?
+  createdAt     DateTime      @default(now())
+}
+
+model PcpndtForm {
+  id            String        @id @default(cuid())
+  patientId     String
+  patient       Patient       @relation(fields: [patientId], references: [id])
+  studyId       String?
+  formNumber    String?
+  formDate      DateTime      @default(now())
+  husbandName   String?
+  husbandAge    Int?
+  husbandAddress String?
+  referral      String?
+  lmp           DateTime?
+  edd           DateTime?
+  currentGa     String?
+  gravida       Int?
+  para          Int?
+  living        Int?
+  abortion      Int?
+  previousUsg   String?
+  previousUsgDate DateTime?
+  previousGa    String?
+  findings      String?
+  impression    String?
+  sexDetermined String?       // NOT DETERMINED, MALE, FEMALE
+  formStatus    String        @default("draft")
+  signedBy      String?
+  signedAt      DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model DoctorPreference {
+  id            String        @id @default(cuid())
+  doctorId      String
+  studyType     String
+  template      String        // JSON string of preferred report template
+  phrases       String        // JSON string of preferred phrases
+  recommendations String?     // JSON string of preferred recommendations
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model AuditLog {
+  id            String        @id @default(cuid())
+  studyId       String?
+  action        String
+  entityType    String?       // measurement, report, image, pcpndt
+  entityId      String?
+  oldValue      String?
+  newValue      String?
+  performedBy   String?
+  aiGenerated   Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+}

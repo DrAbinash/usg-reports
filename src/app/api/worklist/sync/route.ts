@@ -29,9 +29,26 @@ function guessRegion(testName: string, modality: string): string {
     if (/spine|dorso|lumbar|cervical|sacrum/.test(t)) return "CT Spine";
     return "CT Head";
   }
+  // Whole-body / combined screening studies first (before part-level rules)
+  if (/whole body/.test(t)) return "Whole Body Screening";
+  if (/whole spine|\bwss\b/.test(t)) return "Whole Spine Screening";
+  if (/screening/.test(t) && /cervical/.test(t) && /dorsal/.test(t)) return "Whole Spine Screening";
+  // Musculoskeletal
+  if (/knee/.test(t)) return "Knee Joint";
+  if (/shoulder/.test(t)) return "Shoulder Joint";
+  if (/elbow/.test(t)) return "Elbow Joint";
+  if (/wrist|hand/.test(t)) return "Wrist Joint";
+  if (/sacro|\bs\s*i\b|si joint/.test(t)) return "SI Joint";
+  if (/ankle|foot|heel|calcane/.test(t)) return "Ankle Joint";
+  // Neuroradiology
+  if (/orbit|eye/.test(t)) return "Orbit";
+  if (/mastoid|temporal bone/.test(t)) return "Mastoid";
+  if (/brachial/.test(t)) return "Brachial Plexus";
+  if (/dorso/.test(t)) return "DL Spine";
   if (/lumbar|lumbosacral|\bls\b/.test(t)) return "LS Spine";
   if (/cervical/.test(t)) return "Cervical Spine";
-  if (/brain|pituitary|head/.test(t)) return "Brain";
+  if (/hip|femur|pelvis/.test(t)) return "Hip Joint";
+  if (/brain|pituitary|head|sellar|cp angle|sell/.test(t)) return "Brain";
   return "Brain";
 }
 

@@ -106,5 +106,9 @@ export function composeFindingsOpening(
       : uniq.length === 2
         ? `${uniq[0]} and ${uniq[1]}`
         : `${uniq.slice(0, -1).join(", ")} and ${uniq[uniq.length - 1]}`;
-  return `${base} WITH ${joined.toUpperCase()}`;
+  // Titles that already contain "WITH" (e.g. "MRI LS SPINE WITH SCREENING
+  // OF CERVICAL & DORSAL SPINE") join the pathology with a dash instead of
+  // stacking a second "WITH".
+  const sep = /\bwith\b/i.test(base) ? " — " : " WITH ";
+  return `${base}${sep}${joined.toUpperCase()}`;
 }

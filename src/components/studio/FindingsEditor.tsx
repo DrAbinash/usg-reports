@@ -46,6 +46,8 @@ export type FormatOption = {
 const LEVELS: Record<string, string[]> = {
   "LS Spine": ["L1-L2", "L2-L3", "L3-L4", "L4-L5", "L5-S1"],
   "Cervical Spine": ["C2-C3", "C3-C4", "C4-C5", "C5-C6", "C6-C7", "C7-T1"],
+  "DL Spine": ["D9-D10", "D10-D11", "D11-D12", "D12-L1", "L1-L2", "L2-L3", "L3-L4", "L4-L5", "L5-S1"],
+  "Whole Spine Screening": ["C4-C5", "C5-C6", "C6-C7", "D9-D10", "D11-D12", "L1-L2", "L3-L4", "L4-L5", "L5-S1"],
   "CT Spine": ["C5-C6", "C6-C7", "D4-D5", "D8-D9", "D11-D12", "D12-L1", "L1-L2", "L3-L4", "L4-L5", "L5-S1"],
 };
 

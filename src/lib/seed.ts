@@ -35,6 +35,10 @@ const DEMO_ORDERS: DemoOrder[] = [
   // Unlinked: present in Orthanc, no CARE order
   { accession: "ORTH-7101", name: "Walk-in Patient (Orthanc)", age: "60/F", sex: "F", referrer: "—", test: "MRI Brain (unmatched)", modality: "MR", region: "Brain", status: "TO_REPORT", uid: "1.2.840.113619.2.55.3.2831183777.781.1676812345.901", studyDate: new Date(Date.now() - 26 * HOURS) },
   { accession: "ORTH-7102", name: "Walk-in Patient (Orthanc)", age: "52/M", sex: "M", referrer: "—", test: "CT Head (unmatched)", modality: "CT", region: "CT Head", status: "TO_REPORT", uid: "1.2.840.113619.2.55.3.2831183777.781.1676812345.902", studyDate: new Date(Date.now() - 30 * HOURS) },
+  // New regions from the doctor's format library (joints / screening)
+  { accession: "CARE-24087", name: "Ramesh Hansda", age: "34/M", sex: "M", mrn: "MRN-10440", referrer: "Dr. T. Jyoti", test: "MRI Right Knee Joint", modality: "MR", region: "Knee Joint", billing: "PAID", status: "TO_REPORT", studyDate: new Date(Date.now() - 6 * HOURS) },
+  { accession: "CARE-24088", name: "Fulmani Devi", age: "58/F", sex: "F", mrn: "MRN-10451", referrer: "Dr. A. K. Singh", test: "MRI Screening Whole Spine", modality: "MR", region: "Whole Spine Screening", billing: "DUE", status: "TO_REPORT", studyDate: new Date(Date.now() - 9 * HOURS) },
+  { accession: "CARE-24089", name: "Sohan Kumar", age: "45/M", sex: "M", mrn: "MRN-10462", referrer: "Dr. K. Sasikumar", test: "MRI Both Hip Joint Screening", modality: "MR", region: "Hip Joint", billing: null, status: "AWAITING_IMAGES", studyDate: new Date(Date.now() - 1 * HOURS) },
 ];
 
 const DEMO_REPORTED: DemoOrder[] = [
@@ -49,10 +53,11 @@ export async function ensureSeed(): Promise<void> {
   if (phraseCount === 0) {
     await db.quickPhrase.createMany({ data: PHRASE_SEEDS });
   } else {
-    // Drift sync: back-fill phrases added after first boot (e.g. titleFragment
-    // phrases). Fast probe first so steady-state cost is one query.
+    // Drift sync: back-fill phrases added after first boot (e.g. joint
+    // regions from the doctor's format library). Fast probe first so
+    // steady-state cost is one query.
     const probe = await db.quickPhrase.findUnique({
-      where: { modality_region_label: { modality: "MR", region: "Brain", label: "Acute infarct" } },
+      where: { modality_region_label: { modality: "MR", region: "Knee Joint", label: "Joint effusion" } },
     });
     if (!probe) {
       for (const p of PHRASE_SEEDS) {
@@ -108,10 +113,14 @@ export async function ensureSeed(): Promise<void> {
       });
     }
   }
-  // 3. Technique templates
-  const techCount = await db.techniqueTemplate.count();
-  if (techCount === 0) {
-    await db.techniqueTemplate.createMany({ data: TECHNIQUE_SEEDS });
+  // 3. Technique templates — create-if-missing for each seed region
+  for (const t of TECHNIQUE_SEEDS) {
+    const ex = await db.techniqueTemplate.findUnique({
+      where: { modality_region: { modality: t.modality, region: t.region } },
+    });
+    if (!ex) {
+      await db.techniqueTemplate.create({ data: t });
+    }
   }
   // 4. Hospital defaults (only fill blanks — never overwrite user edits)
   const s = await db.hospitalSettings.findUnique({ where: { id: "singleton" } });

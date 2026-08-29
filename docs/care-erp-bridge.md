@@ -1,8 +1,19 @@
 # CARE ERP ↔ Reporting Studio Bridge — Server-Side Endpoints
 
-Paste this into Cursor **in the `care-on-synology1` repo** when the Studio's
-Settings → Integrations is ready to connect. It adds the three API-key-guarded
-endpoints the Studio calls. The Studio side is already built — nothing to do there.
+> **STATUS: SHIPPED** — implemented in the ERP as **PR #639** (commit `568f866d`,
+> merged 30 Aug 2026): `artifacts/api-server/src/routes/internal-reporting-studio.ts`.
+> This document is kept as the contract reference for the Studio side.
+>
+> Highlights of the shipped implementation:
+> - Auth via `x-api-key` + `REPORTING_STUDIO_API_KEY` (503 when unset, 401 on mismatch).
+> - Mounted **before** the `/internal` radiology catch-all so staff auth doesn't intercept.
+> - `POST /finalize` is idempotent (repeat finalize → `{ ok: true, idempotent: true }`),
+>   creates `patient_reports` rows, sets `REPORT_FINAL`, writes a `REPORT_FINAL` audit log entry,
+>   and guards on Match Center identity + PCPNDT Form F (obstetric USG) with clear 409 messages.
+> - `GET /billing-status` resolves accessions on both the worklist and billed-studies tables.
+>
+> Ops to connect: set `REPORTING_STUDIO_API_KEY` in the ERP compose/.env, paste the same
+> key into Studio Settings → Integrations. 11/11 Vitest bridge tests passed at merge.
 
 ---
 
@@ -113,10 +124,13 @@ billing-status lookup as #2. Unknown accessions may be omitted from the map.
 ## Wiring the Studio
 
 In the Studio (already built): Settings → Integrations →
-- API base URL = the ERP's public base (e.g. `https://care.caredeoghar.com`)
+- API base URL = the ERP's scheme+host+port, WITHOUT a trailing `/api`
+  (LAN: `http://172.16.1.139:8888` — the Studio appends `/api/internal/...` itself)
 - API key = the generated key
 
 Press **Test connection** — it calls `ping` and shows a green/red inline result.
+Error bodies from the ERP (Match Center 409, PCPNDT 409, 503 key-not-configured)
+are surfaced verbatim in the Studio's sync banner.
 
 ## Security notes
 

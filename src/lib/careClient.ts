@@ -27,7 +27,19 @@ async function careFetch<T>(path: string, init?: RequestInit): Promise<CareResul
       signal: controller.signal,
       cache: "no-store",
     });
-    if (!res.ok) return { ok: false, error: `CARE responded ${res.status}` };
+    if (!res.ok) {
+      // Surface the ERP's own message (e.g. Match Center 409, PCPNDT 409,
+      // 503 key-not-configured) so the doctor knows exactly what to fix.
+      let detail = "";
+      try {
+        const body = (await res.json()) as { error?: string; message?: string };
+        detail = body?.error ?? body?.message ?? "";
+      } catch {
+        /* non-JSON error body */
+      }
+      const brief = detail ? `: ${detail}` : "";
+      return { ok: false, error: `CARE responded ${res.status}${brief}` };
+    }
     const data = (await res.json()) as T;
     return { ok: true, data };
   } catch (e) {

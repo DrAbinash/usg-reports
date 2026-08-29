@@ -26,7 +26,15 @@ async function finalizeReportPayload(p: { order: { accessionNumber: string; care
 function guessRegion(testName: string, modality: string): string {
   const t = testName.toLowerCase();
   if (modality === "CT") {
-    if (/spine|dorso|lumbar|cervical|sacrum/.test(t)) return "CT Spine";
+    if (/spine|dorso|lumbar|cervical|sacrum|pott|spondyl/.test(t)) return "CT Spine";
+    if (/chest|thorax|lung|koch/.test(t)) return "CT Chest";
+    if (/abd|abdomen|pancrea|liver|kidney|kub|appendic/.test(t)) return "CT Abdomen";
+    if (/pns|sinus|nose/.test(t)) return "CT PNS";
+    if (/orbit|eye/.test(t)) return "CT Orbit";
+    if (/mastoid|temporal|ear|csom/.test(t)) return "CT Temporal Bone";
+    if (/face|zygo|maxill|nasal|mandib/.test(t)) return "CT Face";
+    if (/neck|thyroid|goiter/.test(t)) return "CT Neck";
+    if (/pelvis|acetab|sacro?coccy/.test(t)) return "CT Pelvis";
     return "CT Head";
   }
   // Whole-body / combined screening studies first (before part-level rules)

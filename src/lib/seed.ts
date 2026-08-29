@@ -39,6 +39,10 @@ const DEMO_ORDERS: DemoOrder[] = [
   { accession: "CARE-24087", name: "Ramesh Hansda", age: "34/M", sex: "M", mrn: "MRN-10440", referrer: "Dr. T. Jyoti", test: "MRI Right Knee Joint", modality: "MR", region: "Knee Joint", billing: "PAID", status: "TO_REPORT", studyDate: new Date(Date.now() - 6 * HOURS) },
   { accession: "CARE-24088", name: "Fulmani Devi", age: "58/F", sex: "F", mrn: "MRN-10451", referrer: "Dr. A. K. Singh", test: "MRI Screening Whole Spine", modality: "MR", region: "Whole Spine Screening", billing: "DUE", status: "TO_REPORT", studyDate: new Date(Date.now() - 9 * HOURS) },
   { accession: "CARE-24089", name: "Sohan Kumar", age: "45/M", sex: "M", mrn: "MRN-10462", referrer: "Dr. K. Sasikumar", test: "MRI Both Hip Joint Screening", modality: "MR", region: "Hip Joint", billing: null, status: "AWAITING_IMAGES", studyDate: new Date(Date.now() - 1 * HOURS) },
+  // CT body regions from the doctor's CT format library
+  { accession: "CARE-24090", name: "Anil Mandal", age: "61/M", sex: "M", mrn: "MRN-10477", referrer: "Dr. S. Kumar", test: "CT Chest Plain & Contrast", modality: "CT", region: "CT Chest", billing: "DUE", status: "TO_REPORT", studyDate: new Date(Date.now() - 7 * HOURS) },
+  { accession: "CARE-24091", name: "Sabita Devi", age: "47/F", sex: "F", mrn: "MRN-10484", referrer: "Dr. A. K. Singh", test: "CT Whole Abdomen", modality: "CT", region: "CT Abdomen", billing: "PAID", status: "TO_REPORT", studyDate: new Date(Date.now() - 2 * HOURS) },
+  { accession: "CARE-24092", name: "Md. Salim", age: "39/M", sex: "M", mrn: "MRN-10490", referrer: "Dr. R. Sharma", test: "CT PNS Coronal", modality: "CT", region: "CT PNS", billing: null, status: "AWAITING_IMAGES", studyDate: new Date(Date.now() - 4 * HOURS) },
 ];
 
 const DEMO_REPORTED: DemoOrder[] = [
@@ -111,6 +115,22 @@ export async function ensureSeed(): Promise<void> {
           sortOrder: f.sortOrder,
         },
       });
+    }
+  }
+  // Retire builtin formats whose key left the seed library (e.g. the generic
+  // CT formats replaced by the doctor's own CT library). Reports already
+  // referencing a retired key keep it — the format just stops being builtin.
+  const seedKeys = FORMAT_SEEDS.map((f) => f.key);
+  const stale = await db.reportFormat.findMany({
+    where: { isBuiltin: true, key: { notIn: seedKeys } },
+    select: { id: true, key: true },
+  });
+  for (const st of stale) {
+    const used = await db.report.findFirst({ where: { formatKey: st.key }, select: { id: true } });
+    if (used) {
+      await db.reportFormat.update({ where: { id: st.id }, data: { isBuiltin: false } });
+    } else {
+      await db.reportFormat.delete({ where: { id: st.id } });
     }
   }
   // 3. Technique templates — create-if-missing for each seed region

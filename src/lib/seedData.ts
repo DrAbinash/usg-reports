@@ -8,13 +8,16 @@
  * the doctor's own report library (docs/mri-report-formats).
  */
 
-// Complete-report formats: MRI seeds curated verbatim from the doctor's
-// own library (docs/mri-report-formats); CT seeds retained below.
+// Complete-report formats: MRI + CT seeds curated verbatim from the
+// doctor's own libraries (docs/mri-report-formats + docs/report-formats/ct).
 import { MR_BRAIN_FORMATS } from "@/lib/formats/mrBrain";
 import { MR_BRAIN_PATHOLOGY_FORMATS } from "@/lib/formats/mrBrainPathology";
 import { MR_SPINE_FORMATS } from "@/lib/formats/mrSpine";
 import { MR_JOINT_FORMATS } from "@/lib/formats/mrJoints";
 import { MR_OTHER_FORMATS } from "@/lib/formats/mrOther";
+import { CT_BRAIN_FORMATS } from "@/lib/formats/ctBrain";
+import { CT_SPINE_FORMATS } from "@/lib/formats/ctSpineMsk";
+import { CT_BODY_FORMATS } from "@/lib/formats/ctBody";
 
 export type PhraseSeed = {
   region: string;
@@ -159,6 +162,48 @@ export const PHRASE_SEEDS: PhraseSeed[] = [
   { region: "CT Spine", modality: "CT", label: "Canal stenosis", concept: "canal_stenosis", text: "At {level}, there is {severity} central canal stenosis.", sortOrder: 4 },
   { region: "CT Spine", modality: "CT", label: "Facet OA", concept: "facet_joint", text: "Facet arthropathy is noted at {level}.", sortOrder: 5 },
   { region: "CT Spine", modality: "CT", label: "Paraspinal hematoma", concept: "hematoma", text: "{laterality} paraspinal hematoma is noted.", sortOrder: 6 },
+
+  // ── CT Head (scaffold lines from the doctor's own NCCT format) ────────
+  { region: "CT Head", modality: "CT", label: "Hemispheres normal", concept: "parenchyma", text: "Bilateral cerebral hemispheres are normal in attenuation.", sortOrder: 12 },
+  { region: "CT Head", modality: "CT", label: "Ganglia normal", concept: "deep_gray", text: "Bilateral basal ganglia and thalamus are normal in attenuation.", sortOrder: 13 },
+  { region: "CT Head", modality: "CT", label: "Post fossa normal", concept: "posterior_fossa", text: "Posterior fossa structures are normal in attenuation.", sortOrder: 14 },
+  { region: "CT Head", modality: "CT", label: "Sulci normal", concept: "sulci", text: "Cortical sulci and sylvian fissures are normal.", sortOrder: 15 },
+  { region: "CT Head", modality: "CT", label: "Ventricles normal", concept: "ventricles", text: "Ventricular system is normal.", sortOrder: 16 },
+  { region: "CT Head", modality: "CT", label: "Falx central", concept: "midline", text: "Falx is central.", sortOrder: 17 },
+  { region: "CT Head", modality: "CT", label: "No extra-axial collection", concept: "extra_axial", text: "There is no extra-axial collection.", sortOrder: 18 },
+  { region: "CT Head", modality: "CT", label: "Calvarium intact", concept: "calvarium", text: "Bony calvarium is intact.", sortOrder: 19 },
+  { region: "CT Head", modality: "CT", label: "Scalp oedema", concept: "soft_tissue", text: "Soft tissue swelling in {laterality} fronto-temporo-parietal region.", titleFragment: "scalp oedema", sortOrder: 20 },
+  { region: "CT Head", modality: "CT", label: "Acute SAH", concept: "sah", text: "Hyperdense area of blood density in the interhemispheric fissure — S/O acute subarachnoid haemorrhage.", titleFragment: "subarachnoid haemorrhage", sortOrder: 21 },
+  { region: "CT Head", modality: "CT", label: "Hydrocephalus", concept: "ventricles_dilated", text: "Dilated bilateral lateral, 3rd and 4th ventricles suggesting hydrocephalus.", titleFragment: "hydrocephalus", sortOrder: 22 },
+
+  // ── CT Chest ──────────────────────────────────────────────────────────
+  { region: "CT Chest", modality: "CT", label: "Koch's consolidation", concept: "consolidation", text: "Inhomogeneous air-space consolidation seen in apical segment of {laterality} upper lobe — ? tuberculous etiology.", titleFragment: "pulmonary koch's", sortOrder: 1 },
+  { region: "CT Chest", modality: "CT", label: "Fibrotic densities", concept: "fibrosis", text: "Small fibrotic densities seen in the {laterality} upper lobe — old healed Koch's lesions.", titleFragment: "fibrotic densities", sortOrder: 2 },
+  { region: "CT Chest", modality: "CT", label: "Pleural effusion", concept: "effusion", text: "Mild pleural effusion seen on {laterality} side.", titleFragment: "pleural effusion", sortOrder: 3 },
+  { region: "CT Chest", modality: "CT", label: "Nodes normal", concept: "nodes", text: "No enlarged mediastinal or hilar lymphadenopathy seen.", sortOrder: 4 },
+
+  // ── CT Abdomen ────────────────────────────────────────────────────────
+  { region: "CT Abdomen", modality: "CT", label: "Fatty liver", concept: "liver", text: "Liver shows diffuse hypodensity — fatty infiltration.", titleFragment: "fatty liver", sortOrder: 1 },
+  { region: "CT Abdomen", modality: "CT", label: "Hepatomegaly", concept: "liver", text: "Liver is enlarged in size.", titleFragment: "hepatomegaly", sortOrder: 2 },
+  { region: "CT Abdomen", modality: "CT", label: "Renal calculus", concept: "kidneys", text: "A well defined hyperdense calculus in the {laterality} kidney.", titleFragment: "renal calculus", sortOrder: 3 },
+  { region: "CT Abdomen", modality: "CT", label: "Free fluid", concept: "peritoneum", text: "Evidence of free fluid in the abdominal cavity.", titleFragment: "free fluid", sortOrder: 4 },
+
+  // ── CT PNS ────────────────────────────────────────────────────────────
+  { region: "CT PNS", modality: "CT", label: "Mucosal thickening", concept: "sinusitis", text: "Mucosal thickening noted in the {laterality} maxillary sinus.", titleFragment: "sinusitis", sortOrder: 1 },
+  { region: "CT PNS", modality: "CT", label: "DNS", concept: "septum", text: "Deviated nasal septum towards {laterality} side.", titleFragment: "deviated nasal septum", sortOrder: 2 },
+  { region: "CT PNS", modality: "CT", label: "OMC blocked", concept: "omc", text: "Osteomeatal complex on {laterality} side is blocked.", sortOrder: 3 },
+
+  // ── CT Orbit ──────────────────────────────────────────────────────────
+  { region: "CT Orbit", modality: "CT", label: "Proptosis", concept: "globes", text: "Proptosis of the {laterality} globe.", titleFragment: "proptosis", sortOrder: 1 },
+  { region: "CT Orbit", modality: "CT", label: "Orbital mass", concept: "mass", text: "A well-defined mass lesion in the {laterality} orbit.", titleFragment: "orbital mass", sortOrder: 2 },
+
+  // ── CT Neck ───────────────────────────────────────────────────────────
+  { region: "CT Neck", modality: "CT", label: "Thyroid nodule", concept: "thyroid", text: "Thyroid nodule in the {laterality} lobe.", titleFragment: "thyroid nodule", sortOrder: 1 },
+  { region: "CT Neck", modality: "CT", label: "Lymphadenopathy", concept: "nodes", text: "Multiple enlarged cervical lymphnodes in bilateral levels II, III and IV.", titleFragment: "cervical lymphadenopathy", sortOrder: 2 },
+
+  // ── CT Face ───────────────────────────────────────────────────────────
+  { region: "CT Face", modality: "CT", label: "Nasal bone fracture", concept: "fracture", text: "Fracture of the nasal bone.", titleFragment: "nasal bone fracture", sortOrder: 1 },
+  { region: "CT Face", modality: "CT", label: "Maxillary fracture", concept: "fracture", text: "Fracture of the {laterality} maxillary wall.", titleFragment: "maxillary fracture", sortOrder: 2 },
 ];
 
 export type TechniqueSeed = { region: string; modality: string; text: string };
@@ -180,8 +225,17 @@ export const TECHNIQUE_SEEDS: TechniqueSeed[] = [
   { region: "Mastoid", modality: "MR", text: "Multiplanar, multisequence MRI of the temporal bones and mastoid regions was performed using T1-weighted, T2-weighted and post-contrast sequences." },
   { region: "Brachial Plexus", modality: "MR", text: "Multiplanar MRI of the brachial plexus was performed using T1, T2 and STIR sequences." },
   { region: "Whole Body Screening", modality: "MR", text: "Non-contrast screening of brain, cervical spine, dorsal spine, lumbar spine and chest has been done." },
-  { region: "CT Head", modality: "CT", text: "Non-contrast axial CT of the head, 5 mm sections with bone and soft tissue window reconstruction." },
+  { region: "CT Head", modality: "CT", text: "Serial transaxial scans were performed starting from the base of skull in the infratentorial and supratentorial compartment." },
+  { region: "CT Head", modality: "CT", text: "NCCT followed by CECT of head by taking (5 x 5 mm) axial sections from the base of skull up to the vertex." },
+  { region: "CT Spine", modality: "CT", text: "The lumbar spine was studied with 3 x 2 mm sections in helical mode taken from T12 to S1 vertebrae." },
   { region: "CT Spine", modality: "CT", text: "Non-contrast axial and sagittal reformatted CT of the spine with bone and soft tissue windows." },
+  { region: "CT Chest", modality: "CT", text: "Plain and (non-ionic) contrast CT scan of thorax performed using 5 mm contiguous slices with thin coronal and sagittal 1.25 mm reformation images." },
+  { region: "CT Abdomen", modality: "CT", text: "Contrast enhanced CT scan of whole abdomen performed (after introduction of oral and IV contrast to outline the gastrointestinal tract)." },
+  { region: "CT PNS", modality: "CT", text: "NCCT PNS done by taking 5 x 5 mm coronal sections." },
+  { region: "CT Orbit", modality: "CT", text: "Non-contrast axial and coronal CT of the orbits with soft tissue and bone window reconstruction." },
+  { region: "CT Neck", modality: "CT", text: "3 mm sections were taken through the neck region in sequential mode after administration of IV contrast." },
+  { region: "CT Temporal Bone", modality: "CT", text: "A plain high resolution spiral CT study of the temporal bones was performed in the axial and coronal planes." },
+  { region: "CT Face", modality: "CT", text: "Non-contrast axial and coronal CT of the facial bones with 3D reconstruction." },
 ];
 
 // ── Complete report formats ─────────────────────────────────────────────
@@ -218,64 +272,15 @@ export type FormatSeed = {
   rows: FormatRowSeed[];
 };
 
-const T = {
-  headCt: "Non-contrast axial CT of the head, 5 mm sections with bone and soft tissue window reconstruction.",
-  spineCt: "Non-contrast axial and sagittal reformatted CT of the spine with bone and soft tissue windows.",
-};
-
-/** The normal-impression line — auto-yields when an abnormal finding enters the impression. */
-const NORMAL_IMPRESSION = (region: string): FormatRowSeed => ({
-  region,
-  concept: "normal_impression",
-  text: "No significant abnormality detected.",
-  inImpression: true,
-  impressionOnly: true,
-});
-
-const CT_FORMAT_SEEDS: FormatSeed[] = [
-  {
-    key: "ct-head-normal", modality: "CT", region: "CT Head",
-    name: "Normal", studyTitle: "CT HEAD", titleSuffix: "",
-    technique: T.headCt, recommendation: "", isNormal: true, sortOrder: 1,
-    rows: [
-      { region: "CT Head", concept: "scaffold", text: "Cerebral parenchyma shows normal attenuation with no focal lesion, mass effect or midline shift.", inImpression: false },
-      { region: "CT Head", concept: "ventricles", text: "Ventricles and cisternal spaces are normal for age. No hydrocephalus.", inImpression: false, newParagraph: true },
-      { region: "CT Head", concept: "infarct", text: "No acute infarct or hypodensity. No intracranial hemorrhage, extra-axial collection or contusion.", inImpression: false, newParagraph: true },
-      { region: "CT Head", concept: "fracture", text: "No fracture. Visualized paranasal sinuses and mastoid air cells are clear.", inImpression: false, newParagraph: true },
-      NORMAL_IMPRESSION("CT Head"),
-    ],
-  },
-  {
-    key: "ct-head-senile", modality: "CT", region: "CT Head",
-    name: "Senile Changes", studyTitle: "CT HEAD",
-    titleSuffix: "senile changes",
-    technique: T.headCt, recommendation: "Correlate clinically.", isNormal: false, sortOrder: 2,
-    rows: [
-      { region: "CT Head", concept: "scaffold", text: "Cerebral parenchyma shows normal attenuation with no focal lesion or mass effect.", inImpression: false },
-      { region: "CT Head", concept: "svd", text: "Chronic small vessel ischemic changes in bilateral cerebral white matter.", inImpression: true, newParagraph: true },
-      // Same slot as the normal "ventricles" line — prominent CSF spaces replace it
-      { region: "CT Head", concept: "ventricles", text: "Senile cerebral atrophy — sulci and CSF spaces are prominent for age.", inImpression: true, newParagraph: true },
-      { region: "CT Head", concept: "infarct", text: "No acute infarct or hypodensity. No intracranial hemorrhage, extra-axial collection or contusion. No fracture. Visualized paranasal sinuses and mastoid air cells are clear.", inImpression: false, newParagraph: true },
-    ],
-  },
-  {
-    key: "ct-spine-normal", modality: "CT", region: "CT Spine",
-    name: "Normal", studyTitle: "CT SPINE", titleSuffix: "",
-    technique: T.spineCt, recommendation: "", isNormal: true, sortOrder: 1,
-    rows: [
-      { region: "CT Spine", concept: "alignment", text: "Vertebral alignment is normal with no listhesis or acute fracture. Vertebral body heights are maintained.", inImpression: false },
-      { region: "CT Spine", concept: "disc_contour", text: "No destructive bony lesion. Facet joints are unremarkable. Disc heights are maintained with no significant osteophyte ridge or canal stenosis.", inImpression: false, newParagraph: true },
-      { region: "CT Spine", concept: "hematoma", text: "Paraspinal soft tissues are unremarkable.", inImpression: false, newParagraph: true },
-      NORMAL_IMPRESSION("CT Spine"),
-    ],
-  },
-];
-
 export const FORMAT_SEEDS: FormatSeed[] = [
   ...MR_BRAIN_FORMATS,
   ...MR_BRAIN_PATHOLOGY_FORMATS,
   ...MR_SPINE_FORMATS,
   ...MR_JOINT_FORMATS,
   ...MR_OTHER_FORMATS,
-  ...CT_FORMAT_SEEDS,
+  // The doctor's own CT library — curated verbatim from
+  // care-erp docs/report-formats/ct (brain, spine/MSK, body, head-neck)
+  ...CT_BRAIN_FORMATS,
+  ...CT_SPINE_FORMATS,
+  ...CT_BODY_FORMATS,
 ];

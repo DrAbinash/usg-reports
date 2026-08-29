@@ -8,8 +8,8 @@
  * the doctor's own report library (docs/mri-report-formats).
  */
 
-// Complete-report formats: MRI + CT seeds curated verbatim from the
-// doctor's own libraries (docs/mri-report-formats + docs/report-formats/ct).
+// Complete-report formats: MRI + CT + USG + X-ray seeds curated verbatim from
+// the doctor's own libraries (docs/mri-report-formats + docs/report-formats/{ct,usg,xray}).
 import { MR_BRAIN_FORMATS } from "@/lib/formats/mrBrain";
 import { MR_BRAIN_PATHOLOGY_FORMATS } from "@/lib/formats/mrBrainPathology";
 import { MR_SPINE_FORMATS } from "@/lib/formats/mrSpine";
@@ -18,6 +18,11 @@ import { MR_OTHER_FORMATS } from "@/lib/formats/mrOther";
 import { CT_BRAIN_FORMATS } from "@/lib/formats/ctBrain";
 import { CT_SPINE_FORMATS } from "@/lib/formats/ctSpineMsk";
 import { CT_BODY_FORMATS } from "@/lib/formats/ctBody";
+import { USG_ABDOMEN_FORMATS } from "@/lib/formats/usgAbdomen";
+import { USG_OBSGYN_FORMATS } from "@/lib/formats/usgObsGyn";
+import { USG_SMALLPARTS_FORMATS } from "@/lib/formats/usgSmallParts";
+import { XRAY_GENERAL_FORMATS } from "@/lib/formats/xrayGeneral";
+import { XRAY_PROCEDURES_FORMATS } from "@/lib/formats/xrayProcedures";
 
 export type PhraseSeed = {
   region: string;
@@ -204,6 +209,64 @@ export const PHRASE_SEEDS: PhraseSeed[] = [
   // ── CT Face ───────────────────────────────────────────────────────────
   { region: "CT Face", modality: "CT", label: "Nasal bone fracture", concept: "fracture", text: "Fracture of the nasal bone.", titleFragment: "nasal bone fracture", sortOrder: 1 },
   { region: "CT Face", modality: "CT", label: "Maxillary fracture", concept: "fracture", text: "Fracture of the {laterality} maxillary wall.", titleFragment: "maxillary fracture", sortOrder: 2 },
+
+  // ── USG Whole Abdomen — organ-slot replacement chips (the doctor's exact
+  // scaffold lines; each chip replaces the normal line of its organ slot) ──
+  { region: "USG Whole Abdomen", modality: "USG", label: "Fatty liver Gr I", concept: "liver", text: "Liver is enlarged in size and measures in mid-clavicular line ___ cm. Appears normal in morphology with mildly increased hepatic parenchymal echogenicity (Grade I fatty changes). No masses or focal pathology is noted.", titleFragment: "fatty changes", sortOrder: 1 },
+  { region: "USG Whole Abdomen", modality: "USG", label: "Fatty liver Gr II", concept: "liver", text: "Liver is enlarged in size and measures in mid-clavicular line ___ cm. Shows moderately increased hepatic parenchymal echogenicity with mild attenuation and blurring of the portal vein radicles (Grade II fatty changes).", titleFragment: "grade ii fatty changes", sortOrder: 2 },
+  { region: "USG Whole Abdomen", modality: "USG", label: "Hepatomegaly", concept: "liver", text: "Liver is enlarged in size and measures in mid-clavicular line ___ cm. Appears normal in morphology and parenchymal echogenicity. No masses or focal pathology is noted.", titleFragment: "hepatomegaly", sortOrder: 3 },
+  { region: "USG Whole Abdomen", modality: "USG", label: "GB calculus", concept: "gb", text: "Gall bladder is normal in physiological distension. A well defined echogenic structure (___ cm) casting strong distal acoustic shadow is seen in the lumen of the gall bladder, suggestive of calculus. Wall thickness is normal.", titleFragment: "cholelithiasis", sortOrder: 4 },
+  { region: "USG Whole Abdomen", modality: "USG", label: "GB wall thickened", concept: "gb", text: "Gall bladder wall is thickened and oedematous with positive sonographic Murphy's sign, S/o Cholecystitis. No pericholecystic collection.", titleFragment: "cholecystitis", sortOrder: 5 },
+  { region: "USG Whole Abdomen", modality: "USG", label: "GB sludge", concept: "gb", text: "Gall bladder contains low-level echogenic sludge with gravity-dependent layering. No definitive calculus.", titleFragment: "gb sludge", sortOrder: 6 },
+  { region: "USG Whole Abdomen", modality: "USG", label: "CBD dilated", concept: "cbd", text: "C.B.D is dilated and measures ___ cm in diameter. No evidence of intraluminal calculus.", titleFragment: "dilated cbd", sortOrder: 7 },
+  { region: "USG Whole Abdomen", modality: "USG", label: "CBD calculus", concept: "cbd", text: "C.B.D is dilated and measures ___ cm in diameter. A well defined echogenic focus (___ cm) casting strong distal acoustic shadow is seen in the distal part of the C.B.D, S/o Choledocholithiasis.", titleFragment: "choledocholithiasis", sortOrder: 8 },
+  { region: "USG Whole Abdomen", modality: "USG", label: "Fatty pancreas", concept: "pancreas", text: "Pancreas appears bulky and shows increased parenchymal echogenicity. Pancreatic duct is not dilated.", titleFragment: "fatty pancreas", sortOrder: 9 },
+  { region: "USG Whole Abdomen", modality: "USG", label: "Splenomegaly", concept: "spleen", text: "Spleen is enlarged and measures ___ cm in length. Appears normal in morphology and parenchymal echogenicity.", titleFragment: "splenomegaly", sortOrder: 10 },
+  { region: "USG Whole Abdomen", modality: "USG", label: "Right renal calculus", concept: "kidneys", text: "Right kidney is normal in shape, size & position. A well defined echogenic focus (___ cm) casting strong distal acoustic shadow is seen at the ___ calyx of the right kidney, S/o calculus. No hydronephrosis.", titleFragment: "right renal calculus", sortOrder: 11 },
+  { region: "USG Whole Abdomen", modality: "USG", label: "Left renal calculus", concept: "kidneys_lt", text: "Left kidney is normal in shape, size & position. A well defined echogenic focus (___ cm) casting strong distal acoustic shadow is seen at the ___ calyx of the left kidney, S/o calculus. No hydronephrosis.", titleFragment: "left renal calculus", sortOrder: 12 },
+  { region: "USG Whole Abdomen", modality: "USG", label: "Right hydronephrosis", concept: "kidneys", text: "Right kidney shows mild dilatation of the pelvicalyceal system (hydronephrosis). Calculus is not obvious in the right renal area.", titleFragment: "right hydronephrosis", sortOrder: 13 },
+  { region: "USG Whole Abdomen", modality: "USG", label: "Left hydronephrosis", concept: "kidneys_lt", text: "Left kidney shows mild dilatation of the pelvicalyceal system (hydronephrosis). Calculus is not obvious in the left renal area.", titleFragment: "left hydronephrosis", sortOrder: 14 },
+  { region: "USG Whole Abdomen", modality: "USG", label: "Renal cortical cyst", concept: "kidneys", text: "Right kidney is normal in shape, size & position. A well defined simple cortical cyst (___ x ___ cm) with thin wall and clear content is seen at the ___ pole of the right kidney. No internal echoes or septa.", titleFragment: "renal cortical cyst", sortOrder: 15 },
+  { region: "USG Whole Abdomen", modality: "USG", label: "VUJ calculus", concept: "ureters", text: "A well defined echogenic focus (___ cm), casting strong distal acoustic shadow is seen at the ___ vesico-ureteric junction. ___ ureter is dilated upto the calculus, with mild hydroureteronephrosis.", titleFragment: "vuj calculus", sortOrder: 16 },
+  { region: "USG Whole Abdomen", modality: "USG", label: "Distal ureteric calculus", concept: "ureters", text: "A well defined echogenic focus (___ cm), casting strong distal acoustic shadow is seen in the ___ distal ureter. ___ ureter is dilated upto the calculus.", titleFragment: "distal ureteric calculus", sortOrder: 17 },
+  { region: "USG Whole Abdomen", modality: "USG", label: "Thickened UB wall", concept: "ub", text: "Urinary bladder is partially distended. Thickened U.B wall. No evidence of calculus, mass or diverticulum is seen.", titleFragment: "cystitis", sortOrder: 18 },
+  { region: "USG Whole Abdomen", modality: "USG", label: "UB calculus", concept: "ub", text: "Urinary bladder is normal in outline and distension. A well defined echogenic focus (___ cm) casting strong distal acoustic shadow is seen in the urinary bladder, S/o calculus.", titleFragment: "bladder calculus", sortOrder: 19 },
+  { region: "USG Whole Abdomen", modality: "USG", label: "Prostatomegaly", concept: "prostate", text: "Prostate is enlarged in size and measures ___ X ___ X ___ cm, corresponding to ___ gms (Grade ___ prostatomegaly). Median lobe is protruding into the urinary bladder base.", titleFragment: "prostatomegaly", sortOrder: 20 },
+  { region: "USG Whole Abdomen", modality: "USG", label: "Acute appendicitis", concept: "rif", text: "A tubular, non-compressible, blind-ended structure with target configuration is seen in the right iliac fossa, measuring ___ cm in length and ___ cm in diameter. Wall is thickened with increased surrounding echogenicity of mesenteric fat. Strong probe tenderness present, S/o Acute Appendicitis.", titleFragment: "acute appendicitis", sortOrder: 21 },
+  { region: "USG Whole Abdomen", modality: "USG", label: "Mesenteric nodes", concept: "others", text: "Few enlarged mesenteric lymph nodes (largest ___ x ___ cm) are seen in the right iliac fossa / peri-umbilical region.", titleFragment: "mesenteric lymphadenopathy", sortOrder: 22 },
+  { region: "USG Whole Abdomen", modality: "USG", label: "Fluid & faeces loops", concept: "others", text: "Excessive bowel gas shadow. Fluid and faeces filled bowel loops.", titleFragment: "fluid and faeces filled bowel loops", sortOrder: 23 },
+  { region: "USG Whole Abdomen", modality: "USG", label: "Free fluid", concept: "others", text: "Mild free peritoneal fluid is seen in the dependent parts.", titleFragment: "mild ascites", sortOrder: 24 },
+
+  // ── USG Pregnancy / TVS ─────────────────────────────────────────────────
+  { region: "USG Pregnancy", modality: "USG", label: "Fetal demise", concept: "fetus", text: "No fetal cardiac activity and no fetal somatic movements are seen.", titleFragment: "intrauterine death", sortOrder: 1 },
+  { region: "USG TVS", modality: "USG", label: "Bulky uterus", concept: "uterus", text: "Uterus is bulky in size and measures ___ X ___ X ___ cm.", titleFragment: "bulky uterus", sortOrder: 1 },
+  { region: "USG TVS", modality: "USG", label: "PCOD ovaries", concept: "adnexa", text: "Multiple small cystic structures (5-6 mm) are arranged at the periphery of both ovaries in pearl of string fashion. The central stroma is echogenic. Features are suggestive of Polycystic ovaries.", titleFragment: "polycystic ovaries", sortOrder: 2 },
+  { region: "USG TVS", modality: "USG", label: "Fibroid uterus", concept: "uterus", text: "There is evidence of a well defined intramural lesion (measuring ___ x ___ cm) in the ___ uterine wall, suggestive of Fibroid.", titleFragment: "fibroid", sortOrder: 3 },
+  { region: "USG TVS", modality: "USG", label: "Ovarian cyst", concept: "adnexa", text: "There is evidence of a well defined simple cyst (___ x ___ cm) arising from the ___ ovary. No internal echoes or septa.", titleFragment: "ovarian cyst", sortOrder: 4 },
+  { region: "USG TVS", modality: "USG", label: "POD collection", concept: "pod", text: "Moderate collection with fine internal echoes is seen in the pouch of Douglas.", titleFragment: "pod collection", sortOrder: 5 },
+
+  // ── USG Breast / Neck / Scrotum ─────────────────────────────────────────
+  { region: "USG Breast", modality: "USG", label: "Fibroadenotic changes", concept: "tissue", text: "Fibro glandular tissue shows heterogeneous echotexture with multiple small hypoechoic areas and cystic changes, S/o Fibroadenotic changes.", titleFragment: "fibroadenotic changes", sortOrder: 1 },
+  { region: "USG Breast", modality: "USG", label: "Fibroadenoma", concept: "lesion", text: "A well defined hypoechoic mobile mass (size ___ x ___ cm) with lobulated margin is seen in the ___ quadrant. Colour doppler shows mild internal vascularity.", titleFragment: "fibroadenoma", sortOrder: 2 },
+  { region: "USG Neck", modality: "USG", label: "Thyroiditis", concept: "thyroid_rt", text: "Right lobe is enlarged in size and measures ___ cm in AP diameter. Parenchymal echogenicity is reduced with heterogeneous echotexture. Colour doppler shows increased blood flow.", titleFragment: "thyroiditis", sortOrder: 1 },
+  { region: "USG Neck", modality: "USG", label: "MNG", concept: "thyroid_rt", text: "Right lobe is enlarged and shows multiple nodules of varying sizes with cystic degeneration and calcification.", titleFragment: "multinodular goitre", sortOrder: 2 },
+  { region: "USG Neck", modality: "USG", label: "Colloid cyst", concept: "thyroid_rt", text: "A well defined anechoic cystic lesion (___ x ___ cm) with comet-tail artefacts is seen in the right lobe, S/o Colloid cyst.", titleFragment: "colloid cyst", sortOrder: 3 },
+  { region: "USG Scrotum", modality: "USG", label: "Hydrocele", concept: "collection", text: "Moderate collection is seen in the ___ scrotal sac, S/o Hydrocele.", titleFragment: "hydrocele", sortOrder: 1 },
+  { region: "USG Scrotum", modality: "USG", label: "Varicocele", concept: "inguinal", text: "___ pampiniform plexus of veins are dilated (largest ___ mm) with positive Valsalva test, S/o Varicocele.", titleFragment: "varicocele", sortOrder: 2 },
+  { region: "USG Scrotum", modality: "USG", label: "Epididymo-orchitis", concept: "testis_lt", text: "Left testis is enlarged with decreased echogenicity. Head, body and tail of epididymis are enlarged, heterogeneous in echotexture. Colour doppler shows increased vascularity.", titleFragment: "epididymo-orchitis", sortOrder: 3 },
+
+  // ── X-Ray Chest / Spine / KUB / PNS ──────────────────────────────────────
+  { region: "X-Ray Chest", modality: "X-Ray", label: "Infiltrates", concept: "infiltrates", text: "Parenchymal infiltrates are seen in the ___ zone of the ___ lung field.", titleFragment: "parenchymal infiltrates", sortOrder: 1 },
+  { region: "X-Ray Chest", modality: "X-Ray", label: "Patchy opacities", concept: "infiltrates", text: "Patchy parenchymal opacities are seen in the ___ zone of the ___ lung field, S/o pneumonitis.", titleFragment: "pneumonitis", sortOrder: 2 },
+  { region: "X-Ray Chest", modality: "X-Ray", label: "Pleural effusion", concept: "effusion", text: "Homogeneous opacity in the ___ lower zone with obscuration of the ___ costo-phrenic angle and hemidiaphragm, S/o pleural effusion.", titleFragment: "pleural effusion", sortOrder: 3 },
+  { region: "X-Ray Chest", modality: "X-Ray", label: "Cardiomegaly", concept: "ctr", text: "Increased cardio-thoracic ratio with ___ ventricular type of apex.", titleFragment: "cardiomegaly", sortOrder: 4 },
+  { region: "X-Ray Spine", modality: "X-Ray", label: "Reduced disc space", concept: "disc", text: "Reduced ___ intervertebral disc space.", titleFragment: "reduced disc space", sortOrder: 1 },
+  { region: "X-Ray Spine", modality: "X-Ray", label: "Osteophytes", concept: "osteophytes", text: "Degenerative changes as evident by osteophyte formation at ___ vertebral levels.", titleFragment: "degenerative changes", sortOrder: 2 },
+  { region: "X-Ray Spine", modality: "X-Ray", label: "Anterolisthesis", concept: "listhesis", text: "Anterolisthesis of ___ over ___ vertebra.", titleFragment: "anterolisthesis", sortOrder: 3 },
+  { region: "X-Ray Spine", modality: "X-Ray", label: "Wedge compression", concept: "wedge", text: "Anterior wedging of the ___ vertebral body.", titleFragment: "wedge compression", sortOrder: 4 },
+  { region: "X-Ray Spine", modality: "X-Ray", label: "Sacroiliitis", concept: "sacroiliac", text: "Sclerosis at the articulating margins of bilateral sacroiliac joints with loss of joint space, S/o Bilateral sacroiliitis.", titleFragment: "bilateral sacroiliitis", sortOrder: 5 },
+  { region: "X-Ray KUB", modality: "X-Ray", label: "Ureteric calculus", concept: "calculus", text: "A well defined oval radiopaque shadow overlying the ___ of the ___ vertebra, S/o Ureteric calculus.", titleFragment: "ureteric calculus", sortOrder: 1 },
+  { region: "X-Ray PNS", modality: "X-Ray", label: "Maxillary sinusitis", concept: "maxillary", text: "Haziness is seen in the ___ maxillary sinus, S/o Sinusitis.", titleFragment: "sinusitis", sortOrder: 1 },
 ];
 
 export type TechniqueSeed = { region: string; modality: string; text: string };
@@ -236,6 +299,30 @@ export const TECHNIQUE_SEEDS: TechniqueSeed[] = [
   { region: "CT Neck", modality: "CT", text: "3 mm sections were taken through the neck region in sequential mode after administration of IV contrast." },
   { region: "CT Temporal Bone", modality: "CT", text: "A plain high resolution spiral CT study of the temporal bones was performed in the axial and coronal planes." },
   { region: "CT Face", modality: "CT", text: "Non-contrast axial and coronal CT of the facial bones with 3D reconstruction." },
+
+  // USG / X-ray (the doctor's own USG + X-ray libraries)
+  { region: "USG Whole Abdomen", modality: "USG", text: "Ultrasonography of the whole abdomen was performed in supine position using a curvilinear 3.5 MHz transducer." },
+  { region: "USG Whole Abdomen", modality: "USG", text: "Ultrasonography of the whole abdomen was performed on the GE Voluson Pro 4-D USG machine." },
+  { region: "USG Pregnancy", modality: "USG", text: "Obstetric ultrasonography was performed using a curvilinear 3.5 MHz transducer." },
+  { region: "USG Pregnancy", modality: "USG", text: "Transvaginal sonography was performed with an empty bladder using a 7.5 MHz endocavitary transducer." },
+  { region: "USG TVS", modality: "USG", text: "Transvaginal sonography was performed with an empty bladder using a 7.5 MHz endocavitary transducer." },
+  { region: "USG Breast", modality: "USG", text: "High frequency (7.5-12 MHz) linear transducer was used to scan both breasts." },
+  { region: "USG Neck", modality: "USG", text: "High frequency (7.5-12 MHz) linear transducer was used to scan the neck." },
+  { region: "USG Scrotum", modality: "USG", text: "High frequency (7.5-12 MHz) linear transducer with colour doppler was used to scan the scrotum." },
+  { region: "USG Doppler", modality: "USG", text: "Bilateral lower limb venous doppler was performed with the patient supine, using a linear transducer with graded compression." },
+  { region: "2D Echo", modality: "USG", text: "M-mode, 2D and colour doppler echocardiography was performed in left lateral decubitus position." },
+  { region: "X-Ray Chest", modality: "X-Ray", text: "Standard postero-anterior radiograph of the chest was obtained in erect position." },
+  { region: "X-Ray Chest", modality: "X-Ray", text: "Antero-posterior radiograph of the chest was obtained in erect position." },
+  { region: "X-Ray Spine", modality: "X-Ray", text: "Antero-posterior and lateral radiographs of the spine were obtained." },
+  { region: "X-Ray Abdomen", modality: "X-Ray", text: "Erect radiograph of the abdomen was obtained." },
+  { region: "X-Ray KUB", modality: "X-Ray", text: "Supine radiograph of the kidney, ureter and bladder region was obtained." },
+  { region: "X-Ray PNS", modality: "X-Ray", text: "Open-mouth Water's view radiograph of the paranasal sinuses was obtained." },
+  { region: "X-Ray Bones", modality: "X-Ray", text: "Radiographs of the region were obtained in standard projections." },
+  { region: "X-Ray IVU", modality: "X-Ray", text: "50 ml non-ionic contrast medium was injected intravenously and serial films were taken. No immediate complications seen." },
+  { region: "X-Ray HSG", modality: "X-Ray", text: "Hysterosalpingography was done under full aseptic precautions. Approximately 12 ml of non-ionic contrast was injected through the cannula. The procedure was uneventful." },
+  { region: "X-Ray MCU", modality: "X-Ray", text: "The MCU examination was done after injecting water-soluble contrast media into the urinary bladder (Urograffin-76%)." },
+  { region: "X-Ray Barium", modality: "X-Ray", text: "Barium study was performed after oral/rectal administration of barium suspension with serial films." },
+  { region: "X-Ray Fistulogram", modality: "X-Ray", text: "Water-soluble contrast was injected through the external opening of the sinus under aseptic precautions and films were taken." },
 ];
 
 // ── Complete report formats ─────────────────────────────────────────────
@@ -283,4 +370,12 @@ export const FORMAT_SEEDS: FormatSeed[] = [
   ...CT_BRAIN_FORMATS,
   ...CT_SPINE_FORMATS,
   ...CT_BODY_FORMATS,
+  // The doctor's own USG + X-ray libraries — curated verbatim from
+  // care-erp docs/report-formats/usg + xray (whole abdomen, obs-gyn,
+  // small parts/vascular/echo, X-ray general + procedures)
+  ...USG_ABDOMEN_FORMATS,
+  ...USG_OBSGYN_FORMATS,
+  ...USG_SMALLPARTS_FORMATS,
+  ...XRAY_GENERAL_FORMATS,
+  ...XRAY_PROCEDURES_FORMATS,
 ];

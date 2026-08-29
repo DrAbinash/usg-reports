@@ -1,12 +1,13 @@
 "use client";
-/** Settings — Hospital / Radiologist / Security / Integrations. Secrets masked. */
-import { useEffect, useState } from "react";
+/** Settings — Appearance / Hospital / Radiologist / Security / Integrations. Secrets masked. */
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SectionLabel } from "./bits";
-import { Building2, UserRound, ShieldCheck, PlugZap, Check, X } from "lucide-react";
+import { LOGIN_THEMES, type LoginThemeName } from "./LockScreen";
+import { Building2, UserRound, ShieldCheck, PlugZap, Check, X, Palette, Upload, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +18,7 @@ type Settings = {
   careApiBase: string; careApiKeySet: boolean;
   orthancUrl: string; orthancUsername: string; orthancPasswordSet: boolean;
   ohifLanUrl: string; ohifTailscaleUrl: string;
+  loginTheme: string; loginBgUrl: string;
   pinSet: boolean;
 };
 
@@ -46,6 +48,8 @@ export function SettingsView() {
   const [orthancPassword, setOrthancPassword] = useState("");
   const [tests, setTests] = useState<Record<string, { ok: boolean; msg: string } | "loading">>({});
   const [pin, setPin] = useState({ current: "", next: "" });
+  const [bgUploading, setBgUploading] = useState(false);
+  const bgFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch("/api/settings").then((r) => r.json()).then((d) => setS(d.settings));
@@ -97,18 +101,146 @@ export function SettingsView() {
     } else toast.error(r.error);
   };
 
+  /** Downscale the picked photo to ≤1920px wide JPEG data-URL, then save. */
+  const uploadBg = async (file: File) => {
+    if (!file.type.startsWith("image/")) { toast.error("Pick an image file (JPG/PNG)"); return; }
+    if (file.size > 8 * 1024 * 1024) { toast.error("Image too large — pick one under 8 MB"); return; }
+    setBgUploading(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+          const maxW = 1920;
+          const scale = Math.min(1, maxW / img.width);
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          const ctx = canvas.getContext("2d");
+          if (!ctx) { URL.revokeObjectURL(url); reject(new Error("canvas")); return; }
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          URL.revokeObjectURL(url);
+          resolve(canvas.toDataURL("image/jpeg", 0.82));
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not read image")); };
+        img.src = url;
+      });
+      setS((prev) => (prev ? { ...prev, loginBgUrl: dataUrl } : prev));
+      // Save immediately — the background is meant to be quick to try.
+      const body: Record<string, string> = { ...(s as unknown as Record<string, string>), loginBgUrl: dataUrl };
+      const r = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }).then((res) => res.json());
+      if (r.settings) toast.success("Login background saved — lock the studio to see it");
+      else toast.error("Could not save background");
+    } catch {
+      toast.error("Could not process that image");
+    } finally {
+      setBgUploading(false);
+      if (bgFileRef.current) bgFileRef.current.value = "";
+    }
+  };
+
+  const removeBg = async () => {
+    setS((prev) => (prev ? { ...prev, loginBgUrl: "" } : prev));
+    const body: Record<string, string> = { ...(s as unknown as Record<string, string>), loginBgUrl: "" };
+    await fetch("/api/settings", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    toast.success("Background removed — gradient theme shows instead");
+  };
+
   return (
     <div className="mx-auto max-w-2xl p-4 md:p-6">
       <SectionLabel>Settings</SectionLabel>
       <h1 className="mb-5 mt-1 text-lg font-bold tracking-tight">Studio configuration</h1>
 
-      <Tabs defaultValue="hospital">
+      <Tabs defaultValue="appearance">
         <TabsList className="bg-panel">
+          <TabsTrigger value="appearance" className="text-[12px]"><Palette className="mr-1.5 h-3.5 w-3.5" />Appearance</TabsTrigger>
           <TabsTrigger value="hospital" className="text-[12px]"><Building2 className="mr-1.5 h-3.5 w-3.5" />Hospital</TabsTrigger>
           <TabsTrigger value="radiologist" className="text-[12px]"><UserRound className="mr-1.5 h-3.5 w-3.5" />Radiologist</TabsTrigger>
           <TabsTrigger value="security" className="text-[12px]"><ShieldCheck className="mr-1.5 h-3.5 w-3.5" />Security</TabsTrigger>
           <TabsTrigger value="integrations" className="text-[12px]"><PlugZap className="mr-1.5 h-3.5 w-3.5" />Integrations</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="appearance" className="mt-4 space-y-5 rounded-xl border border-border bg-card p-5">
+          <div>
+            <p className="text-[13px] font-bold">Login screen theme</p>
+            <p className="mt-0.5 text-[11.5px] leading-relaxed text-faint">
+              Six colour identities for the login screen — the gradient, the keypad glow and the PIN dots all follow it.
+            </p>
+            <div className="mt-3 grid grid-cols-3 gap-2.5">
+              {(Object.keys(LOGIN_THEMES) as LoginThemeName[]).map((name) => {
+                const t = LOGIN_THEMES[name];
+                const Icon = t.icon;
+                const active = (s.loginTheme || "aurora") === name;
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => { set("loginTheme", name); }}
+                    className={cn(
+                      "group relative overflow-hidden rounded-xl border p-3 text-left transition-all active:scale-[0.97]",
+                      active ? "border-primary ring-2 ring-primary/30" : "border-border hover:border-primary/40 hover:shadow-sm",
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-lg text-white shadow" style={{ background: t.accent }}>
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <span className="text-[12px] font-bold">{t.label}</span>
+                      {active ? <Check className="ml-auto h-3.5 w-3.5 text-primary" /> : null}
+                    </div>
+                    <div className="mt-2.5 flex gap-1">
+                      {t.blobs.map((c) => (
+                        <span key={c} className="h-2.5 flex-1 rounded-full" style={{ background: c }} />
+                      ))}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="h-px bg-border" />
+
+          <div>
+            <p className="text-[13px] font-bold">Login background photo</p>
+            <p className="mt-0.5 text-[11.5px] leading-relaxed text-faint">
+              Upload any photo of your centre — it fills the login screen behind the card with a colour wash on top so the keypad stays readable. Landscape photos look best. Leave empty to keep the pure gradient.
+            </p>
+            <div className="mt-3 flex items-center gap-3">
+              <div
+                className="relative h-20 w-32 shrink-0 overflow-hidden rounded-lg border border-border bg-muted"
+                style={s.loginBgUrl ? { backgroundImage: `url(${s.loginBgUrl})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}
+              >
+                {!s.loginBgUrl ? (
+                  <div className="flex h-full w-full items-center justify-center" style={{ background: LOGIN_THEMES[(s.loginTheme || "aurora") as LoginThemeName]?.accent ?? LOGIN_THEMES.aurora.accent }}>
+                    <span className="text-[10px] font-bold text-white/90">GRADIENT</span>
+                  </div>
+                ) : null}
+              </div>
+              <div className="flex flex-col gap-2">
+                <input ref={bgFileRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadBg(f); }} />
+                <Button size="sm" variant="outline" className="h-8 w-fit border-border text-[11.5px]" disabled={bgUploading} onClick={() => bgFileRef.current?.click()}>
+                  <Upload className="mr-1.5 h-3.5 w-3.5" />{bgUploading ? "Processing…" : s.loginBgUrl ? "Replace photo" : "Upload photo"}
+                </Button>
+                {s.loginBgUrl ? (
+                  <Button size="sm" variant="ghost" className="h-8 w-fit text-[11.5px] text-destructive hover:bg-bad-bg" onClick={removeBg}>
+                    <Trash2 className="mr-1.5 h-3.5 w-3.5" />Remove
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          <Button onClick={save} className="h-9 text-[12.5px]">Save appearance</Button>
+        </TabsContent>
 
         <TabsContent value="hospital" className="mt-4 space-y-4 rounded-xl border border-border bg-card p-5">
           <Field label="App title"><Input value={s.appTitle} onChange={(e) => set("appTitle", e.target.value)} className="h-9 text-[13px]" /></Field>

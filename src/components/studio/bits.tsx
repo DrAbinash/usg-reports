@@ -3,17 +3,24 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
+const MODALITY_STYLES: Record<string, { label: string; cls: string }> = {
+  MR: { label: "MR", cls: "bg-[#e8f0f7] text-[#24567f] ring-[#c6d9e9]" },
+  CT: { label: "CT", cls: "bg-teal-50 text-teal-800 ring-teal-200" },
+  USG: { label: "USG", cls: "bg-violet-50 text-violet-800 ring-violet-200" },
+  "X-Ray": { label: "X-RAY", cls: "bg-amber-50 text-amber-800 ring-amber-200" },
+};
+
 export function ModalityChip({ modality, className }: { modality: string; className?: string }) {
-  const ct = modality === "CT";
+  const m = MODALITY_STYLES[modality] ?? MODALITY_STYLES.MR;
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide",
-        ct ? "bg-teal-50 text-teal-800 ring-1 ring-teal-200" : "bg-[#e8f0f7] text-[#24567f] ring-1 ring-[#c6d9e9]",
+        "inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide ring-1",
+        m.cls,
         className,
       )}
     >
-      {ct ? "CT" : "MR"}
+      {m.label}
     </span>
   );
 }

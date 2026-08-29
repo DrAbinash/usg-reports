@@ -31,6 +31,10 @@ model HospitalSettings {
   // Security
   pinHash         String?
 
+  // Login appearance — colourful themes + user-uploaded background image
+  loginTheme      String   @default("aurora")  // aurora | sunset | ocean | rose | emerald | royal
+  loginBgUrl      String   @default("")        // data-URL photo shown behind the login card
+
   // Integrations (secrets — never returned unmasked to the client)
   careApiBase     String   @default("")
   careApiKey      String   @default("")

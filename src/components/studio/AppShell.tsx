@@ -11,10 +11,10 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import type { View } from "@/lib/store";
 
-const NAV: { id: View; label: string; icon: typeof ListChecks }[] = [
-  { id: "worklist", label: "Worklist", icon: ListChecks },
-  { id: "library", label: "Library", icon: BookLock },
-  { id: "settings", label: "Settings", icon: Settings2 },
+const NAV: { id: View; label: string; icon: typeof ListChecks; tint: string }[] = [
+  { id: "worklist", label: "Worklist", icon: ListChecks, tint: "text-violet-600 bg-violet-50 ring-violet-200" },
+  { id: "library", label: "Library", icon: BookLock, tint: "text-teal-700 bg-teal-50 ring-teal-200" },
+  { id: "settings", label: "Settings", icon: Settings2, tint: "text-amber-700 bg-amber-50 ring-amber-200" },
 ];
 
 export function AppShell() {
@@ -32,10 +32,14 @@ export function AppShell() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
-      {/* Header */}
-      <header className="flex h-14 shrink-0 items-center gap-4 border-b border-border bg-card px-4">
+      {/* Header — gradient identity strip */}
+      <header className="relative flex h-14 shrink-0 items-center gap-4 border-b border-border bg-card px-4">
+        <div className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-violet-600 via-fuchsia-500 to-cyan-400" aria-hidden />
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
+          <div
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-white shadow-sm"
+            style={{ background: "linear-gradient(135deg,#7c3aed 0%,#d946ef 55%,#06b6d4 130%)" }}
+          >
             <Stethoscope className="h-4 w-4" />
           </div>
           <div className="leading-tight">
@@ -80,18 +84,20 @@ export function AppShell() {
                 className={cn(
                   "relative flex h-10 items-center justify-center gap-2.5 rounded-lg text-[13px] font-medium transition-all md:justify-start md:px-3",
                   active
-                    ? "bg-card text-primary shadow-sm ring-1 ring-border"
+                    ? "bg-card text-foreground shadow-sm ring-1 ring-border"
                     : "text-muted-foreground hover:bg-card/60 hover:text-foreground",
                 )}
               >
-                <n.icon className="h-4 w-4 shrink-0" />
+                <span className={cn("flex h-6 w-6 items-center justify-center rounded-md md:h-7 md:w-7", active ? `ring-1 ${n.tint}` : "")}>
+                  <n.icon className="h-4 w-4 shrink-0" />
+                </span>
                 <span className="hidden md:inline">{n.label}</span>
                 {n.id === "worklist" && toReport > 0 ? (
-                  <span className="absolute right-2 top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground md:static md:ml-auto">
+                  <span className="absolute right-2 top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-500 px-1 text-[9px] font-bold text-white shadow md:static md:ml-auto">
                     {toReport}
                   </span>
                 ) : null}
-                {active ? <span className="absolute left-0 top-1/2 hidden h-5 w-0.5 -translate-y-1/2 rounded-r bg-primary md:block" /> : null}
+                {active ? <span className="absolute left-0 top-1/2 hidden h-5 w-0.5 -translate-y-1/2 rounded-r bg-gradient-to-b from-violet-600 to-fuchsia-500 md:block" /> : null}
               </button>
             );
           })}

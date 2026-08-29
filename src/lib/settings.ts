@@ -42,7 +42,7 @@ export async function updateSettings(patch: SettingsUpdate) {
     "appTitle", "hospitalName", "addressLine", "phone", "email", "footerMessage",
     "logoUrl", "radiologistName", "radiologistQual", "radiologistRegNo",
     "careApiBase", "careApiKey", "orthancUrl", "orthancUsername", "orthancPassword",
-    "ohifLanUrl", "ohifTailscaleUrl",
+    "ohifLanUrl", "ohifTailscaleUrl", "loginTheme", "loginBgUrl",
   ];
   const data: Record<string, string> = {};
   for (const k of allowed) {

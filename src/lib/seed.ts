@@ -43,6 +43,14 @@ const DEMO_ORDERS: DemoOrder[] = [
   { accession: "CARE-24090", name: "Anil Mandal", age: "61/M", sex: "M", mrn: "MRN-10477", referrer: "Dr. S. Kumar", test: "CT Chest Plain & Contrast", modality: "CT", region: "CT Chest", billing: "DUE", status: "TO_REPORT", studyDate: new Date(Date.now() - 7 * HOURS) },
   { accession: "CARE-24091", name: "Sabita Devi", age: "47/F", sex: "F", mrn: "MRN-10484", referrer: "Dr. A. K. Singh", test: "CT Whole Abdomen", modality: "CT", region: "CT Abdomen", billing: "PAID", status: "TO_REPORT", studyDate: new Date(Date.now() - 2 * HOURS) },
   { accession: "CARE-24092", name: "Md. Salim", age: "39/M", sex: "M", mrn: "MRN-10490", referrer: "Dr. R. Sharma", test: "CT PNS Coronal", modality: "CT", region: "CT PNS", billing: null, status: "AWAITING_IMAGES", studyDate: new Date(Date.now() - 4 * HOURS) },
+  // USG orders from the doctor's USG format library
+  { accession: "CARE-24093", name: "Kiran Devi", age: "44/F", sex: "F", mrn: "MRN-10501", referrer: "Dr. R. Sharma", test: "USG Whole Abdomen", modality: "USG", region: "USG Whole Abdomen", billing: "PAID", status: "TO_REPORT", studyDate: new Date(Date.now() - 1.5 * HOURS) },
+  { accession: "CARE-24094", name: "Sarita Kumari", age: "26/F", sex: "F", mrn: "MRN-10504", referrer: "Dr. N. Ahmed", test: "TVS", modality: "USG", region: "USG TVS", billing: "DUE", status: "TO_REPORT", studyDate: new Date(Date.now() - 3 * HOURS) },
+  { accession: "CARE-24095", name: "Rekha Devi", age: "24/F", sex: "F", mrn: "MRN-10509", referrer: "Dr. (Mrs) S. Patralekh", test: "Antenatal Scan", modality: "USG", region: "USG Pregnancy", billing: "PAID", status: "TO_REPORT", studyDate: new Date(Date.now() - 5 * HOURS) },
+  // X-ray orders from the doctor's X-ray format library
+  { accession: "CARE-24096", name: "Rajendra Prasad", age: "58/M", sex: "M", mrn: "MRN-10512", referrer: "Dr. A. Verma", test: "X-Ray Chest PA", modality: "X-Ray", region: "X-Ray Chest", billing: "PAID", status: "TO_REPORT", studyDate: new Date(Date.now() - 40 * 60 * 1000) },
+  { accession: "CARE-24097", name: "Guddu Kumar", age: "42/M", sex: "M", mrn: "MRN-10518", referrer: "Dr. S. Kumar", test: "X-Ray LS Spine AP/LAT", modality: "X-Ray", region: "X-Ray Spine", billing: "DUE", status: "TO_REPORT", studyDate: new Date(Date.now() - 6 * HOURS) },
+  { accession: "CARE-24098", name: "Priya Singh", age: "29/F", sex: "F", mrn: "MRN-10524", referrer: "Dr. (Mrs) R. Thakur", test: "HSG", modality: "X-Ray", region: "X-Ray HSG", billing: null, status: "AWAITING_IMAGES", studyDate: new Date(Date.now() - 2 * HOURS) },
 ];
 
 const DEMO_REPORTED: DemoOrder[] = [
@@ -61,7 +69,7 @@ export async function ensureSeed(): Promise<void> {
     // regions from the doctor's format library). Fast probe first so
     // steady-state cost is one query.
     const probe = await db.quickPhrase.findUnique({
-      where: { modality_region_label: { modality: "MR", region: "Knee Joint", label: "Joint effusion" } },
+      where: { modality_region_label: { modality: "USG", region: "USG Whole Abdomen", label: "Fatty liver Gr I" } },
     });
     if (!probe) {
       for (const p of PHRASE_SEEDS) {

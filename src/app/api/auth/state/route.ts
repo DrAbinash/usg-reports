@@ -14,5 +14,12 @@ export async function GET() {
     needsSetup: !settings.pinHash,
     authenticated,
     demoOrders: orders,
+    // Pre-auth branding for the lock screen (no secrets)
+    loginBranding: {
+      theme: settings.loginTheme,
+      bgUrl: settings.loginBgUrl,
+      appTitle: settings.appTitle,
+      hospitalName: settings.hospitalName,
+    },
   });
 }

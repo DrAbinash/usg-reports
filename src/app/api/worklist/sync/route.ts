@@ -37,6 +37,36 @@ function guessRegion(testName: string, modality: string): string {
     if (/pelvis|acetab|sacro?coccy/.test(t)) return "CT Pelvis";
     return "CT Head";
   }
+  if (modality === "USG") {
+    // Obstetrics / gynaecology first (TVS vs abdomen vs pregnancy)
+    if (/tvs|transvaginal|hsg/.test(t)) return "USG TVS";
+    if (/pregnan|antenatal|obstetric|follicular|anomaly|bpp|fetal/.test(t)) return "USG Pregnancy";
+    if (/breast/.test(t)) return "USG Breast";
+    if (/thyroid|neck/.test(t)) return "USG Neck";
+    if (/scrotum|testis|testicular|varicocele|hydrocele/.test(t)) return "USG Scrotum";
+    if (/doppler/.test(t) && !/obstetric|fetal|pregnan/.test(t)) return "USG Doppler";
+    if (/echo|echocardio/.test(t)) return "2D Echo";
+    if (/upper abd/.test(t)) return "USG Whole Abdomen";
+    // Whole / KUB / lower abdomen + everything abdominal defaults here
+    return "USG Whole Abdomen";
+  }
+  if (modality === "X-Ray") {
+    // Procedures first (they carry distinctive names)
+    if (/\bivu\b|\bivp\b|urogram/.test(t)) return "X-Ray IVU";
+    if (/hsg|hystero/.test(t)) return "X-Ray HSG";
+    if (/\bmcu\b|\brgu\b|urethro/.test(t)) return "X-Ray MCU";
+    if (/barium|\bba\b|ba swallow|ba meal|enema|follow through|bmft|goo/.test(t)) return "X-Ray Barium";
+    if (/fistulo|sinogram/.test(t)) return "X-Ray Fistulogram";
+    if (/invertogram/.test(t)) return "X-Ray Misc";
+    if (/t.?tube|cholangio/.test(t)) return "X-Ray Misc";
+    if (/chest|thorax/.test(t)) return "X-Ray Chest";
+    if (/spine|cervical|lumbar|dorso|sacrum|spondyl/.test(t)) return "X-Ray Spine";
+    if (/erect|abdomen|obstruction|perforation/.test(t)) return "X-Ray Abdomen";
+    if (/kub|kidney|ureter|bladder|calculus/.test(t)) return "X-Ray KUB";
+    if (/pns|sinus/.test(t)) return "X-Ray PNS";
+    if (/pelvis|hip|bone age|wrist|joint|skull|nasal|clavicle|mandible|heel|mastoid/.test(t)) return "X-Ray Bones";
+    return "X-Ray Chest";
+  }
   // Whole-body / combined screening studies first (before part-level rules)
   if (/whole body/.test(t)) return "Whole Body Screening";
   if (/whole spine|\bwss\b/.test(t)) return "Whole Spine Screening";
@@ -102,8 +132,8 @@ export async function POST() {
               patientGender: w.patientGender ?? null,
               referringDoctor: w.referringDoctor ?? null,
               testName: w.testName ?? null,
-              modality: (w.modality === "CT" ? "CT" : "MR"),
-              bodyRegion: guessRegion(w.testName ?? "", w.modality === "CT" ? "CT" : "MR"),
+              modality: (["CT", "USG", "X-Ray"].includes(w.modality ?? "") ? w.modality : "MR") as string,
+              bodyRegion: guessRegion(w.testName ?? "", (["CT", "USG", "X-Ray"].includes(w.modality ?? "") ? w.modality : "MR") as string),
               studyInstanceUid: w.studyInstanceUid ?? null,
               billingStatus: w.billingStatus ?? null,
               studyDate: w.studyDate ? new Date(w.studyDate) : null,

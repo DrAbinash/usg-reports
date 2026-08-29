@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { Toaster } from "@/components/ui/sonner";
+import { Toaster } from "@/components/ui/toaster";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,11 +14,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MRI Report Manager — Synology Deployable",
-  description: "Organize, view, and manage MRI reports. Upload your report folder and auto-organize by body region. Deploy on Synology NAS with Docker.",
-  keywords: ["MRI", "report", "medical imaging", "DICOM", "Synology", "NAS", "healthcare"],
+  title: "CARE Reporting Studio",
+  description:
+    "Single-radiology reporting workspace — worklist, findings, impression and A4 print, linked to CARE billing and Orthanc.",
   icons: {
-    icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>",
+    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
   },
 };
 

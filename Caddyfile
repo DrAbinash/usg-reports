@@ -1,23 +1,20 @@
-:81 {
-	@transform_port_query {
-		query XTransformPort=*
+# CARE Reporting Studio reverse proxy
+# - Studio app at /
+# - OHIF viewer at /ohif (SAME ORIGIN — enables the Capture button)
+#
+# NOTE: /ohif works when your OHIF is built with PUBLIC_URL=/ohif.
+# If your OHIF runs at :3010 built for the root path, keep using it directly
+# (set the LAN viewer URL in Settings) — the "From DICOM" image picker needs
+# no viewer at all, it renders images straight from Orthanc.
+
+:8090 {
+	# Same-origin OHIF (optional but recommended — Capture button works).
+	handle_path /ohif/* {
+		reverse_proxy {$OHIF_UPSTREAM:172.16.1.139:3010}
 	}
 
-	handle @transform_port_query {
-		reverse_proxy localhost:{query.XTransformPort} {
-			header_up Host {host}
-			header_up X-Forwarded-For {remote_host}
-			header_up X-Forwarded-Proto {scheme}
-			header_up X-Real-IP {remote_host}
-		}
-	}
-
+	# The Studio itself
 	handle {
-		reverse_proxy localhost:3000 {
-			header_up Host {host}
-			header_up X-Forwarded-For {remote_host}
-			header_up X-Forwarded-Proto {scheme}
-			header_up X-Real-IP {remote_host}
-		}
+		reverse_proxy studio:3000
 	}
 }

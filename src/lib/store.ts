@@ -1,133 +1,72 @@
-import { create } from 'zustand';
+"use client";
+/**
+ * Studio store — deliberately small (anti-soul rule: no 1,400-line monsters).
+ * Auth + navigation + worklist cache only; report detail lives in the editor.
+ */
+import { create } from "zustand";
 
-export type TabValue = 'upload' | 'reports' | 'create' | 'dashboard' | 'settings';
-
-export interface MriReport {
+export type Order = {
   id: string;
+  accessionNumber: string;
   patientName: string;
-  patientId: string | null;
-  patientAge: number | null;
+  patientAge: string | null;
   patientGender: string | null;
+  patientMrn: string | null;
   referringDoctor: string | null;
-  studyDate: string | null;
-  accessionNumber: string | null;
-  bodyRegion: string;
-  studyType: string;
+  testName: string | null;
   modality: string;
-  scannerModel: string | null;
-  fieldStrength: string | null;
-  clinicalIndication: string | null;
-  clinicalHistory: string | null;
-  technique: string | null;
-  comparison: string | null;
-  findings: string;
-  impression: string;
-  contrastAdministered: boolean;
-  contrastAgent: string | null;
-  contrastVolume: string | null;
-  contrastRoute: string | null;
-  reportStatus: string;
-  priority: string;
-  reportNumber: string | null;
-  attachmentPath: string | null;
-  attachmentName: string | null;
-  fileSize: number | null;
-  createdAt: string;
-  updatedAt: string;
-}
+  bodyRegion: string;
+  studyInstanceUid: string | null;
+  billingStatus: string | null;
+  status: string;
+  ignored: boolean;
+  studyDate: string | null;
+  reportStatus: string | null;
+  hasReport: boolean;
+};
 
-export interface UploadResult {
-  total: number;
-  success: number;
-  skipped: number;
-  errors: string[];
-  organized: {
-    originalName: string;
-    storedPath: string;
-    bodyRegion: string;
-    patientName: string;
-  }[];
-}
+export type View = "worklist" | "reporting" | "library" | "settings";
 
-export interface DashboardStats {
-  totalReports: number;
-  finalReports: number;
-  draftReports: number;
-  urgentReports: number;
-  recentReports: MriReport[];
-  regionCounts: { region: string; count: number }[];
-  monthlyData: Record<string, number>;
-}
+type StudioState = {
+  bootstrapped: boolean;
+  needsSetup: boolean;
+  authenticated: boolean;
+  view: View;
+  activeOrderId: string | null;
+  orders: Order[];
+  search: string;
+  syncedAt: string | null;
+  careOk: boolean;
+  orthancOk: boolean;
+  lastError: string | null;
+  syncing: boolean;
 
-export interface TemplateData {
-  bodyRegions: string[];
-  studyTypes: Record<string, string[]>;
-  defaultTemplates: { name: string; bodyRegion: string; technique: string; findings: string; impression: string }[];
-  customTemplates: { id: string; name: string; bodyRegion: string; technique: string | null; findings: string | null; impression: string | null }[];
-}
+  setAuth: (v: { needsSetup: boolean; authenticated: boolean }) => void;
+  setView: (v: View) => void;
+  openReporting: (orderId: string) => void;
+  setSearch: (s: string) => void;
+  setWorklist: (data: { orders: Order[]; syncedAt: string | null; careOk: boolean; orthancOk: boolean; lastError: string | null }) => void;
+  setSyncing: (v: boolean) => void;
+};
 
-interface AppState {
-  // Navigation
-  activeTab: TabValue;
-  setActiveTab: (tab: TabValue) => void;
+export const useStudio = create<StudioState>((set) => ({
+  bootstrapped: false,
+  needsSetup: false,
+  authenticated: false,
+  view: "worklist",
+  activeOrderId: null,
+  orders: [],
+  search: "",
+  syncedAt: null,
+  careOk: false,
+  orthancOk: false,
+  lastError: null,
+  syncing: false,
 
-  // Selected report for viewing
-  selectedReportId: string | null;
-  setSelectedReportId: (id: string | null) => void;
-
-  // Edit mode
-  editingReportId: string | null;
-  setEditingReportId: (id: string | null) => void;
-
-  // Upload state
-  isUploading: boolean;
-  uploadResult: UploadResult | null;
-  setIsUploading: (v: boolean) => void;
-  setUploadResult: (r: UploadResult | null) => void;
-
-  // Search/filter
-  searchQuery: string;
-  setSearchQuery: (q: string) => void;
-  filterRegion: string;
-  setFilterRegion: (r: string) => void;
-  filterStatus: string;
-  setFilterStatus: (s: string) => void;
-  filterPriority: string;
-  setFilterPriority: (p: string) => void;
-
-  // OHIF Viewer
-  showOhifViewer: boolean;
-  setShowOhifViewer: (v: boolean) => void;
-  ohifViewerWidth: number;
-  setOhifViewerWidth: (w: number) => void;
-}
-
-export const useAppStore = create<AppState>((set) => ({
-  activeTab: 'create',
-  setActiveTab: (tab) => set({ activeTab: tab }),
-
-  selectedReportId: null,
-  setSelectedReportId: (id) => set({ selectedReportId: id }),
-
-  editingReportId: null,
-  setEditingReportId: (id) => set({ editingReportId: id }),
-
-  isUploading: false,
-  uploadResult: null,
-  setIsUploading: (v) => set({ isUploading: v }),
-  setUploadResult: (r) => set({ uploadResult: r }),
-
-  searchQuery: '',
-  setSearchQuery: (q) => set({ searchQuery: q }),
-  filterRegion: '',
-  setFilterRegion: (r) => set({ filterRegion: r }),
-  filterStatus: '',
-  setFilterStatus: (s) => set({ filterStatus: s }),
-  filterPriority: '',
-  setFilterPriority: (p) => set({ filterPriority: p }),
-
-  showOhifViewer: false,
-  setShowOhifViewer: (v) => set({ showOhifViewer: v }),
-  ohifViewerWidth: 40,
-  setOhifViewerWidth: (w) => set({ ohifViewerWidth: w }),
+  setAuth: (v) => set({ ...v, bootstrapped: true }),
+  setView: (view) => set({ view }),
+  openReporting: (orderId) => set({ activeOrderId: orderId, view: "reporting" }),
+  setSearch: (search) => set({ search }),
+  setWorklist: (data) => set(data),
+  setSyncing: (syncing) => set({ syncing }),
 }));

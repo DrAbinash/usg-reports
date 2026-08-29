@@ -1,14 +1,7 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
 # dependencies
 node_modules
 /.pnp
 .pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
 
 # testing
 /coverage
@@ -28,45 +21,20 @@ node_modules
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
+dev.log
+*.log
 
-# env files — keep .env.example, ignore the rest
+# env files
 .env
-.env.local
-.env.production
-!.env.example
+.env*.local
 
 # vercel
 .vercel
 
-
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-local-*
-.claude
-.z-ai-config
-*.log
-dev.log
-dev.out.log
-test
-prompt
-server.log
 
-# Backup/temp files
-*.tmp
-*.bak
-
-# Synology Docker data (created at runtime)
+# Studio — local database & deploy state
+/db/
 /data/
-/uploads/
-
-# Tool results
-tool-results/
-
-# Skills directory
-/skills/
-
-# Dev database
-/db/*.db
-/db/*.db-journalupload/

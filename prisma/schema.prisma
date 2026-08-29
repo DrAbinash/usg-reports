@@ -1,3 +1,6 @@
+// CARE Reporting Studio — single-radiologist reporting workspace.
+// Schema follows the v1 build spec (Phase 1): additive, SQLite-friendly.
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,122 +10,199 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model MriReport {
-  id          String   @id @default(cuid())
-  
-  // Patient Information
+// ── Settings (single row, id = "singleton") ─────────────────────────────
+model HospitalSettings {
+  id              String   @id @default("singleton")
+
+  // Header / identity — the "soul" from CARE ERP
+  appTitle        String   @default("CARE Reporting Studio")
+  hospitalName    String   @default("")
+  addressLine     String   @default("")
+  phone           String   @default("")
+  email           String   @default("")
+  footerMessage   String   @default("")
+  logoUrl         String   @default("")
+
+  // Radiologist signature block
+  radiologistName     String   @default("")
+  radiologistQual     String   @default("")
+  radiologistRegNo    String   @default("")
+
+  // Security
+  pinHash         String?
+
+  // Integrations (secrets — never returned unmasked to the client)
+  careApiBase     String   @default("")
+  careApiKey      String   @default("")
+  orthancUrl      String   @default("")
+  orthancUsername String   @default("")
+  orthancPassword String   @default("")
+  ohifLanUrl      String   @default("")
+  ohifTailscaleUrl String  @default("")
+
+  updatedAt       DateTime @updatedAt
+}
+
+// ── Sessions for the PIN gate ────────────────────────────────────────────
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+// ── CARE worklist bridge ────────────────────────────────────────────────
+model CareOrderLink {
+  id              String   @id @default(cuid())
+  accessionNumber String   @unique
+  careWorklistId  String?
+  patientMrn      String?
   patientName     String
-  patientId       String?
-  patientAge      Int?
+  patientAge      String?
   patientGender   String?
   referringDoctor String?
+  testName        String?
+  modality        String   @default("MR") // MR | CT
+  bodyRegion      String   @default("")   // LS Spine / Cervical Spine / Brain / CT Head …
+  studyInstanceUid String?
+  billingStatus   String?  // PAID | DUE | UPI_PENDING | null
+  billingUpdatedAt DateTime?
   studyDate       DateTime?
-  accessionNumber String?
-  
-  // Study Details
-  bodyRegion      String
-  studyType       String
-  modality        String    @default("MRI")
-  scannerModel    String?
-  fieldStrength   String?
-  
-  // Clinical Information
-  clinicalIndication String?
-  clinicalHistory    String?
-  
-  // Report Content
-  technique      String?
-  comparison     String?
-  findings       String
-  impression     String
-  
-  // Additional Details
-  contrastAdministered Boolean  @default(false)
-  contrastAgent       String?
-  contrastVolume      String?
-  contrastRoute       String?
-  
-  // Metadata
-  reportStatus  String   @default("Draft")
-  priority      String   @default("Routine")
-  reportNumber  String?
-  
-  // File attachment
-  attachmentPath String?
-  attachmentName String?
-  fileSize       Int?
-  
-  // Timestamps
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
+  status          String   @default("AWAITING_IMAGES") // AWAITING_IMAGES | TO_REPORT | REPORTING | REPORTED
+  ignored         Boolean  @default(false)             // Unlinked bucket "Ignore"
+  report          Report?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status])
   @@index([patientName])
-  @@index([bodyRegion])
-  @@index([studyDate])
-  @@index([reportStatus])
-  @@index([accessionNumber])
 }
 
-model ReportTemplate {
-  id          String   @id @default(cuid())
-  name        String
-  bodyRegion  String
-  description String?
-  technique   String?
-  findings    String?
-  impression  String?
-  isDefault   Boolean   @default(false)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+// ── Complete report formats (one-click full report) ─────────────────────
+// A format fills the ENTIRE report in one tap: study title, technique,
+// findings scaffold, impression lines and recommendation. Formats expand
+// to FindingRows (single source of truth) — later phrase additions
+// append to the compiled sections and recompose the study title.
+model ReportFormat {
+  id          String  @id @default(cuid())
+  key         String  @unique        // "mr-brain-fazekas1-senile"
+  modality    String  @default("MR") // MR | CT
+  region      String                // Brain / LS Spine / Cervical Spine / CT Head / CT Spine
+  name        String                // "Fazekas Grade 1 + Senile Changes"
+  studyTitle  String                // "MRI BRAIN"
+  titleSuffix String  @default("")  // "fazekas grade 1 changes and senile changes"
+  technique   String  @default("")
+  recommendation String @default("")
+  rowsJson    String  @default("[]") // JSON: FormatRowSeed[]
+  isNormal    Boolean @default(false)
+  isBuiltin   Boolean @default(true)
+  sortOrder   Int     @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([modality, region])
 }
 
-model FindingTemplate {
-  id          String   @id @default(cuid())
-  bodyRegion  String
-  label       String
-  text        String
-  isAbnormal  Boolean  @default(false)
-  sortOrder   Int      @default(0)
-  isDefault   Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+// ── Reports ─────────────────────────────────────────────────────────────
+model Report {
+  id            String   @id @default(cuid())
+  orderId       String   @unique
+  order         CareOrderLink @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  @@index([bodyRegion])
+  technique     String   @default("")
+  findings      String   @default("")   // compiled findings text (informational)
+  impression    String   @default("")   // compiled impression (or manual)
+  impressionManual Boolean @default(false)
+  recommendation String  @default("")
+
+  // Study heading is the SHORT title ("MRI BRAIN"). The composed phrase
+  // ("MRI BRAIN WITH FAZEKAS GRADE 1 CHANGES AND SENILE CHANGES") lives as
+  // the bold opening line of FINDINGS — never in the heading.
+  formatKey     String?                // applied ReportFormat.key
+  studyBase     String?                // "MRI BRAIN" — the printed heading
+  titleSuffix   String?                // format suffix, stored at apply time
+  studyName     String?                // display heading (= studyBase unless manual)
+  titleManual   Boolean  @default(false)
+  findingsOpening String?              // bold opening line inside FINDINGS
+  openingManual  Boolean @default(false) // user edited the opening line
+
+  status        String   @default("DRAFT") // DRAFT | FINALIZED
+  reportHtml    String?                  // frozen snapshot at finalize
+  finalizedAt   DateTime?
+  careSyncedAt  DateTime?                // set when CARE finalize succeeded
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  findingRows   FindingRow[]
+  images        ReportImage[]
 }
 
-model HospitalSettings {
-  id              String   @id @default(cuid())
-  hospitalName    String   @default("MRI Report Center")
-  tagline         String?
-  address         String?
-  phone           String?
-  website         String?
-  email           String?
-  logoUrl         String?
-  radiologistName String?
-  radiologistQualification String?
-  radiologistRegNumber String?
-  accreditation   String?
-  accreditationNumber  String?
-  footerMessage   String   @default("Thank you for choosing our services.")
-  reportHeaderColor String @default("#1e3a5f")
+// ── Key images printed with the report (captured from OHIF or uploaded) ──
+model ReportImage {
+  id        String   @id @default(cuid())
+  reportId  String
+  report    Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  dataUrl   String                // base64 JPEG/PNG data URL (≤ ~1.5 MB)
+  caption   String   @default("")
+  source    String   @default("capture") // capture | upload
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
 
-  // Print layout options
-  reportLayout    String   @default("classic")
-  showTechnique   Boolean  @default(true)
-  showComparison  Boolean  @default(true)
-  showClinicalInfo Boolean  @default(true)
-  showSignature   Boolean  @default(true)
-  showFooterMessage Boolean  @default(true)
-  showAccreditation Boolean  @default(true)
-  patientColumns  String   @default("3")
-  impressionStyle  String   @default("bordered")
-  headerStyle     String   @default("full")
+  @@index([reportId])
+}
 
-  // Integration settings
-  orthancUrl      String?
-  ollamaUrl       String   @default("http://localhost:11434")
+// ── Atomic findings (R2-mini ledger) ────────────────────────────────────
+model FindingRow {
+  id         String   @id @default(cuid())
+  reportId   String
+  report     Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  region     String
+  concept    String   // disc_contour | canal_stenosis | fazekas | note | …
+  level      String?
+  laterality String?  // left | right | bilateral
+  severity   String?  // mild | moderate | severe | …
+  text       String
+  inImpression Boolean @default(true)
+  // Format-system extras:
+  titleFragment String?              // "chronic infarct" — joins the study title
+  newParagraph  Boolean @default(false) // start a new paragraph in findings
+  impressionOnly Boolean @default(false) // excluded from findings, numbered in impression
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
 
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  @@index([reportId])
+}
+
+// ── Quick phrases (chips) ───────────────────────────────────────────────
+model QuickPhrase {
+  id         String   @id @default(cuid())
+  region     String   // LS Spine / Cervical Spine / Brain / CT Head / CT Spine
+  modality   String   @default("MR")
+  label      String
+  concept    String
+  level      String?
+  laterality String?
+  severity   String?
+  text       String
+  titleFragment String?             // "chronic infarct" — copied to the row, joins the title
+  sortOrder  Int      @default(0)
+  @@unique([modality, region, label])
+}
+
+// ── Technique templates ─────────────────────────────────────────────────
+model TechniqueTemplate {
+  id        String  @id @default(cuid())
+  region    String
+  modality  String  @default("MR")
+  text      String
+  @@unique([modality, region])
+}
+
+// ── Worklist sync state (singleton) ─────────────────────────────────────
+model SyncState {
+  id           String   @id @default("singleton")
+  lastSyncAt   DateTime?
+  lastCareOk   Boolean  @default(false)
+  lastOrthancOk Boolean @default(false)
+  lastError    String?
 }

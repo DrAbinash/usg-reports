@@ -309,6 +309,7 @@ export function SettingsView() {
           <p className="rounded-lg bg-muted/60 px-3 py-2 text-[11px] leading-relaxed text-faint">
             Pre-filled with the clinic LAN defaults (CARE :8888 · Orthanc :8042 · OHIF :3010) and the
             CARE API key from this NAS’s <code>.env</code> — nothing to type on a fresh install.
+            You can enter just 172.16.1.139:8888 — http:// is added automatically.
             Saved values always win; clearing a URL reverts it to its default.
           </p>
           {/* CARE */}
@@ -356,7 +357,7 @@ export function SettingsView() {
             <div className="grid gap-4">
               <div className="flex items-end gap-2">
                 <div className="flex-1">
-                  <Field label="LAN URL" hint="In-hospital address, e.g. http://192.168.1.20:3001">
+                  <Field label="LAN URL" hint="In-hospital address, e.g. http://172.16.1.139:3010">
                     <Input value={s.ohifLanUrl} onChange={(e) => set("ohifLanUrl", e.target.value)} placeholder="http://…" className="h-9 text-[13px]" />
                   </Field>
                 </div>

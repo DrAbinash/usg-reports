@@ -23,6 +23,15 @@ const LAN_DEFAULTS = {
   ohifLanUrl: "http://172.16.1.139:3010",  // OHIF      (care-pacs compose)
 } as const;
 
+/** Bare LAN addresses like 172.16.1.139:8888 are how humans type — make
+ * them valid URLs by assuming plain http (the clinic LAN has no TLS).
+ * Idempotent; empty stays empty; https:// is preserved. */
+export function normalizeUrl(v: string): string {
+  const t = v.trim();
+  if (!t) return "";
+  return /^https?:\/\//i.test(t) ? t : `http://${t}`;
+}
+
 function envOverride(name: string): string {
   const v = process.env[name];
   return v && v.trim() ? v.trim() : "";
@@ -33,11 +42,16 @@ function defaultsOff(): boolean {
   return /^(0|false|off|no)$/i.test(process.env.INTEGRATION_DEFAULTS ?? "");
 }
 
-/** saved value → env override → built-in LAN default */
-function effective(saved: string, envName: string, fallback = ""): string {
-  if (saved.trim()) return saved;
+/** saved value → env override → built-in LAN default. URL fields are
+ * normalized (bare host:port healed); secrets never are — an API key like
+ * "live-key-42" must NEVER become "http://live-key-42". */
+function effective(saved: string, envName: string, fallback = "", isUrl = false): string {
+  const fix = (v: string): string => (isUrl ? normalizeUrl(v) : v);
+  // A saved bare host:port ("172.16.1.139:8888") is healed at READ time so
+  // rows written by earlier versions keep working with no re-typing.
+  if (saved.trim()) return fix(saved);
   if (defaultsOff()) return saved;
-  return envOverride(envName) || fallback;
+  return fix(envOverride(envName) || fallback);
 }
 
 /** Get (or lazily create) the singleton settings row, defaults applied. */
@@ -48,14 +62,14 @@ export async function getSettings() {
   }
   return {
     ...row,
-    careApiBase: effective(row.careApiBase, "CARE_API_BASE", LAN_DEFAULTS.careApiBase),
-    careApiKey: effective(row.careApiKey, "CARE_API_KEY"), // secret: env only, never a code default
-    orthancUrl: effective(row.orthancUrl, "ORTHANC_URL", LAN_DEFAULTS.orthancUrl),
+    careApiBase: effective(row.careApiBase, "CARE_API_BASE", LAN_DEFAULTS.careApiBase, true),
+    careApiKey: effective(row.careApiKey, "CARE_API_KEY"), // secret: env only, never a code default, NEVER normalized
+    orthancUrl: effective(row.orthancUrl, "ORTHANC_URL", LAN_DEFAULTS.orthancUrl, true),
     orthancUsername: effective(row.orthancUsername, "ORTHANC_USERNAME"),
     // Passwords are stored verbatim — never trimmed, so keep the verbatim check.
     orthancPassword: row.orthancPassword || (defaultsOff() ? "" : envOverride("ORTHANC_PASSWORD")),
-    ohifLanUrl: effective(row.ohifLanUrl, "OHIF_LAN_URL", LAN_DEFAULTS.ohifLanUrl),
-    ohifTailscaleUrl: effective(row.ohifTailscaleUrl, "OHIF_TAILSCALE_URL"), // optional — never guessed
+    ohifLanUrl: effective(row.ohifLanUrl, "OHIF_LAN_URL", LAN_DEFAULTS.ohifLanUrl, true),
+    ohifTailscaleUrl: effective(row.ohifTailscaleUrl, "OHIF_TAILSCALE_URL", "", true), // optional — never guessed
   };
 }
 
@@ -84,6 +98,10 @@ export async function getMaskedSettings(): Promise<MaskedSettings> {
 
 type SettingsUpdate = Partial<Record<string, string>>;
 
+/** URL-valued settings fields — normalized on save so "172.16.1.139:8888"
+ * is stored as "http://172.16.1.139:8888" (the doctor never types a scheme). */
+const URL_FIELDS = new Set(["careApiBase", "orthancUrl", "ohifLanUrl", "ohifTailscaleUrl"]);
+
 /** Apply a settings update. Empty-string secret fields = "keep existing". */
 export async function updateSettings(patch: SettingsUpdate) {
   const allowed = [
@@ -109,8 +127,9 @@ export async function updateSettings(patch: SettingsUpdate) {
     }
     // Ordinary fields (URLs, names…): trim so a pasted trailing space or
     // newline can never corrupt a URL, and empty string IS a valid update
-    // (clearing a URL is allowed).
-    data[k] = v.trim();
+    // (clearing a URL is allowed). URL fields additionally get http://
+    // prepended when the scheme is missing.
+    data[k] = URL_FIELDS.has(k) ? normalizeUrl(v) : v.trim();
   }
   await getSettings(); // ensure row exists
   await db.hospitalSettings.update({ where: { id: "singleton" }, data });

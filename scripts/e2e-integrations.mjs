@@ -229,20 +229,20 @@ async function main() {
     ok(pre?.ohifLanUrl === "http://172.16.1.139:3010", `ohifLanUrl default -> ${pre?.ohifLanUrl}`);
     ok(pre?.careApiKeySet === true && !("careApiKey" in (pre ?? {})), "env key visible as set, still masked");
 
-    console.log("== 6. save integrations (with paste artifacts) ==");
+    console.log("== 6. save integrations (natural typing: bare host:port, no scheme, paste artifacts) ==");
     r = await app("PUT", "/api/settings", {
-      careApiBase: `  http://127.0.0.1:${CARE_PORT} `,
+      careApiBase: `  127.0.0.1:${CARE_PORT} `,
       careApiKey: `  ${API_KEY} \n`,
-      orthancUrl: ` http://127.0.0.1:${ORTHANC_PORT}/ `,
+      orthancUrl: `127.0.0.1:${ORTHANC_PORT} `,
       orthancUsername: "",
       orthancPassword: "",
-      ohifLanUrl: `http://127.0.0.1:${OHIF_PORT}`,
+      ohifLanUrl: `127.0.0.1:${OHIF_PORT}`,
     });
     const saved = r.json?.settings;
     ok(r.status === 200, "PUT /api/settings returns 200");
-    ok(saved?.careApiBase === `http://127.0.0.1:${CARE_PORT}`, `careApiBase persisted (trimmed) -> ${saved?.careApiBase}`);
-    ok(saved?.orthancUrl === `http://127.0.0.1:${ORTHANC_PORT}/`, `orthancUrl persisted -> ${saved?.orthancUrl}`);
-    ok(saved?.ohifLanUrl === `http://127.0.0.1:${OHIF_PORT}`, `ohifLanUrl persisted -> ${saved?.ohifLanUrl}`);
+    ok(saved?.careApiBase === `http://127.0.0.1:${CARE_PORT}`, `careApiBase normalized -> ${saved?.careApiBase}`);
+    ok(saved?.orthancUrl === `http://127.0.0.1:${ORTHANC_PORT}`, `orthancUrl normalized -> ${saved?.orthancUrl}`);
+    ok(saved?.ohifLanUrl === `http://127.0.0.1:${OHIF_PORT}`, `ohifLanUrl normalized -> ${saved?.ohifLanUrl}`);
     ok(saved?.careApiKeySet === true && !("careApiKey" in (saved ?? {})), "key saved but masked in response");
     ok(!("orthancPassword" in (saved ?? {})) && !("pinHash" in (saved ?? {})), "no secrets in response");
 

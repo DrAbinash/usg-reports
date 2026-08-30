@@ -222,3 +222,84 @@ describe("ship-with-defaults: git pull → integrations preconfigured", () => {
     expect((await getSettings()).careApiBase).toBe("http://172.16.1.139:8888");
   });
 });
+
+describe("URL normalization — the doctor types 172.16.1.139:8888, we make it a URL", () => {
+  const ENV_KEYS = [
+    "CARE_API_BASE", "CARE_API_KEY", "ORTHANC_URL", "ORTHANC_USERNAME",
+    "ORTHANC_PASSWORD", "OHIF_LAN_URL", "OHIF_TAILSCALE_URL", "INTEGRATION_DEFAULTS",
+  ] as const;
+  let savedEnv: Record<string, string | undefined>;
+
+  beforeEach(async () => {
+    savedEnv = {};
+    for (const k of ENV_KEYS) { savedEnv[k] = process.env[k]; delete process.env[k]; }
+    await db.hospitalSettings.deleteMany();
+  });
+  afterEach(() => {
+    for (const k of ENV_KEYS) {
+      if (savedEnv[k] === undefined) delete process.env[k];
+      else process.env[k] = savedEnv[k];
+    }
+  });
+
+  it("saves a bare host:port with http:// prepended (all three integrations)", async () => {
+    await updateSettings({
+      careApiBase: " 172.16.1.139:8888 ",
+      orthancUrl: "172.16.1.139:8042",
+      ohifLanUrl: "172.16.1.139:3010",
+      ohifTailscaleUrl: "100.101.102.103:80",
+    });
+    const s = await getSettings();
+    expect(s.careApiBase).toBe("http://172.16.1.139:8888");
+    expect(s.orthancUrl).toBe("http://172.16.1.139:8042");
+    expect(s.ohifLanUrl).toBe("http://172.16.1.139:3010");
+    expect(s.ohifTailscaleUrl).toBe("http://100.101.102.103:80");
+  });
+
+  it("heals LEGACY scheme-less rows at read time — no re-typing, no re-save", async () => {
+    // Simulate the exact production row: values saved by the earlier build
+    // without a scheme (the reported "save integration is not working" state).
+    await db.hospitalSettings.create({
+      data: {
+        id: "singleton",
+        careApiBase: "172.16.1.139:8888",
+        orthancUrl: "172.16.1.139:8042",
+        ohifLanUrl: "172.16.1.139:3010",
+      },
+    });
+    const s = await getSettings();
+    expect(s.careApiBase).toBe("http://172.16.1.139:8888");
+    expect(s.orthancUrl).toBe("http://172.16.1.139:8042");
+    expect(s.ohifLanUrl).toBe("http://172.16.1.139:3010");
+    // The masked API the Settings form reads shows the healed URLs too:
+    const m = await getMaskedSettings();
+    expect(m.careApiBase).toBe("http://172.16.1.139:8888");
+  });
+
+  it("preserves https:// and keeps empty clearable (reverts to default)", async () => {
+    await updateSettings({ careApiBase: "https://caredeoghar.com" });
+    expect((await getSettings()).careApiBase).toBe("https://caredeoghar.com");
+    await updateSettings({ careApiBase: "" });
+    expect((await getSettings()).careApiBase).toBe("http://172.16.1.139:8888");
+  });
+
+  it("normalizes scheme-less env overrides as well", async () => {
+    process.env.ORTHANC_URL = "172.16.1.140:8042";
+    const s = await getSettings();
+    expect(s.orthancUrl).toBe("http://172.16.1.140:8042");
+  });
+
+  it("NEVER normalizes the API key — a key is not a URL (regression guard)", async () => {
+    await updateSettings({ careApiKey: "e46eea8477770ee979324824ea4af992359eef50b29ed7c8" });
+    expect((await getSettings()).careApiKey).toBe("e46eea8477770ee979324824ea4af992359eef50b29ed7c8");
+    process.env.CARE_API_KEY = "env-key-no-scheme";
+    await db.hospitalSettings.deleteMany();
+    expect((await getSettings()).careApiKey).toBe("env-key-no-scheme");
+  });
+
+  it("is idempotent — an already-correct URL round-trips unchanged", async () => {
+    await updateSettings({ orthancUrl: "http://172.16.1.139:8042" });
+    await updateSettings({ orthancUrl: " http://172.16.1.139:8042 " });
+    expect((await getSettings()).orthancUrl).toBe("http://172.16.1.139:8042");
+  });
+});

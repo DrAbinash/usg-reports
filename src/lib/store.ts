@@ -25,7 +25,7 @@ export type Order = {
   hasReport: boolean;
 };
 
-export type View = "worklist" | "reporting" | "library" | "settings";
+export type View = "worklist" | "reporting" | "usg" | "library" | "settings";
 
 type StudioState = {
   bootstrapped: boolean;

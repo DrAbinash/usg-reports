@@ -109,8 +109,10 @@ export async function updateSettings(patch: SettingsUpdate) {
     "logoUrl", "radiologistName", "radiologistQual", "radiologistRegNo",
     "careApiBase", "careApiKey", "orthancUrl", "orthancUsername", "orthancPassword",
     "ohifLanUrl", "ohifTailscaleUrl", "loginTheme", "loginBgUrl",
+    "usgDoctorName", "usgDoctorQual", "usgDoctorRegNo", "usgMachineLine",
+    "usgFooterLine", "usgDeclarationLine",
   ];
-  const data: Record<string, string> = {};
+  const data: Record<string, string | boolean> = {};
   for (const k of allowed) {
     const v = patch[k];
     if (typeof v !== "string") continue;
@@ -130,6 +132,12 @@ export async function updateSettings(patch: SettingsUpdate) {
     // (clearing a URL is allowed). URL fields additionally get http://
     // prepended when the scheme is missing.
     data[k] = URL_FIELDS.has(k) ? normalizeUrl(v) : v.trim();
+  }
+  // USG machine banner toggle arrives as a string checkbox value.
+  if (typeof patch.usgShowMachine === "string") {
+    data.usgShowMachine = !/^(0|false|off|no)$/i.test(patch.usgShowMachine.trim());
+  } else if (typeof patch.usgShowMachine === "boolean") {
+    data.usgShowMachine = patch.usgShowMachine;
   }
   await getSettings(); // ensure row exists
   await db.hospitalSettings.update({ where: { id: "singleton" }, data });

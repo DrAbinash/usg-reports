@@ -44,6 +44,16 @@ model HospitalSettings {
   ohifLanUrl      String   @default("")
   ohifTailscaleUrl String  @default("")
 
+  // USG (sonography) studio — Dr Sugandha's standalone ultrasound reporting.
+  // Sonologist signature is separate from the radiologist block above.
+  usgDoctorName     String   @default("")
+  usgDoctorQual     String   @default("")
+  usgDoctorRegNo    String   @default("")
+  usgMachineLine    String   @default("This Scan has been proudly done on GE Voluson Pro 4-D USG Machine")
+  usgShowMachine    Boolean  @default(true)
+  usgFooterLine     String   @default("Kindly co-relate with clinico-pathological findings.")
+  usgDeclarationLine String  @default("") // optional PC-PNDT style declaration under the signature
+
   updatedAt       DateTime @updatedAt
 }
 
@@ -209,4 +219,52 @@ model SyncState {
   lastCareOk   Boolean  @default(false)
   lastOrthancOk Boolean @default(false)
   lastError    String?
+}
+
+// ── USG Studio — standalone sonography reports (Dr Sugandha) ────────────
+// Not tied to the CARE worklist: walk-in ultrasound patients with their own
+// drafts, finalize-freeze and reprint, exactly like the reporting pipeline.
+model UsgReport {
+  id            String    @id @default(cuid())
+  patientName   String
+  patientAge    String    @default("")
+  patientSex    String    @default("F") // F | M
+  referredBy    String    @default("")
+  studyKey      String    @default("wa-female") // wa-male | wa-female | ua | la-male | la-female
+  technique     String    @default("")
+
+  // Full composer state (organs, selected pathologies, variables, overrides)
+  stateJson     String    @default("{}")
+
+  // Denormalised for search/listing; resolved from state at save time.
+  studyTitle    String    @default("")
+  findings      String    @default("")
+  impression    String    @default("")
+
+  status        String    @default("DRAFT") // DRAFT | FINALIZED
+  reportHtml    String?   // frozen snapshot at finalize
+  finalizedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([status])
+  @@index([patientName])
+  @@index([createdAt])
+}
+
+// ── USG Studio — user-added custom pathologies ──────────────────────────
+// Builtin pathology entries live in code (src/lib/usg/pathologies.ts);
+// anything the doctor adds in the UI is persisted here and merged at runtime.
+model UsgPathology {
+  id            String   @id @default(cuid())
+  organKey      String
+  label         String
+  findingText   String   // may contain {variable} tokens
+  impressionLinesJson String @default("[]")
+  titleFragment String   @default("")
+  sortOrder     Int      @default(100)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([organKey, label])
 }

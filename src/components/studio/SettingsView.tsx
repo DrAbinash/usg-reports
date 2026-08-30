@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SectionLabel } from "./bits";
 import { LOGIN_THEMES, type LoginThemeName } from "./LockScreen";
-import { Building2, UserRound, ShieldCheck, PlugZap, Check, X, Palette, Upload, Trash2 } from "lucide-react";
+import { Building2, UserRound, ShieldCheck, PlugZap, Check, X, Palette, Upload, Trash2, Waves } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +21,9 @@ type Settings = {
   ohifLanUrl: string; ohifTailscaleUrl: string;
   loginTheme: string; loginBgUrl: string;
   pinSet: boolean;
+  usgDoctorName: string; usgDoctorQual: string; usgDoctorRegNo: string;
+  usgMachineLine: string; usgShowMachine: boolean;
+  usgFooterLine: string; usgDeclarationLine: string;
 };
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -187,6 +191,7 @@ export function SettingsView() {
           <TabsTrigger value="appearance" className="text-[12px]"><Palette className="mr-1.5 h-3.5 w-3.5" />Appearance</TabsTrigger>
           <TabsTrigger value="hospital" className="text-[12px]"><Building2 className="mr-1.5 h-3.5 w-3.5" />Hospital</TabsTrigger>
           <TabsTrigger value="radiologist" className="text-[12px]"><UserRound className="mr-1.5 h-3.5 w-3.5" />Radiologist</TabsTrigger>
+          <TabsTrigger value="usg" className="text-[12px]"><Waves className="mr-1.5 h-3.5 w-3.5" />USG Studio</TabsTrigger>
           <TabsTrigger value="security" className="text-[12px]"><ShieldCheck className="mr-1.5 h-3.5 w-3.5" />Security</TabsTrigger>
           <TabsTrigger value="integrations" className="text-[12px]"><PlugZap className="mr-1.5 h-3.5 w-3.5" />Integrations</TabsTrigger>
         </TabsList>
@@ -286,6 +291,40 @@ export function SettingsView() {
             <Input value={s.radiologistQual} onChange={(e) => set("radiologistQual", e.target.value)} className="h-9 text-[13px]" />
           </Field>
           <Field label="Registration number"><Input value={s.radiologistRegNo} onChange={(e) => set("radiologistRegNo", e.target.value)} className="h-9 text-[13px]" /></Field>
+          <Button onClick={save} className="h-9 text-[12.5px]">Save</Button>
+        </TabsContent>
+
+        <TabsContent value="usg" className="mt-4 space-y-4 rounded-xl border border-border bg-card p-5">
+          <div className="flex items-center gap-2 rounded-lg bg-rose-50 px-3 py-2 text-[12px] font-semibold text-rose-700 ring-1 ring-rose-200">
+            <Waves className="h-4 w-4" /> Sonologist block printed on every USG report — separate from the radiologist above
+          </div>
+          <Field label="Sonologist name" hint="e.g. Dr. Sugandha Priyadarshini">
+            <Input value={s.usgDoctorName ?? ""} onChange={(e) => set("usgDoctorName", e.target.value)} className="h-9 text-[13px]" />
+          </Field>
+          <Field label="Qualification" hint="e.g. MBBS, MD">
+            <Input value={s.usgDoctorQual ?? ""} onChange={(e) => set("usgDoctorQual", e.target.value)} className="h-9 text-[13px]" />
+          </Field>
+          <Field label="Registration number">
+            <Input value={s.usgDoctorRegNo ?? ""} onChange={(e) => set("usgDoctorRegNo", e.target.value)} className="h-9 text-[13px]" />
+          </Field>
+          <Field label="Machine banner" hint="Printed in italics under the study heading — the doctor's classic line.">
+            <Input value={s.usgMachineLine ?? ""} onChange={(e) => set("usgMachineLine", e.target.value)} className="h-9 text-[13px]" />
+          </Field>
+          <Field label="Report footer line" hint="Printed at the bottom of every USG report.">
+            <Input value={s.usgFooterLine ?? ""} onChange={(e) => set("usgFooterLine", e.target.value)} className="h-9 text-[13px]" />
+          </Field>
+          <Field label="Declaration (optional)" hint="Boxed legal line under the signature, e.g. the PC-PNDT declaration. Leave blank to omit.">
+            <Textarea value={s.usgDeclarationLine ?? ""} onChange={(e) => set("usgDeclarationLine", e.target.value)} rows={2} className="text-[12px]" />
+          </Field>
+          <label className="flex cursor-pointer items-center gap-2 text-[12px] font-medium text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={s.usgShowMachine !== false}
+              onChange={(e) => setS({ ...s, usgShowMachine: e.target.checked } as Settings)}
+              className="h-4 w-4 accent-rose-600"
+            />
+            Show the machine banner on printed USG reports
+          </label>
           <Button onClick={save} className="h-9 text-[12.5px]">Save</Button>
         </TabsContent>
 

@@ -5,7 +5,8 @@ import { WorklistView } from "./WorklistView";
 import { ReportingView } from "./ReportingView";
 import { LibraryView } from "./LibraryView";
 import { SettingsView } from "./SettingsView";
-import { Stethoscope, ListChecks, BookLock, Settings2, LogOut, RefreshCw } from "lucide-react";
+import { UsgStudioView } from "./usg/UsgStudioView";
+import { Stethoscope, ListChecks, BookLock, Settings2, LogOut, RefreshCw, Waves } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -13,6 +14,7 @@ import type { View } from "@/lib/store";
 
 const NAV: { id: View; label: string; icon: typeof ListChecks; tint: string }[] = [
   { id: "worklist", label: "Worklist", icon: ListChecks, tint: "text-violet-600 bg-violet-50 ring-violet-200" },
+  { id: "usg", label: "USG Studio", icon: Waves, tint: "text-rose-700 bg-rose-50 ring-rose-200" },
   { id: "library", label: "Library", icon: BookLock, tint: "text-teal-700 bg-teal-50 ring-teal-200" },
   { id: "settings", label: "Settings", icon: Settings2, tint: "text-amber-700 bg-amber-50 ring-amber-200" },
 ];
@@ -116,6 +118,7 @@ export function AppShell() {
         <main className="studio-scroll min-h-0 flex-1 overflow-y-auto">
           {view === "worklist" && <WorklistView />}
           {view === "reporting" && activeOrderId && <ReportingView />}
+          {view === "usg" && <UsgStudioView />}
           {view === "library" && <LibraryView />}
           {view === "settings" && <SettingsView />}
         </main>

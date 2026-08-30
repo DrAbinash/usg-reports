@@ -54,3 +54,26 @@ Caddyfile
 upload/
 download/
 tool-results/
+# Synology metadata
+@eaDir/
+**/@eaDir/
+
+# Microsoft Office temporary files
+~$*
+**/~$*
+
+# Synology metadata
+@eaDir/
+**/@eaDir/
+
+# Windows / Word temporary files
+Desktop.ini
+**/Desktop.ini
+*.tmp
+**/*.tmp
+*.lnk
+**/*.lnk
+
+# Accidental media files
+*.mp3
+**/*.mp3

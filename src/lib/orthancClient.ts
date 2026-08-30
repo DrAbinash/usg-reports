@@ -10,8 +10,11 @@ const TIMEOUT_MS = 10_000;
 async function orthancFetch<T>(path: string): Promise<OrthancResult<T>> {
   const s = await getSettings();
   if (!s.orthancUrl) return { ok: false, error: "Orthanc not configured (Settings → Integrations)" };
-  const base = s.orthancUrl.replace(/\/+$/, "");
+  const base = s.orthancUrl.trim().replace(/\/+$/, "");
   const headers: Record<string, string> = {};
+  // Only send Authorization when a username is configured. This Orthanc has
+  // no auth — an empty credential pair must mean "anonymous", never a bogus
+  // Basic header that some proxies reject with 401.
   if (s.orthancUsername) {
     headers.Authorization = `Basic ${Buffer.from(`${s.orthancUsername}:${s.orthancPassword}`).toString("base64")}`;
   }
@@ -22,7 +25,11 @@ async function orthancFetch<T>(path: string): Promise<OrthancResult<T>> {
     if (!res.ok) return { ok: false, error: `Orthanc responded ${res.status}` };
     const data = (await res.json()) as T;
     return { ok: true, data };
-  } catch {
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") return { ok: false, error: `Orthanc timed out (${TIMEOUT_MS / 1000}s)` };
+    if (e instanceof TypeError && /invalid url|failed to parse/i.test(e.message)) {
+      return { ok: false, error: "Orthanc unreachable (invalid URL — expected like http://172.16.1.139:8042)" };
+    }
     return { ok: false, error: "Orthanc unreachable" };
   } finally {
     clearTimeout(timer);
@@ -35,12 +42,44 @@ export type OrthancStudy = {
   PatientMainTags?: { PatientName?: string; PatientID?: string };
 };
 
-export function listStudies() {
-  return orthancFetch<OrthancStudy[]>("/api/studies?requestedStudies=main-module-tags");
+/**
+ * List studies with their MainDicomTags (AccessionNumber, StudyInstanceUID).
+ *
+ * Orthanc 1.12.x core REST API (NO /api prefix):
+ *   1. GET /studies            → array of study IDs (no metadata)
+ *   2. GET /studies/{id}       → full study resource incl. MainDicomTags
+ *
+ * PatientMainTags lives on the patient resource and nothing in the app
+ * consumes it today, so we deliberately do NOT spend one extra request per
+ * study fetching it — the field stays optional on the type.
+ *
+ * Studies are fetched with bounded concurrency (6); a study that fails to
+ * resolve is skipped so one bad row can never fail the whole sync.
+ */
+const STUDY_CONCURRENCY = 6;
+
+export async function listStudies(): Promise<OrthancResult<OrthancStudy[]>> {
+  const ids = await orthancFetch<string[]>("/studies");
+  if (!ids.ok) return ids;
+  if (!Array.isArray(ids.data)) {
+    return { ok: false, error: "Orthanc /studies returned an unexpected response" };
+  }
+  const out: OrthancStudy[] = [];
+  let next = 0;
+  const worker = async () => {
+    while (next < ids.data.length) {
+      const id = String(ids.data[next++]);
+      const r = await orthancFetch<OrthancStudy>(`/studies/${encodeURIComponent(id)}`);
+      if (r.ok && r.data?.ID && r.data.MainDicomTags) out.push(r.data);
+    }
+  };
+  const workers = Array.from({ length: Math.min(STUDY_CONCURRENCY, ids.data.length) }, worker);
+  await Promise.all(workers);
+  return { ok: true, data: out };
 }
 
 export function testOrthanc() {
-  return orthancFetch<{ Name?: string; Version?: string }>("/api/system");
+  return orthancFetch<{ Name?: string; Version?: string; DatabaseVersion?: number; StorageAreaName?: string }>("/system");
 }
 
 // ── DICOMweb (the premium-report image selector soul from CARE R1.3) ─────

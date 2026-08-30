@@ -13,7 +13,10 @@ async function careFetch<T>(path: string, init?: RequestInit): Promise<CareResul
   if (!s.careApiBase || !s.careApiKey) {
     return { ok: false, error: "CARE integration not configured (Settings → Integrations)" };
   }
-  const base = s.careApiBase.replace(/\/+$/, "");
+  const base = s.careApiBase.trim().replace(/\/+$/, "");
+  if (!/^https?:\/\//i.test(base)) {
+    return { ok: false, error: "CARE unreachable (base URL must start with http:// or https:// — e.g. http://172.16.1.139:8888)" };
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
@@ -43,8 +46,11 @@ async function careFetch<T>(path: string, init?: RequestInit): Promise<CareResul
     const data = (await res.json()) as T;
     return { ok: true, data };
   } catch (e) {
-    const msg = e instanceof Error && e.name === "AbortError" ? "CARE timed out (10s)" : "CARE unreachable";
-    return { ok: false, error: msg };
+    if (e instanceof Error && e.name === "AbortError") return { ok: false, error: "CARE timed out (10s)" };
+    if (e instanceof TypeError && /invalid url|failed to parse/i.test(e.message)) {
+      return { ok: false, error: "CARE unreachable (invalid base URL — check Settings → Integrations)" };
+    }
+    return { ok: false, error: "CARE unreachable" };
   } finally {
     clearTimeout(timer);
   }

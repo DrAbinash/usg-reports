@@ -1,6 +1,7 @@
 import { requireSession } from "@/lib/auth";
 import { pingCare } from "@/lib/careClient";
 import { testOrthanc } from "@/lib/orthancClient";
+import { probeViewer } from "@/lib/viewerClient";
 import { getSettings } from "@/lib/settings";
 
 export async function POST(req: Request) {
@@ -15,23 +16,19 @@ export async function POST(req: Request) {
   }
   if (target === "orthanc") {
     const r = await testOrthanc();
-    return Response.json(r.ok ? { ok: true, message: `Orthanc ${r.data.Version ?? ""} reachable`.trim() } : { ok: false, error: r.error });
+    const message = `Orthanc ${r.ok && r.data.Version ? `${r.data.Version} ` : ""}reachable`;
+    return Response.json(r.ok ? { ok: true, message } : { ok: false, error: r.error });
   }
   if (target === "ohif") {
+    // Tests use the SAVED values — the doctor must click "Save integrations"
+    // first. The LAN/Tailscale distinction is preserved via the label.
     const s = await getSettings();
     const which = body.network === "tailscale" ? "ohifTailscaleUrl" : "ohifLanUrl";
-    const url = s[which];
-    if (!url) return Response.json({ ok: false, error: `${body.network === "tailscale" ? "Tailscale" : "LAN"} viewer URL not set` });
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
-    try {
-      const res = await fetch(url, { method: "HEAD", signal: controller.signal });
-      return Response.json(res.ok ? { ok: true, message: "Viewer reachable" } : { ok: false, error: `Viewer responded ${res.status}` });
-    } catch {
-      return Response.json({ ok: false, error: "Viewer unreachable" });
-    } finally {
-      clearTimeout(timer);
-    }
+    const label = body.network === "tailscale" ? "Tailscale viewer" : "LAN viewer";
+    const url = s[which] ?? "";
+    if (!url) return Response.json({ ok: false, error: `${label} URL not set (save integrations first)` });
+    const r = await probeViewer(url, label);
+    return Response.json(r.ok ? { ok: true, message: r.message } : { ok: false, error: r.error });
   }
   return Response.json({ ok: false, error: "Unknown test target" }, { status: 400 });
 }

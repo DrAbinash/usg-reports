@@ -42,3 +42,6 @@ next-env.d.ts
 # local test database
 prisma/dev.db
 prisma/dev.db-journal
+
+# vitest scratch databases
+tests/.tmp

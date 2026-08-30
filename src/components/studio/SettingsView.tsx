@@ -50,9 +50,14 @@ export function SettingsView() {
   const [pin, setPin] = useState({ current: "", next: "" });
   const [bgUploading, setBgUploading] = useState(false);
   const bgFileRef = useRef<HTMLInputElement>(null);
+  /** Snapshot of the last SAVED state — used to warn before testing unsaved edits. */
+  const savedRef = useRef<Settings | null>(null);
 
   useEffect(() => {
-    fetch("/api/settings").then((r) => r.json()).then((d) => setS(d.settings));
+    fetch("/api/settings").then((r) => r.json()).then((d) => {
+      setS(d.settings);
+      savedRef.current = d.settings;
+    });
   }, []);
 
   if (!s) return <div className="p-6 text-[13px] text-faint">Loading settings…</div>;
@@ -70,6 +75,7 @@ export function SettingsView() {
     }).then((res) => res.json());
     if (r.settings) {
       setS({ ...s, careApiKeySet: r.settings.careApiKeySet, orthancPasswordSet: r.settings.orthancPasswordSet });
+      savedRef.current = { ...s, careApiKeySet: r.settings.careApiKeySet, orthancPasswordSet: r.settings.orthancPasswordSet } as Settings;
       setCareApiKey("");
       setOrthancPassword("");
       toast.success("Settings saved");
@@ -80,6 +86,23 @@ export function SettingsView() {
 
   const runTest = async (target: string, network?: string) => {
     const key = network ? `${target}:${network}` : target;
+    // Tests run against the SAVED settings — if the form holds unsaved
+    // integration edits, say so instead of reporting a confusing failure.
+    const dirty = (() => {
+      if (!s || !savedRef.current) return false;
+      const fields: Record<string, (keyof Settings)[]> = {
+        care: ["careApiBase"],
+        orthanc: ["orthancUrl", "orthancUsername"],
+        ohif: network === "tailscale" ? ["ohifTailscaleUrl"] : ["ohifLanUrl"],
+      };
+      return (fields[target] ?? []).some((f) => s[f] !== savedRef.current![f])
+        || (target === "care" && careApiKey !== "")
+        || (target === "orthanc" && orthancPassword !== "");
+    })();
+    if (dirty) {
+      setTests((t) => ({ ...t, [key]: { ok: false, msg: "Save integrations first — tests use saved values" } }));
+      return;
+    }
     setTests((t) => ({ ...t, [key]: "loading" }));
     const r = await fetch("/api/settings/test", {
       method: "POST",

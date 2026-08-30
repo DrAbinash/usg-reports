@@ -48,8 +48,21 @@ export async function updateSettings(patch: SettingsUpdate) {
   for (const k of allowed) {
     const v = patch[k];
     if (typeof v !== "string") continue;
-    if ((k === "careApiKey" || k === "orthancPassword") && v.trim() === "") continue; // keep
-    data[k] = v;
+    if (k === "careApiKey") {
+      // API keys are pasted from chat/notes — strip paste whitespace.
+      if (v.trim() === "") continue; // blank = keep existing key
+      data[k] = v.trim();
+      continue;
+    }
+    if (k === "orthancPassword") {
+      if (v === "") continue; // blank = keep existing password
+      data[k] = v; // passwords stored verbatim (spaces may be intentional)
+      continue;
+    }
+    // Ordinary fields (URLs, names…): trim so a pasted trailing space or
+    // newline can never corrupt a URL, and empty string IS a valid update
+    // (clearing a URL is allowed).
+    data[k] = v.trim();
   }
   await getSettings(); // ensure row exists
   await db.hospitalSettings.update({ where: { id: "singleton" }, data });

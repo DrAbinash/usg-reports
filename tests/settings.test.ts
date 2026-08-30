@@ -9,7 +9,7 @@
  *   → ordinary fields must be freely clearable,
  *   → GET /api/settings (masked) must never leak secrets.
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
 import { getMaskedSettings, getSettings, setPinHash, updateSettings } from "@/lib/settings";
 
@@ -144,5 +144,81 @@ describe("untrusted fields can never be written through updateSettings", () => {
     const s = await getSettings();
     expect(s.id).toBe("singleton");
     expect(s.pinHash ?? null).toBeNull();
+  });
+});
+
+describe("ship-with-defaults: git pull → integrations preconfigured", () => {
+  const ENV_KEYS = [
+    "CARE_API_BASE", "CARE_API_KEY", "ORTHANC_URL", "ORTHANC_USERNAME",
+    "ORTHANC_PASSWORD", "OHIF_LAN_URL", "OHIF_TAILSCALE_URL", "INTEGRATION_DEFAULTS",
+  ] as const;
+  let savedEnv: Record<string, string | undefined>;
+
+  beforeEach(async () => {
+    savedEnv = {};
+    for (const k of ENV_KEYS) { savedEnv[k] = process.env[k]; delete process.env[k]; }
+    await db.hospitalSettings.deleteMany();
+  });
+  afterEach(() => {
+    for (const k of ENV_KEYS) {
+      if (savedEnv[k] === undefined) delete process.env[k];
+      else process.env[k] = savedEnv[k];
+    }
+  });
+
+  it("a fresh database opens with the clinic LAN defaults", async () => {
+    const s = await getSettings();
+    expect(s.careApiBase).toBe("http://172.16.1.139:8888");
+    expect(s.orthancUrl).toBe("http://172.16.1.139:8042");
+    expect(s.ohifLanUrl).toBe("http://172.16.1.139:3010");
+    expect(s.orthancUsername).toBe("");   // this Orthanc has no auth
+    expect(s.orthancPassword).toBe("");
+    expect(s.ohifTailscaleUrl).toBe("");  // optional — never guessed
+  });
+
+  it("the API key comes from CARE_API_KEY (never hardcoded, still masked)", async () => {
+    process.env.CARE_API_KEY = "env-key-from-dotenv";
+    const s = await getSettings();
+    expect(s.careApiKey).toBe("env-key-from-dotenv");
+    const m = await getMaskedSettings();
+    expect(m.careApiKeySet).toBe(true);
+    expect(JSON.stringify(m)).not.toContain("env-key-from-dotenv");
+  });
+
+  it("a value the doctor SAVED always beats env and defaults", async () => {
+    process.env.CARE_API_BASE = "http://env-should-lose:9999";
+    await updateSettings({ careApiBase: "http://172.16.1.139:8888" });
+    expect((await getSettings()).careApiBase).toBe("http://172.16.1.139:8888");
+  });
+
+  it("a saved API key beats CARE_API_KEY from the environment", async () => {
+    process.env.CARE_API_KEY = "env-key";
+    await updateSettings({ careApiKey: "saved-key" });
+    expect((await getSettings()).careApiKey).toBe("saved-key");
+  });
+
+  it("env overrides beat the built-in LAN defaults", async () => {
+    process.env.ORTHANC_URL = "http://172.16.1.140:8042";
+    process.env.OHIF_TAILSCALE_URL = "https://care.tail-x.ts.net";
+    const s = await getSettings();
+    expect(s.orthancUrl).toBe("http://172.16.1.140:8042");
+    expect(s.ohifTailscaleUrl).toBe("https://care.tail-x.ts.net");
+  });
+
+  it("clearing a URL reverts to the default (appliance semantics)", async () => {
+    await updateSettings({ careApiBase: "http://elsewhere:8888" });
+    expect((await getSettings()).careApiBase).toBe("http://elsewhere:8888");
+    await updateSettings({ careApiBase: "" });
+    expect((await getSettings()).careApiBase).toBe("http://172.16.1.139:8888");
+  });
+
+  it("INTEGRATION_DEFAULTS=off keeps cleared fields blank (read per call)", async () => {
+    await updateSettings({ careApiBase: "http://temp:8888" });
+    await updateSettings({ careApiBase: "" });
+    expect((await getSettings()).careApiBase).toBe("http://172.16.1.139:8888");
+    process.env.INTEGRATION_DEFAULTS = "off";
+    expect((await getSettings()).careApiBase).toBe("");
+    delete process.env.INTEGRATION_DEFAULTS;
+    expect((await getSettings()).careApiBase).toBe("http://172.16.1.139:8888");
   });
 });

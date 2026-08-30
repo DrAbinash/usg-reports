@@ -192,6 +192,9 @@ async function main() {
       HOSTNAME: "127.0.0.1",
       DATABASE_URL: `file:${path.join(tmp, "e2e.db")}`,
       NEXT_TELEMETRY_DISABLED: "1",
+      // Ship-with-defaults: the NAS .env provides the secret key; the LAN
+      // defaults live in code. The app must come up preconfigured.
+      CARE_API_KEY: API_KEY,
     },
     stdio: ["ignore", "ignore", "pipe"],
   });
@@ -218,7 +221,15 @@ async function main() {
     console.log("     login ->", r.status, JSON.stringify(r.json), "cookie:", cookie ? "captured" : "NONE");
     ok(r.status === 200 && r.json?.ok === true, "login works (also seeds demo data)");
 
-    console.log("== 5. save integrations (with paste artifacts) ==");
+    console.log("== 5. ship-with-defaults: settings pre-filled BEFORE saving ==");
+    r = await app("GET", "/api/settings");
+    const pre = r.json?.settings;
+    ok(pre?.careApiBase === "http://172.16.1.139:8888", `careApiBase default -> ${pre?.careApiBase}`);
+    ok(pre?.orthancUrl === "http://172.16.1.139:8042", `orthancUrl default -> ${pre?.orthancUrl}`);
+    ok(pre?.ohifLanUrl === "http://172.16.1.139:3010", `ohifLanUrl default -> ${pre?.ohifLanUrl}`);
+    ok(pre?.careApiKeySet === true && !("careApiKey" in (pre ?? {})), "env key visible as set, still masked");
+
+    console.log("== 6. save integrations (with paste artifacts) ==");
     r = await app("PUT", "/api/settings", {
       careApiBase: `  http://127.0.0.1:${CARE_PORT} `,
       careApiKey: `  ${API_KEY} \n`,

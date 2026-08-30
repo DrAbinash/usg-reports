@@ -306,6 +306,11 @@ export function SettingsView() {
         </TabsContent>
 
         <TabsContent value="integrations" className="mt-4 space-y-5">
+          <p className="rounded-lg bg-muted/60 px-3 py-2 text-[11px] leading-relaxed text-faint">
+            Pre-filled with the clinic LAN defaults (CARE :8888 · Orthanc :8042 · OHIF :3010) and the
+            CARE API key from this NAS’s <code>.env</code> — nothing to type on a fresh install.
+            Saved values always win; clearing a URL reverts it to its default.
+          </p>
           {/* CARE */}
           <div className="space-y-4 rounded-xl border border-border bg-card p-5">
             <div className="flex items-center justify-between">
@@ -330,7 +335,7 @@ export function SettingsView() {
               <p className="text-[13px] font-bold">Orthanc PACS</p>
               <Button size="sm" variant="outline" className="h-8 border-border text-[11.5px]" onClick={() => runTest("orthanc")}>Test connection</Button>
             </div>
-            <Field label="Orthanc URL" hint="e.g. http://192.168.1.20:8042 — DICOMweb + /api/studies used for the worklist match.">
+            <Field label="Orthanc URL" hint="e.g. http://172.16.1.139:8042 — /system + /studies power the worklist match. Leave username/password blank when Orthanc has no auth.">
               <Input value={s.orthancUrl} onChange={(e) => set("orthancUrl", e.target.value)} placeholder="http://…" className="h-9 text-[13px]" />
             </Field>
             <div className="grid grid-cols-2 gap-4">

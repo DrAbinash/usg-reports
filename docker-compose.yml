@@ -16,6 +16,17 @@ services:
       - NODE_ENV=production
       - DATABASE_URL=file:/app/data/db/studio.db
       - TZ=${TZ:-Asia/Kolkata}
+      # Integration defaults (see .env.example). Values SAVED in the app always
+      # win; these only pre-fill blanks. CARE_API_KEY is the one line you set
+      # in .env on the NAS — secrets never live in the git repo.
+      - CARE_API_BASE=${CARE_API_BASE:-}
+      - CARE_API_KEY=${CARE_API_KEY:-}
+      - ORTHANC_URL=${ORTHANC_URL:-}
+      - ORTHANC_USERNAME=${ORTHANC_USERNAME:-}
+      - ORTHANC_PASSWORD=${ORTHANC_PASSWORD:-}
+      - OHIF_LAN_URL=${OHIF_LAN_URL:-}
+      - OHIF_TAILSCALE_URL=${OHIF_TAILSCALE_URL:-}
+      - INTEGRATION_DEFAULTS=${INTEGRATION_DEFAULTS:-on}
     volumes:
       - ./data/db:/app/data/db
     # Caddy fronts the studio; if you skip Caddy, publish the port instead:

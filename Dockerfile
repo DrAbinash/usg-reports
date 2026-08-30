@@ -22,6 +22,18 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 RUN npm run build
 
+# ---- Prisma CLI stage ----
+# prisma 6.16+ CLI depends on @prisma/config -> effect / c12 / … (a deep
+# transitive chain). The runner needs a COMPLETE prisma install for the
+# entrypoint's `prisma db push` — cherry-picking node_modules folders breaks
+# it (that caused the 2026-08-30 "Cannot find module 'effect'" crash loop).
+# The version is read from package-lock.json so it always matches the app.
+FROM node:20-alpine AS prisma-cli
+COPY package-lock.json /tmp/lock.json
+WORKDIR /prisma-cli
+RUN PRISMA_VER=$(node -p "require('/tmp/lock.json').packages['node_modules/prisma'].version") \
+    && npm install "prisma@$PRISMA_VER" --no-audit --no-fund --loglevel=error
+
 # ---- Production Stage ----
 FROM node:20-alpine AS runner
 
@@ -38,11 +50,15 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# Prisma client + CLI so the entrypoint can `prisma db push` on boot
-# (creates/updates the SQLite schema idempotently, matching the app).
+# COMPLETE prisma CLI install (prisma + @prisma/* + effect/c12/… transitive
+# deps + engine binaries) so the entrypoint can `prisma db push` on boot.
+# Docker COPY merges directories — the standalone trace below is preserved.
+COPY --from=prisma-cli /prisma-cli/node_modules ./node_modules
+
+# Generated prisma client + engines from the builder — belt & suspenders on
+# top of the standalone trace, which already bundles @prisma/client.
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/node_modules/.bin ./node_modules/.bin
 COPY --from=builder /app/prisma ./prisma
 

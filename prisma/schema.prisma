@@ -1,3 +1,6 @@
+// CARE Reporting Studio — single-radiologist reporting workspace.
+// Schema follows the v1 build spec (Phase 1): additive, SQLite-friendly.
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,186 +10,261 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Patient {
-  id          String   @id @default(cuid())
-  name        String
-  age         Int
-  sex         String
-  phone       String?
-  address     String?
-  uhid        String   @unique
+// ── Settings (single row, id = "singleton") ─────────────────────────────
+model HospitalSettings {
+  id              String   @id @default("singleton")
+
+  // Header / identity — the "soul" from CARE ERP
+  appTitle        String   @default("CARE Reporting Studio")
+  hospitalName    String   @default("")
+  addressLine     String   @default("")
+  phone           String   @default("")
+  email           String   @default("")
+  footerMessage   String   @default("")
+  logoUrl         String   @default("")
+
+  // Radiologist signature block
+  radiologistName     String   @default("")
+  radiologistQual     String   @default("")
+  radiologistRegNo    String   @default("")
+
+  // Security
+  pinHash         String?
+
+  // Login appearance — colourful themes + user-uploaded background image
+  loginTheme      String   @default("aurora")  // aurora | sunset | ocean | rose | emerald | royal
+  loginBgUrl      String   @default("")        // data-URL photo shown behind the login card
+
+  // Integrations (secrets — never returned unmasked to the client)
+  careApiBase     String   @default("")
+  careApiKey      String   @default("")
+  orthancUrl      String   @default("")
+  orthancUsername String   @default("")
+  orthancPassword String   @default("")
+  ohifLanUrl      String   @default("")
+  ohifTailscaleUrl String  @default("")
+
+  // USG (sonography) studio — Dr Sugandha's standalone ultrasound reporting.
+  // Sonologist signature is separate from the radiologist block above.
+  usgDoctorName     String   @default("")
+  usgDoctorQual     String   @default("")
+  usgDoctorRegNo    String   @default("")
+  usgMachineLine    String   @default("This Scan has been proudly done on GE Voluson Pro 4-D USG Machine")
+  usgShowMachine    Boolean  @default(true)
+  usgFooterLine     String   @default("Kindly co-relate with clinico-pathological findings.")
+  usgDeclarationLine String  @default("") // optional PC-PNDT style declaration under the signature
+
+  updatedAt       DateTime @updatedAt
+}
+
+// ── Sessions for the PIN gate ────────────────────────────────────────────
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+// ── CARE worklist bridge ────────────────────────────────────────────────
+model CareOrderLink {
+  id              String   @id @default(cuid())
+  accessionNumber String   @unique
+  careWorklistId  String?
+  patientMrn      String?
+  patientName     String
+  patientAge      String?
+  patientGender   String?
   referringDoctor String?
+  testName        String?
+  modality        String   @default("MR") // MR | CT
+  bodyRegion      String   @default("")   // LS Spine / Cervical Spine / Brain / CT Head …
+  studyInstanceUid String?
+  billingStatus   String?  // PAID | DUE | UPI_PENDING | null
+  billingUpdatedAt DateTime?
+  studyDate       DateTime?
+  status          String   @default("AWAITING_IMAGES") // AWAITING_IMAGES | TO_REPORT | REPORTING | REPORTED
+  ignored         Boolean  @default(false)             // Unlinked bucket "Ignore"
+  report          Report?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status])
+  @@index([patientName])
+}
+
+// ── Complete report formats (one-click full report) ─────────────────────
+// A format fills the ENTIRE report in one tap: study title, technique,
+// findings scaffold, impression lines and recommendation. Formats expand
+// to FindingRows (single source of truth) — later phrase additions
+// append to the compiled sections and recompose the study title.
+model ReportFormat {
+  id          String  @id @default(cuid())
+  key         String  @unique        // "mr-brain-fazekas1-senile"
+  modality    String  @default("MR") // MR | CT
+  region      String                // Brain / LS Spine / Cervical Spine / CT Head / CT Spine
+  name        String                // "Fazekas Grade 1 + Senile Changes"
+  studyTitle  String                // "MRI BRAIN"
+  titleSuffix String  @default("")  // "fazekas grade 1 changes and senile changes"
+  technique   String  @default("")
+  recommendation String @default("")
+  rowsJson    String  @default("[]") // JSON: FormatRowSeed[]
+  isNormal    Boolean @default(false)
+  isBuiltin   Boolean @default(true)
+  sortOrder   Int     @default(0)
   createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  studies     Study[]
-  pcpndtForms PcpndtForm[]
+
+  @@index([modality, region])
 }
 
-model Study {
-  id            String        @id @default(cuid())
-  studyUid      String        @unique
-  studyDate     DateTime
-  studyType     String        // OB, PELVIS, ABDOMEN, THYROID, BREAST, SCROTUM, DOPPLER, etc.
-  studyDesc     String?
-  machine       String        @default("GE Voluson E9")
-  status        String        @default("pending") // pending, in-progress, reporting, qa, signed
-  patientId     String
-  patient       Patient       @relation(fields: [patientId], references: [id])
-  series        Series[]
-  measurements  Measurement[]
-  report        Report?
-  aiSuggestions AiSuggestion[]
-  keyImages     KeyImage[]
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-}
-
-model Series {
-  id            String        @id @default(cuid())
-  seriesUid     String
-  seriesDesc    String?
-  seriesNumber  Int
-  modality      String        @default("US")
-  studyId       String
-  study         Study         @relation(fields: [studyId], references: [id])
-  images        DicomImage[]
-  createdAt     DateTime      @default(now())
-}
-
-model DicomImage {
-  id            String        @id @default(cuid())
-  sopUid        String        @unique
-  sopClassUid   String?
-  instanceNumber Int
-  seriesId      String
-  series        Series        @relation(fields: [seriesId], references: [id])
-  imageType     String?       // BPD, HC, AC, FL, PLACENTA, CERVIX, DOPPLER, etc.
-  qualityScore  Float?
-  aiLabel       String?
-  thumbnailPath String?
-  filePath      String?
-  isKeyImage    Boolean       @default(false)
-  isApproved    Boolean       @default(false)
-  frameNumber   Int?
-  createdAt     DateTime      @default(now())
-}
-
-model Measurement {
-  id            String        @id @default(cuid())
-  studyId       String
-  study         Study         @relation(fields: [studyId], references: [id])
-  name          String        // BPD, HC, AC, FL, CRL, EFW, etc.
-  value         Float
-  unit          String        // mm, cm, g, weeks, bpm, etc.
-  category      String        // OB, PELVIS, ABDOMEN, DOPPLER, etc.
-  gestationalAge String?      // calculated GA if applicable
-  percentile    Float?
-  source        String        @default("dicom_sr") // dicom_sr, dicom_tag, ge_private, ai, ocr, manual
-  confidence    Float?
-  sopUid        String?
-  seriesUid     String?
-  frameNumber   Int?
-  isVerified    Boolean       @default(false)
-  isEdited      Boolean       @default(false)
-  originalValue Float?
-  notes         String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-}
-
+// ── Reports ─────────────────────────────────────────────────────────────
 model Report {
-  id            String        @id @default(cuid())
-  studyId       String        @unique
-  study         Study         @relation(fields: [studyId], references: [id])
-  clinicalInfo  String?
-  findings      String
-  impression    String
-  recommendation String?
-  technique     String?
-  comparison    String?
-  reportStatus  String        @default("draft") // draft, reviewed, signed
-  signedBy      String?
-  signedAt      DateTime?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id            String   @id @default(cuid())
+  orderId       String   @unique
+  order         CareOrderLink @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  technique     String   @default("")
+  findings      String   @default("")   // compiled findings text (informational)
+  impression    String   @default("")   // compiled impression (or manual)
+  impressionManual Boolean @default(false)
+  recommendation String  @default("")
+
+  // Study heading is the SHORT title ("MRI BRAIN"). The composed phrase
+  // ("MRI BRAIN WITH FAZEKAS GRADE 1 CHANGES AND SENILE CHANGES") lives as
+  // the bold opening line of FINDINGS — never in the heading.
+  formatKey     String?                // applied ReportFormat.key
+  studyBase     String?                // "MRI BRAIN" — the printed heading
+  titleSuffix   String?                // format suffix, stored at apply time
+  studyName     String?                // display heading (= studyBase unless manual)
+  titleManual   Boolean  @default(false)
+  findingsOpening String?              // bold opening line inside FINDINGS
+  openingManual  Boolean @default(false) // user edited the opening line
+
+  status        String   @default("DRAFT") // DRAFT | FINALIZED
+  reportHtml    String?                  // frozen snapshot at finalize
+  finalizedAt   DateTime?
+  careSyncedAt  DateTime?                // set when CARE finalize succeeded
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  findingRows   FindingRow[]
+  images        ReportImage[]
 }
 
-model AiSuggestion {
-  id            String        @id @default(cuid())
-  studyId       String
-  study         Study         @relation(fields: [studyId], references: [id])
-  category      String        // finding, alert, quality, missing, comparison
-  message       String
-  severity      String        @default("info") // info, warning, critical
-  isDismissed   Boolean       @default(false)
-  isAccepted    Boolean?
-  source        String?       // measurement, image, report, qa
-  createdAt     DateTime      @default(now())
+// ── Key images printed with the report (captured from OHIF or uploaded) ──
+model ReportImage {
+  id        String   @id @default(cuid())
+  reportId  String
+  report    Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  dataUrl   String                // base64 JPEG/PNG data URL (≤ ~1.5 MB)
+  caption   String   @default("")
+  source    String   @default("capture") // capture | upload
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([reportId])
 }
 
-model KeyImage {
-  id            String        @id @default(cuid())
-  studyId       String
-  study         Study         @relation(fields: [studyId], references: [id])
-  imageId       String?
-  category      String        // BPD, HC, AC, FL, PLACENTA, CERVIX, DOPPLER, etc.
-  rank          Int           @default(1)
-  isApproved    Boolean       @default(false)
-  aiScore       Float?
-  createdAt     DateTime      @default(now())
+// ── Atomic findings (R2-mini ledger) ────────────────────────────────────
+model FindingRow {
+  id         String   @id @default(cuid())
+  reportId   String
+  report     Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  region     String
+  concept    String   // disc_contour | canal_stenosis | fazekas | note | …
+  level      String?
+  laterality String?  // left | right | bilateral
+  severity   String?  // mild | moderate | severe | …
+  text       String
+  inImpression Boolean @default(true)
+  // Format-system extras:
+  titleFragment String?              // "chronic infarct" — joins the study title
+  newParagraph  Boolean @default(false) // start a new paragraph in findings
+  impressionOnly Boolean @default(false) // excluded from findings, numbered in impression
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@index([reportId])
 }
 
-model PcpndtForm {
-  id            String        @id @default(cuid())
-  patientId     String
-  patient       Patient       @relation(fields: [patientId], references: [id])
-  studyId       String?
-  formNumber    String?
-  formDate      DateTime      @default(now())
-  husbandName   String?
-  husbandAge    Int?
-  husbandAddress String?
-  referral      String?
-  lmp           DateTime?
-  edd           DateTime?
-  currentGa     String?
-  gravida       Int?
-  para          Int?
-  living        Int?
-  abortion      Int?
-  previousUsg   String?
-  previousUsgDate DateTime?
-  previousGa    String?
-  findings      String?
-  impression    String?
-  sexDetermined String?       // NOT DETERMINED, MALE, FEMALE
-  formStatus    String        @default("draft")
-  signedBy      String?
-  signedAt      DateTime?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+// ── Quick phrases (chips) ───────────────────────────────────────────────
+model QuickPhrase {
+  id         String   @id @default(cuid())
+  region     String   // LS Spine / Cervical Spine / Brain / CT Head / CT Spine
+  modality   String   @default("MR")
+  label      String
+  concept    String
+  level      String?
+  laterality String?
+  severity   String?
+  text       String
+  titleFragment String?             // "chronic infarct" — copied to the row, joins the title
+  sortOrder  Int      @default(0)
+  @@unique([modality, region, label])
 }
 
-model DoctorPreference {
-  id            String        @id @default(cuid())
-  doctorId      String
-  studyType     String
-  template      String        // JSON string of preferred report template
-  phrases       String        // JSON string of preferred phrases
-  recommendations String?     // JSON string of preferred recommendations
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+// ── Technique templates ─────────────────────────────────────────────────
+model TechniqueTemplate {
+  id        String  @id @default(cuid())
+  region    String
+  modality  String  @default("MR")
+  text      String
+  @@unique([modality, region])
 }
 
-model AuditLog {
-  id            String        @id @default(cuid())
-  studyId       String?
-  action        String
-  entityType    String?       // measurement, report, image, pcpndt
-  entityId      String?
-  oldValue      String?
-  newValue      String?
-  performedBy   String?
-  aiGenerated   Boolean       @default(false)
-  createdAt     DateTime      @default(now())
+// ── Worklist sync state (singleton) ─────────────────────────────────────
+model SyncState {
+  id           String   @id @default("singleton")
+  lastSyncAt   DateTime?
+  lastCareOk   Boolean  @default(false)
+  lastOrthancOk Boolean @default(false)
+  lastError    String?
+}
+
+// ── USG Studio — standalone sonography reports (Dr Sugandha) ────────────
+// Not tied to the CARE worklist: walk-in ultrasound patients with their own
+// drafts, finalize-freeze and reprint, exactly like the reporting pipeline.
+model UsgReport {
+  id            String    @id @default(cuid())
+  patientName   String
+  patientAge    String    @default("")
+  patientSex    String    @default("F") // F | M
+  referredBy    String    @default("")
+  studyKey      String    @default("wa-female") // wa-male | wa-female | ua | la-male | la-female
+  technique     String    @default("")
+
+  // Full composer state (organs, selected pathologies, variables, overrides)
+  stateJson     String    @default("{}")
+
+  // Denormalised for search/listing; resolved from state at save time.
+  studyTitle    String    @default("")
+  findings      String    @default("")
+  impression    String    @default("")
+
+  status        String    @default("DRAFT") // DRAFT | FINALIZED
+  reportHtml    String?   // frozen snapshot at finalize
+  finalizedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([status])
+  @@index([patientName])
+  @@index([createdAt])
+}
+
+// ── USG Studio — user-added custom pathologies ──────────────────────────
+// Builtin pathology entries live in code (src/lib/usg/pathologies.ts);
+// anything the doctor adds in the UI is persisted here and merged at runtime.
+model UsgPathology {
+  id            String   @id @default(cuid())
+  organKey      String
+  label         String
+  findingText   String   // may contain {variable} tokens
+  impressionLinesJson String @default("[]")
+  titleFragment String   @default("")
+  sortOrder     Int      @default(100)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([organKey, label])
 }

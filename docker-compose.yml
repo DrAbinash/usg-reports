@@ -1,35 +1,62 @@
-# Synology Container Manager compatible format
-# Remove 'version' line if your DSM supports compose spec v2+
+# CARE Reporting Studio — Synology Container Manager
+# Project folder example: /volume1/docker/care-studio
+#
+#   cd /volume1/docker/care-studio
+#   cp .env.example .env      (edit ports/URLs)
+#   sudo docker compose up -d --build
+#
+# The studio keeps its own SQLite database in ./data — survives rebuilds.
 
 services:
-  care-ai-usg:
+  studio:
     build: .
-    container_name: care-ai-sonologist-companion
+    container_name: care-reporting-studio
     restart: unless-stopped
-    ports:
-      - "${APP_PORT:-3090}:3000"
-    volumes:
-      # Persistent database — survives container rebuilds
-      - ./data/db:/app/data/db
-      # Persistent DICOM study files from GE Voluson E9
-      - ./data/studies:/app/data/studies
-      # Persistent exported PDF reports
-      - ./data/exports:/app/data/exports
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=file:/app/data/db/usg_companion.db
-      - NEXT_TELEMETRY_DISABLED=1
+      - DATABASE_URL=file:/app/data/db/studio.db
       - TZ=${TZ:-Asia/Kolkata}
-    # Synology NAS resource limits (adjust for your model)
+      # Integration defaults (see .env.example). Values SAVED in the app always
+      # win; these only pre-fill blanks. CARE_API_KEY is the one line you set
+      # in .env on the NAS — secrets never live in the git repo.
+      - CARE_API_BASE=${CARE_API_BASE:-}
+      - CARE_API_KEY=${CARE_API_KEY:-}
+      - ORTHANC_URL=${ORTHANC_URL:-}
+      - ORTHANC_USERNAME=${ORTHANC_USERNAME:-}
+      - ORTHANC_PASSWORD=${ORTHANC_PASSWORD:-}
+      - OHIF_LAN_URL=${OHIF_LAN_URL:-}
+      - OHIF_TAILSCALE_URL=${OHIF_TAILSCALE_URL:-}
+      - INTEGRATION_DEFAULTS=${INTEGRATION_DEFAULTS:-on}
+    volumes:
+      - ./data/db:/app/data/db
+    # Caddy fronts the studio; if you skip Caddy, publish the port instead:
+    # ports:
+    #   - "${STUDIO_PORT:-3090}:3000"
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 768M
         reservations:
+          memory: 192M
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: care-studio-caddy
+    restart: unless-stopped
+    ports:
+      - "${STUDIO_PORT:-3090}:8090"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy:/data
+      - ./data/caddy-config:/config
+    environment:
+      # Where your EXISTING OHIF listens (care-pacs compose, same NAS or LAN).
+      # When set, the viewer loads under /ohif on the SAME origin as the
+      # studio — the Capture button in the viewer panel then works.
+      - OHIF_UPSTREAM=${OHIF_UPSTREAM:-172.16.1.139:3010}
+    depends_on:
+      - studio
+    deploy:
+      resources:
+        limits:
           memory: 128M
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s

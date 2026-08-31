@@ -37,79 +37,123 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-panel: var(--panel);
+  --color-ink: var(--ink);
+  --color-faint: var(--faint);
+  --color-ok: var(--ok);
+  --color-ok-bg: var(--ok-bg);
+  --color-ok-line: var(--ok-line);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-warn-line: var(--warn-line);
+  --color-bad: var(--bad);
+  --color-bad-bg: var(--bad-bg);
+  --color-bad-line: var(--bad-line);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* ── CARE clinical palette (from the audited CARE workspace design) ── */
 :root {
   --radius: 0.5rem;
-  --background: oklch(0.985 0.002 155);
-  --foreground: oklch(0.145 0.02 160);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0.02 160);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0.02 160);
-  --primary: oklch(0.45 0.12 165);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.96 0.01 155);
-  --secondary-foreground: oklch(0.25 0.04 165);
-  --muted: oklch(0.96 0.008 155);
-  --muted-foreground: oklch(0.50 0.02 160);
-  --accent: oklch(0.95 0.02 165);
-  --accent-foreground: oklch(0.25 0.04 165);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.91 0.01 155);
-  --input: oklch(0.91 0.01 155);
-  --ring: oklch(0.45 0.12 165);
-  --chart-1: oklch(0.45 0.12 165);
-  --chart-2: oklch(0.60 0.10 180);
-  --chart-3: oklch(0.70 0.15 155);
-  --chart-4: oklch(0.55 0.08 200);
-  --chart-5: oklch(0.65 0.12 140);
-  --sidebar: oklch(0.98 0.005 165);
-  --sidebar-foreground: oklch(0.145 0.02 160);
-  --sidebar-primary: oklch(0.45 0.12 165);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.94 0.015 165);
-  --sidebar-accent-foreground: oklch(0.25 0.04 165);
-  --sidebar-border: oklch(0.91 0.01 155);
-  --sidebar-ring: oklch(0.45 0.12 165);
+
+  --background: #fafcfd;
+  --foreground: #22303c;
+  --card: #ffffff;
+  --card-foreground: #22303c;
+  --popover: #ffffff;
+  --popover-foreground: #22303c;
+
+  --primary: #2e6da4;
+  --primary-foreground: #f6fafd;
+  --secondary: #edf4f9;
+  --secondary-foreground: #24567f;
+  --muted: #f1f6fa;
+  --muted-foreground: #5c6e7d;
+  --accent: #edf4f9;
+  --accent-foreground: #24567f;
+
+  --destructive: #b3402f;
+  --border: #d9e4ed;
+  --input: #cbd8e3;
+  --ring: #2e6da4;
+
+  --panel: #f1f6fa;
+  --ink: #22303c;
+  --faint: #8fa1b0;
+
+  --ok: #2f6a45;
+  --ok-bg: #eaf3ee;
+  --ok-line: #c4dcce;
+  --warn: #8a5a1e;
+  --warn-bg: #f9f0dd;
+  --warn-line: #e2cda5;
+  --bad: #b3402f;
+  --bad-bg: #f9eceA;
+  --bad-line: #e3c4bd;
+
+  --chart-1: #2e6da4;
+  --chart-2: #2f6a45;
+  --chart-3: #8a5a1e;
+  --chart-4: #5c6e7d;
+  --chart-5: #8fa1b0;
+
+  --sidebar: #f1f6fa;
+  --sidebar-foreground: #22303c;
+  --sidebar-primary: #2e6da4;
+  --sidebar-primary-foreground: #f6fafd;
+  --sidebar-accent: #e2ecf4;
+  --sidebar-accent-foreground: #24567f;
+  --sidebar-border: #cbd8e3;
+  --sidebar-ring: #2e6da4;
 }
 
 .dark {
-  --background: oklch(0.13 0.015 165);
-  --foreground: oklch(0.96 0.005 155);
-  --card: oklch(0.18 0.02 165);
-  --card-foreground: oklch(0.96 0.005 155);
-  --popover: oklch(0.18 0.02 165);
-  --popover-foreground: oklch(0.96 0.005 155);
-  --primary: oklch(0.55 0.14 165);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.22 0.02 165);
-  --secondary-foreground: oklch(0.96 0.005 155);
-  --muted: oklch(0.22 0.02 165);
-  --muted-foreground: oklch(0.65 0.03 160);
-  --accent: oklch(0.25 0.03 165);
-  --accent-foreground: oklch(0.96 0.005 155);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.55 0.14 165);
-  --chart-1: oklch(0.55 0.14 165);
-  --chart-2: oklch(0.65 0.10 180);
-  --chart-3: oklch(0.70 0.12 155);
-  --chart-4: oklch(0.60 0.08 200);
-  --chart-5: oklch(0.65 0.10 140);
-  --sidebar: oklch(0.16 0.018 165);
-  --sidebar-foreground: oklch(0.96 0.005 155);
-  --sidebar-primary: oklch(0.55 0.14 165);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.22 0.03 165);
-  --sidebar-accent-foreground: oklch(0.96 0.005 155);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.55 0.14 165);
+  --background: #16212b;
+  --foreground: #dbe5ee;
+  --card: #1b2833;
+  --card-foreground: #dbe5ee;
+  --popover: #1b2833;
+  --popover-foreground: #dbe5ee;
+  --primary: #6ea3cc;
+  --primary-foreground: #101a22;
+  --secondary: #223140;
+  --secondary-foreground: #c3d5e4;
+  --muted: #1f2c38;
+  --muted-foreground: #92a5b4;
+  --accent: #223140;
+  --accent-foreground: #c3d5e4;
+  --destructive: #d0705f;
+  --border: #2b3b4a;
+  --input: #33455a;
+  --ring: #6ea3cc;
+  --panel: #1b2833;
+  --ink: #dbe5ee;
+  --faint: #7488a0;
+  --ok: #7dbb97;
+  --ok-bg: #1d3226;
+  --ok-line: #2f4d3a;
+  --warn: #d3a35c;
+  --warn-bg: #33290f;
+  --warn-line: #4d3f1d;
+  --bad: #d0705f;
+  --bad-bg: #39211c;
+  --bad-line: #53322b;
+  --chart-1: #6ea3cc;
+  --chart-2: #7dbb97;
+  --chart-3: #d3a35c;
+  --chart-4: #92a5b4;
+  --chart-5: #7488a0;
+  --sidebar: #1b2833;
+  --sidebar-foreground: #dbe5ee;
+  --sidebar-primary: #6ea3cc;
+  --sidebar-primary-foreground: #101a22;
+  --sidebar-accent: #223140;
+  --sidebar-accent-foreground: #c3d5e4;
+  --sidebar-border: #2b3b4a;
+  --sidebar-ring: #6ea3cc;
 }
 
 @layer base {
@@ -118,61 +162,41 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "cv11", "ss01";
   }
 }
 
-/* Medical UI scrollbar */
-.usg-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* ── Studio scrollbars ── */
+.studio-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
-.usg-scrollbar::-webkit-scrollbar-track {
+.studio-scroll::-webkit-scrollbar-thumb {
+  background: #c3d2dd;
+  border-radius: 8px;
+}
+.studio-scroll::-webkit-scrollbar-thumb:hover {
+  background: #a9bece;
+}
+.studio-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
-.usg-scrollbar::-webkit-scrollbar-thumb {
-  background: oklch(0.80 0.01 155);
-  border-radius: 3px;
-}
-.usg-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.65 0.02 165);
-}
 
-/* DICOM image placeholder styling */
-.dicom-placeholder {
-  background: linear-gradient(135deg, oklch(0.15 0.02 165) 0%, oklch(0.20 0.03 165) 50%, oklch(0.12 0.01 165) 100%);
-  position: relative;
-  overflow: hidden;
-}
-.dicom-placeholder::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 70%;
-  height: 70%;
-  border-radius: 50%;
-  background: radial-gradient(ellipse, oklch(0.35 0.06 165) 0%, oklch(0.18 0.02 165) 70%, transparent 100%);
-}
-
-/* Pulse animation for live indicator */
-@keyframes pulse-teal {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-.animate-pulse-teal {
-  animation: pulse-teal 2s ease-in-out infinite;
-}
-
-/* Confidence bar */
-.confidence-bar {
-  height: 3px;
-  border-radius: 2px;
-  background: oklch(0.92 0.01 155);
-  overflow: hidden;
-}
-.confidence-fill {
-  height: 100%;
-  border-radius: 2px;
-  transition: width 0.3s ease;
+/* ── A4 print (report) ── */
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+  body * {
+    visibility: hidden;
+  }
+  #print-root, #print-root * {
+    visibility: visible;
+  }
+  #print-root {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+  }
 }

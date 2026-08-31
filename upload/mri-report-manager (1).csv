@@ -1,0 +1,466 @@
+mri-report-manager
+date,stream,content
+2026/07/14 17:11:36,stderr,}
+
+2026/07/14 17:11:36,stderr,  clientVersion: '6.19.2'
+
+2026/07/14 17:11:36,stderr,"  meta: [Object],
+"
+2026/07/14 17:11:36,stderr,"  code: 'P2021',
+"
+2026/07/14 17:11:36,stderr,    at async l (.next/server/chunks/[root-of-the-server]__8fb1416c._.js:1:6619) {
+
+2026/07/14 17:11:36,stderr,    at async d (.next/server/chunks/[root-of-the-server]__8fb1416c._.js:1:5578)
+
+2026/07/14 17:11:36,stderr,    at async w (.next/server/chunks/[root-of-the-server]__8fb1416c._.js:1:1612)
+
+2026/07/14 17:11:36,stderr,The table `main.FindingTemplate` does not exist in the current database.
+
+2026/07/14 17:11:36,stderr,
+
+2026/07/14 17:11:36,stderr,
+
+2026/07/14 17:11:36,stderr,Invalid `prisma.findingTemplate.findMany()` invocation:
+
+2026/07/14 17:11:36,stderr,⨯ Error [PrismaClientKnownRequestError]: 
+
+2026/07/14 17:11:36,stderr,}
+
+2026/07/14 17:11:36,stderr,  clientVersion: '6.19.2'
+
+2026/07/14 17:11:36,stderr,"  meta: [Object],
+"
+2026/07/14 17:11:36,stderr,"  code: 'P2021',
+"
+2026/07/14 17:11:36,stderr,    at async l (.next/server/chunks/[root-of-the-server]__37053214._.js:1:9452) {
+
+2026/07/14 17:11:36,stderr,    at async d (.next/server/chunks/[root-of-the-server]__37053214._.js:1:8411)
+
+2026/07/14 17:11:36,stderr,    at async A (.next/server/chunks/[root-of-the-server]__37053214._.js:1:5110)
+
+2026/07/14 17:11:36,stderr,The table `main.ReportTemplate` does not exist in the current database.
+
+2026/07/14 17:11:36,stderr,
+
+2026/07/14 17:11:36,stderr,
+
+2026/07/14 17:11:36,stderr,Invalid `prisma.reportTemplate.findMany()` invocation:
+
+2026/07/14 17:11:36,stderr,Error fetching templates: Error [PrismaClientKnownRequestError]: 
+
+2026/07/14 17:11:36,stderr,}
+
+2026/07/14 17:11:36,stderr,  clientVersion: '6.19.2'
+
+2026/07/14 17:11:36,stderr,"  meta: [Object],
+"
+2026/07/14 17:11:36,stderr,"  code: 'P2021',
+"
+2026/07/14 17:11:36,stderr,    at async o (.next/server/chunks/[root-of-the-server]__556ce81c._.js:1:11826) {
+
+2026/07/14 17:11:36,stderr,    at async d (.next/server/chunks/[root-of-the-server]__556ce81c._.js:1:10785)
+
+2026/07/14 17:11:36,stderr,    at async v (.next/server/chunks/[root-of-the-server]__556ce81c._.js:1:7256)
+
+2026/07/14 17:11:36,stderr,The table `main.FindingTemplate` does not exist in the current database.
+
+2026/07/14 17:11:36,stderr,
+
+2026/07/14 17:11:36,stderr,
+
+2026/07/14 17:11:36,stderr,Invalid `prisma.findingTemplate.findMany()` invocation:
+
+2026/07/14 17:11:36,stderr,Seed error: Error [PrismaClientKnownRequestError]: 
+
+2026/07/14 17:11:36,stderr,}
+
+2026/07/14 17:11:36,stderr,  clientVersion: '6.19.2'
+
+2026/07/14 17:11:36,stderr,"  meta: [Object],
+"
+2026/07/14 17:11:36,stderr,"  code: 'P2021',
+"
+2026/07/14 17:11:36,stderr,    at async o (.next/server/chunks/[root-of-the-server]__556ce81c._.js:1:11826) {
+
+2026/07/14 17:11:36,stderr,    at async d (.next/server/chunks/[root-of-the-server]__556ce81c._.js:1:10785)
+
+2026/07/14 17:11:36,stderr,    at async v (.next/server/chunks/[root-of-the-server]__556ce81c._.js:1:7256)
+
+2026/07/14 17:11:36,stderr,The table `main.FindingTemplate` does not exist in the current database.
+
+2026/07/14 17:11:36,stderr,
+
+2026/07/14 17:11:36,stderr,
+
+2026/07/14 17:11:36,stderr,Invalid `prisma.findingTemplate.findMany()` invocation:
+
+2026/07/14 17:11:36,stderr,Seed error: Error [PrismaClientKnownRequestError]: 
+
+2026/07/14 17:11:17,stderr,}
+
+2026/07/14 17:11:17,stderr,  clientVersion: '6.19.2'
+
+2026/07/14 17:11:17,stderr,"  meta: [Object],
+"
+2026/07/14 17:11:17,stderr,"  code: 'P2021',
+"
+2026/07/14 17:11:17,stderr,    at async l (.next/server/chunks/[root-of-the-server]__8fb1416c._.js:1:6619) {
+
+2026/07/14 17:11:17,stderr,    at async d (.next/server/chunks/[root-of-the-server]__8fb1416c._.js:1:5578)
+
+2026/07/14 17:11:17,stderr,    at async w (.next/server/chunks/[root-of-the-server]__8fb1416c._.js:1:1612)
+
+2026/07/14 17:11:17,stderr,The table `main.FindingTemplate` does not exist in the current database.
+
+2026/07/14 17:11:17,stderr,
+
+2026/07/14 17:11:17,stderr,
+
+2026/07/14 17:11:17,stderr,Invalid `prisma.findingTemplate.findMany()` invocation:
+
+2026/07/14 17:11:17,stderr,⨯ Error [PrismaClientKnownRequestError]: 
+
+2026/07/14 17:11:17,stderr,}
+
+2026/07/14 17:11:17,stderr,  clientVersion: '6.19.2'
+
+2026/07/14 17:11:17,stderr,"  meta: [Object],
+"
+2026/07/14 17:11:17,stderr,"  code: 'P2021',
+"
+2026/07/14 17:11:17,stderr,    at async l (.next/server/chunks/[root-of-the-server]__37053214._.js:1:9452) {
+
+2026/07/14 17:11:17,stderr,    at async d (.next/server/chunks/[root-of-the-server]__37053214._.js:1:8411)
+
+2026/07/14 17:11:17,stderr,    at async A (.next/server/chunks/[root-of-the-server]__37053214._.js:1:5110)
+
+2026/07/14 17:11:17,stderr,The table `main.ReportTemplate` does not exist in the current database.
+
+2026/07/14 17:11:17,stderr,
+
+2026/07/14 17:11:17,stderr,
+
+2026/07/14 17:11:17,stderr,Invalid `prisma.reportTemplate.findMany()` invocation:
+
+2026/07/14 17:11:17,stderr,Error fetching templates: Error [PrismaClientKnownRequestError]: 
+
+2026/07/14 17:11:16,stderr,}
+
+2026/07/14 17:11:16,stderr,  clientVersion: '6.19.2'
+
+2026/07/14 17:11:16,stderr,"  meta: [Object],
+"
+2026/07/14 17:11:16,stderr,"  code: 'P2021',
+"
+2026/07/14 17:11:16,stderr,    at async o (.next/server/chunks/[root-of-the-server]__556ce81c._.js:1:11826) {
+
+2026/07/14 17:11:16,stderr,    at async d (.next/server/chunks/[root-of-the-server]__556ce81c._.js:1:10785)
+
+2026/07/14 17:11:16,stderr,    at async v (.next/server/chunks/[root-of-the-server]__556ce81c._.js:1:7256)
+
+2026/07/14 17:11:16,stderr,The table `main.FindingTemplate` does not exist in the current database.
+
+2026/07/14 17:11:16,stderr,
+
+2026/07/14 17:11:16,stderr,
+
+2026/07/14 17:11:16,stderr,Invalid `prisma.findingTemplate.findMany()` invocation:
+
+2026/07/14 17:11:16,stderr,Seed error: Error [PrismaClientKnownRequestError]: 
+
+2026/07/14 17:11:16,stderr,}
+
+2026/07/14 17:11:16,stderr,  clientVersion: '6.19.2'
+
+2026/07/14 17:11:16,stderr,"  meta: [Object],
+"
+2026/07/14 17:11:16,stderr,"  code: 'P2021',
+"
+2026/07/14 17:11:16,stderr,    at async o (.next/server/chunks/[root-of-the-server]__556ce81c._.js:1:11826) {
+
+2026/07/14 17:11:16,stderr,    at async d (.next/server/chunks/[root-of-the-server]__556ce81c._.js:1:10785)
+
+2026/07/14 17:11:16,stderr,    at async v (.next/server/chunks/[root-of-the-server]__556ce81c._.js:1:7256)
+
+2026/07/14 17:11:16,stderr,The table `main.FindingTemplate` does not exist in the current database.
+
+2026/07/14 17:11:16,stderr,
+
+2026/07/14 17:11:16,stderr,
+
+2026/07/14 17:11:16,stderr,Invalid `prisma.findingTemplate.findMany()` invocation:
+
+2026/07/14 17:11:16,stderr,Seed error: Error [PrismaClientKnownRequestError]: 
+
+2026/07/14 17:11:11,stderr,}
+
+2026/07/14 17:11:11,stderr,  clientVersion: '6.19.2'
+
+2026/07/14 17:11:11,stderr,"  meta: [Object],
+"
+2026/07/14 17:11:11,stderr,"  code: 'P2021',
+"
+2026/07/14 17:11:11,stderr,    at async l (.next/server/chunks/[root-of-the-server]__8fb1416c._.js:1:6619) {
+
+2026/07/14 17:11:11,stderr,    at async d (.next/server/chunks/[root-of-the-server]__8fb1416c._.js:1:5578)
+
+2026/07/14 17:11:11,stderr,    at async w (.next/server/chunks/[root-of-the-server]__8fb1416c._.js:1:1612)
+
+2026/07/14 17:11:11,stderr,The table `main.FindingTemplate` does not exist in the current database.
+
+2026/07/14 17:11:11,stderr,
+
+2026/07/14 17:11:11,stderr,
+
+2026/07/14 17:11:11,stderr,Invalid `prisma.findingTemplate.findMany()` invocation:
+
+2026/07/14 17:11:11,stderr,⨯ Error [PrismaClientKnownRequestError]: 
+
+2026/07/14 17:11:11,stderr,}
+
+2026/07/14 17:11:11,stderr,  clientVersion: '6.19.2'
+
+2026/07/14 17:11:11,stderr,"  meta: [Object],
+"
+2026/07/14 17:11:11,stderr,"  code: 'P2021',
+"
+2026/07/14 17:11:11,stderr,    at async l (.next/server/chunks/[root-of-the-server]__37053214._.js:1:9452) {
+
+2026/07/14 17:11:11,stderr,    at async d (.next/server/chunks/[root-of-the-server]__37053214._.js:1:8411)
+
+2026/07/14 17:11:11,stderr,    at async A (.next/server/chunks/[root-of-the-server]__37053214._.js:1:5110)
+
+2026/07/14 17:11:11,stderr,The table `main.ReportTemplate` does not exist in the current database.
+
+2026/07/14 17:11:11,stderr,
+
+2026/07/14 17:11:11,stderr,
+
+2026/07/14 17:11:11,stderr,Invalid `prisma.reportTemplate.findMany()` invocation:
+
+2026/07/14 17:11:11,stderr,Error fetching templates: Error [PrismaClientKnownRequestError]: 
+
+2026/07/14 17:11:10,stderr,}
+
+2026/07/14 17:11:10,stderr,  clientVersion: '6.19.2'
+
+2026/07/14 17:11:10,stderr,"  meta: [Object],
+"
+2026/07/14 17:11:10,stderr,"  code: 'P2021',
+"
+2026/07/14 17:11:10,stderr,    at async o (.next/server/chunks/[root-of-the-server]__556ce81c._.js:1:11826) {
+
+2026/07/14 17:11:10,stderr,    at async d (.next/server/chunks/[root-of-the-server]__556ce81c._.js:1:10785)
+
+2026/07/14 17:11:10,stderr,    at async v (.next/server/chunks/[root-of-the-server]__556ce81c._.js:1:7256)
+
+2026/07/14 17:11:10,stderr,The table `main.FindingTemplate` does not exist in the current database.
+
+2026/07/14 17:11:10,stderr,
+
+2026/07/14 17:11:10,stderr,
+
+2026/07/14 17:11:10,stderr,Invalid `prisma.findingTemplate.findMany()` invocation:
+
+2026/07/14 17:11:10,stderr,Seed error: Error [PrismaClientKnownRequestError]: 
+
+2026/07/14 17:11:10,stderr,}
+
+2026/07/14 17:11:10,stderr,  clientVersion: '6.19.2'
+
+2026/07/14 17:11:10,stderr,"  meta: [Object],
+"
+2026/07/14 17:11:10,stderr,"  code: 'P2021',
+"
+2026/07/14 17:11:10,stderr,    at async o (.next/server/chunks/[root-of-the-server]__556ce81c._.js:1:11826) {
+
+2026/07/14 17:11:10,stderr,    at async d (.next/server/chunks/[root-of-the-server]__556ce81c._.js:1:10785)
+
+2026/07/14 17:11:10,stderr,    at async v (.next/server/chunks/[root-of-the-server]__556ce81c._.js:1:7256)
+
+2026/07/14 17:11:10,stderr,The table `main.FindingTemplate` does not exist in the current database.
+
+2026/07/14 17:11:10,stderr,
+
+2026/07/14 17:11:10,stderr,
+
+2026/07/14 17:11:10,stderr,Invalid `prisma.findingTemplate.findMany()` invocation:
+
+2026/07/14 17:11:10,stderr,Seed error: Error [PrismaClientKnownRequestError]: 
+
+2026/07/14 17:10:55,stderr,}
+
+2026/07/14 17:10:55,stderr,  clientVersion: '6.19.2'
+
+2026/07/14 17:10:55,stderr,"  meta: [Object],
+"
+2026/07/14 17:10:55,stderr,"  code: 'P2021',
+"
+2026/07/14 17:10:55,stderr,    at async l (.next/server/chunks/[root-of-the-server]__8fb1416c._.js:1:6619) {
+
+2026/07/14 17:10:55,stderr,    at async d (.next/server/chunks/[root-of-the-server]__8fb1416c._.js:1:5578)
+
+2026/07/14 17:10:55,stderr,    at async w (.next/server/chunks/[root-of-the-server]__8fb1416c._.js:1:1612)
+
+2026/07/14 17:10:55,stderr,The table `main.FindingTemplate` does not exist in the current database.
+
+2026/07/14 17:10:55,stderr,
+
+2026/07/14 17:10:55,stderr,
+
+2026/07/14 17:10:55,stderr,Invalid `prisma.findingTemplate.findMany()` invocation:
+
+2026/07/14 17:10:55,stderr,⨯ Error [PrismaClientKnownRequestError]: 
+
+2026/07/14 17:10:55,stderr,}
+
+2026/07/14 17:10:55,stderr,  clientVersion: '6.19.2'
+
+2026/07/14 17:10:55,stderr,"  meta: [Object],
+"
+2026/07/14 17:10:55,stderr,"  code: 'P2021',
+"
+2026/07/14 17:10:55,stderr,    at async l (.next/server/chunks/[root-of-the-server]__37053214._.js:1:9452) {
+
+2026/07/14 17:10:55,stderr,    at async d (.next/server/chunks/[root-of-the-server]__37053214._.js:1:8411)
+
+2026/07/14 17:10:55,stderr,    at async A (.next/server/chunks/[root-of-the-server]__37053214._.js:1:5110)
+
+2026/07/14 17:10:55,stderr,The table `main.ReportTemplate` does not exist in the current database.
+
+2026/07/14 17:10:55,stderr,
+
+2026/07/14 17:10:55,stderr,
+
+2026/07/14 17:10:55,stderr,Invalid `prisma.reportTemplate.findMany()` invocation:
+
+2026/07/14 17:10:55,stderr,Error fetching templates: Error [PrismaClientKnownRequestError]: 
+
+2026/07/14 17:10:55,stderr,}
+
+2026/07/14 17:10:55,stderr,  clientVersion: '6.19.2'
+
+2026/07/14 17:10:55,stderr,"  meta: [Object],
+"
+2026/07/14 17:10:55,stderr,"  code: 'P2021',
+"
+2026/07/14 17:10:55,stderr,    at async o (.next/server/chunks/[root-of-the-server]__556ce81c._.js:1:11826) {
+
+2026/07/14 17:10:55,stderr,    at async d (.next/server/chunks/[root-of-the-server]__556ce81c._.js:1:10785)
+
+2026/07/14 17:10:55,stderr,    at async v (.next/server/chunks/[root-of-the-server]__556ce81c._.js:1:7256)
+
+2026/07/14 17:10:55,stderr,The table `main.FindingTemplate` does not exist in the current database.
+
+2026/07/14 17:10:55,stderr,
+
+2026/07/14 17:10:55,stderr,
+
+2026/07/14 17:10:55,stderr,Invalid `prisma.findingTemplate.findMany()` invocation:
+
+2026/07/14 17:10:55,stderr,Seed error: Error [PrismaClientKnownRequestError]: 
+
+2026/07/14 17:10:55,stderr,}
+
+2026/07/14 17:10:55,stderr,  clientVersion: '6.19.2'
+
+2026/07/14 17:10:55,stderr,"  meta: [Object],
+"
+2026/07/14 17:10:55,stderr,"  code: 'P2021',
+"
+2026/07/14 17:10:55,stderr,    at async o (.next/server/chunks/[root-of-the-server]__556ce81c._.js:1:11826) {
+
+2026/07/14 17:10:55,stderr,    at async d (.next/server/chunks/[root-of-the-server]__556ce81c._.js:1:10785)
+
+2026/07/14 17:10:55,stderr,    at async v (.next/server/chunks/[root-of-the-server]__556ce81c._.js:1:7256)
+
+2026/07/14 17:10:55,stderr,The table `main.FindingTemplate` does not exist in the current database.
+
+2026/07/14 17:10:55,stderr,
+
+2026/07/14 17:10:55,stderr,
+
+2026/07/14 17:10:55,stderr,Invalid `prisma.findingTemplate.findMany()` invocation:
+
+2026/07/14 17:10:55,stderr,Seed error: Error [PrismaClientKnownRequestError]: 
+
+2026/07/14 16:21:07,stdout,✓ Ready in 2.1s
+
+2026/07/14 16:21:05,stdout,✓ Starting...
+
+2026/07/14 16:21:05,stdout,
+
+2026/07/14 16:21:05,stdout,- Network:       http://0.0.0.0:3000
+
+2026/07/14 16:21:05,stdout,- Local:         http://localhost:3000
+
+2026/07/14 16:21:05,stdout,▲ Next.js 16.1.3
+
+2026/07/14 16:21:01,stdout,=========================================
+
+2026/07/14 16:21:01,stdout,[entrypoint] Starting application on port 3000...
+
+2026/07/14 16:21:01,stdout,[entrypoint] Database ready.
+
+2026/07/14 16:21:01,stdout,[entrypoint] WARNING: prisma db push had an issue. App will still start.
+
+2026/07/14 16:21:01,stdout,Node.js v20.20.2
+
+2026/07/14 16:21:01,stdout,
+
+2026/07/14 16:21:01,stdout,}
+
+2026/07/14 16:21:01,stdout,  ]
+
+2026/07/14 16:21:01,stdout,    '/app/node_modules/prisma/build/index.js'
+
+2026/07/14 16:21:01,stdout,"    '/app/node_modules/@prisma/config/dist/index.js',
+"
+2026/07/14 16:21:01,stdout,  requireStack: [
+
+2026/07/14 16:21:01,stdout,"  code: 'MODULE_NOT_FOUND',
+"
+2026/07/14 16:21:01,stdout,    at Module.require (node:internal/modules/cjs/loader:1289:19) {
+
+2026/07/14 16:21:01,stdout,    at Module._load (node:internal/modules/cjs/loader:1091:12)
+
+2026/07/14 16:21:01,stdout,    at Module.load (node:internal/modules/cjs/loader:1266:32)
+
+2026/07/14 16:21:01,stdout,    at Module._extensions..js (node:internal/modules/cjs/loader:1623:10)
+
+2026/07/14 16:21:01,stdout,    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+
+2026/07/14 16:21:01,stdout,    at Object.<anonymous> (/app/node_modules/@prisma/config/dist/index.js:361:22)
+
+2026/07/14 16:21:01,stdout,    at require (node:internal/modules/helpers:182:18)
+
+2026/07/14 16:21:01,stdout,    at Module.require (node:internal/modules/cjs/loader:1289:19)
+
+2026/07/14 16:21:01,stdout,    at Module._load (node:internal/modules/cjs/loader:1038:27)
+
+2026/07/14 16:21:01,stdout,    at Module._resolveFilename (node:internal/modules/cjs/loader:1207:15)
+
+2026/07/14 16:21:01,stdout,- /app/node_modules/prisma/build/index.js
+
+2026/07/14 16:21:01,stdout,- /app/node_modules/@prisma/config/dist/index.js
+
+2026/07/14 16:21:01,stdout,Require stack:
+
+2026/07/14 16:21:01,stdout,Error: Cannot find module 'effect'
+
+2026/07/14 16:21:01,stdout,
+
+2026/07/14 16:21:01,stdout,  ^
+
+2026/07/14 16:21:01,stdout,  throw err;
+
+2026/07/14 16:21:00,stdout,node:internal/modules/cjs/loader:1210
+
+2026/07/14 16:20:57,stdout,[entrypoint] Syncing database schema...
+
+2026/07/14 16:20:57,stdout,=========================================
+
+2026/07/14 16:20:57,stdout,[entrypoint] MRI Report Manager starting...
+
+2026/07/14 16:20:57,stdout,=========================================
+

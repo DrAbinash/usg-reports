@@ -2,81 +2,43 @@
 set -e
 
 echo "========================================="
-echo "[entrypoint] CARE AI Sonologist Companion starting..."
-echo "[entrypoint] Node.js: $(node --version)"
-echo "[entrypoint] Platform: $(uname -m)"
-echo "[entrypoint] TZ: ${TZ:-UTC}"
+echo "[studio] CARE Reporting Studio starting..."
+echo "[studio] Node.js: $(node --version)  Platform: $(uname -m)"
 echo "========================================="
 
-# Ensure data directories exist
-mkdir -p /app/data/db /app/data/studies /app/data/exports
+mkdir -p /app/data/db
 
-# Database setup using sqlite3 CLI
-DB_FILE="/app/data/db/usg_companion.db"
-SQL_FILE="/app/schema.sql"
+# Apply the SQLite schema (idempotent — safe on every boot).
+#
+# NO --accept-data-loss: this database holds finalized medical reports.
+# - additive changes (new tables/columns) apply automatically;
+# - a change that would DROP data makes prisma exit non-zero — we then FAIL
+#   STARTUP deliberately instead of destroying clinical data. Fix the schema
+#   conflict manually (backup ./data/db first), then restart.
+echo "[studio] Applying database schema…"
+PRISMA="./node_modules/.bin/prisma"
+if [ ! -x "$PRISMA" ]; then
+  PRISMA="node ./node_modules/prisma/build/index.js"
+fi
 
-setup_db() {
-  echo "[entrypoint] Setting up database tables..."
-  if [ -f "$SQL_FILE" ]; then
-    if sqlite3 "$DB_FILE" < "$SQL_FILE" 2>&1; then
-      echo "[entrypoint] Database tables created/verified."
-      return 0
-    else
-      echo "[entrypoint] WARNING: sqlite3 setup had issues."
-      return 1
-    fi
-  else
-    echo "[entrypoint] WARNING: schema.sql not found!"
-    return 1
+n=0
+until $PRISMA db push --skip-generate; do
+  n=$((n + 1))
+  if [ "$n" -ge 3 ]; then
+    echo "=============================================" >&2
+    echo "[studio] FATAL: schema push failed 3 times." >&2
+    echo "[studio] Startup is being stopped on purpose:" >&2
+    echo "[studio]  - if the error mentions a possible data loss / reset," >&2
+    echo "[studio]    prisma was asked NOT to destroy data (report DB!)." >&2
+    echo "[studio]  - back up ./data/db, resolve the schema conflict," >&2
+    echo "[studio]    then restart the container." >&2
+    echo "=============================================" >&2
+    $PRISMA -v || true
+    exit 1
   fi
-}
+  echo "[studio] schema push failed — retrying in 5s (attempt $n/3)…" >&2
+  sleep 5
+done
 
-# Check if DB exists and has required tables
-if [ -f "$DB_FILE" ]; then
-  echo "[entrypoint] Existing database found."
-
-  # Check for required tables
-  MISSING_TABLES=""
-  for TABLE in Patient Study Series DicomImage Measurement Report AiSuggestion KeyImage PcpndtForm DoctorPreference AuditLog; do
-    if ! sqlite3 "$DB_FILE" "SELECT name FROM sqlite_master WHERE type='table' AND name='$TABLE';" 2>/dev/null | grep -q "$TABLE"; then
-      MISSING_TABLES="$MISSING_TABLES $TABLE"
-    fi
-  done
-
-  if [ -n "$MISSING_TABLES" ]; then
-    echo "[entrypoint] MISSING TABLES:$MISSING_TABLES"
-    echo "[entrypoint] Re-creating database from scratch..."
-    rm -f "$DB_FILE"
-    setup_db
-  else
-    echo "[entrypoint] All 11 tables found. Database looks good."
-    # Still run schema.sql to add any new columns/indexes (IF NOT EXISTS is safe)
-    setup_db
-  fi
-else
-  echo "[entrypoint] No existing database. Creating new one..."
-  setup_db
-fi
-
-# Verify Prisma engine exists
-ENGINE_FILE=$(find /app/node_modules/.prisma -name "libquery_engine*" -type f 2>/dev/null | head -1)
-if [ -n "$ENGINE_FILE" ]; then
-  echo "[entrypoint] Prisma engine found: $(basename "$ENGINE_FILE")"
-else
-  echo "[entrypoint] WARNING: No Prisma engine binary found!"
-fi
-
-# Verify server.js exists
-if [ -f "/app/server.js" ]; then
-  echo "[entrypoint] server.js found."
-else
-  echo "[entrypoint] FATAL: server.js not found! Build may have failed."
-  ls -la /app/ 2>/dev/null
-  exit 1
-fi
-
-echo "[entrypoint] Starting CARE AI Sonologist Companion on port ${PORT:-3000}..."
-echo "[entrypoint] Access: http://localhost:${PORT:-3000}"
-echo "========================================="
-
+echo "[studio] Starting server on :3000"
 exec "$@"

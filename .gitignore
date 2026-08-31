@@ -1,79 +1,47 @@
-# Dependencies
+# dependencies
 node_modules
-.pnp
-.pnp.js
+/.pnp
+.pnp.*
 
-# Build output
-.next
-out
-dist
-build
+# testing
+/coverage
 
-# Environment files (contain secrets)
-.env
-.env.local
-.env.production
+# next.js
+/.next/
+/out/
 
-# Database files (persisted via volume on Synology)
-db/*.db
-db/*.db-journal
-db/*.db-wal
-data/
+# production
+/build
 
-# IDE
-.vscode
-.idea
-*.swp
-*.swo
-*~
-
-# OS
+# misc
 .DS_Store
-Thumbs.db
+*.pem
 
-# Logs
-*.log
-server.log
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 dev.log
+*.log
 
-# Tool artifacts
-tool-results
-download
-upload
-mini-services
-examples
+# env files
+.env
+.env*.local
 
-# Prisma migration history (schema + generate is enough for fresh deploy)
-prisma/migrations
+# vercel
+.vercel
 
-# Sandbox environment files (not part of the app)
-.zscripts
-skills
-Caddyfile
-.zscripts/
-upload/
-download/
-tool-results/
-# Synology metadata
-@eaDir/
-**/@eaDir/
+# typescript
+*.tsbuildinfo
+next-env.d.ts
 
-# Microsoft Office temporary files
-~$*
-**/~$*
+# Studio — local database & deploy state
+/db/
+/data/
 
-# Synology metadata
-@eaDir/
-**/@eaDir/
+# local test database
+prisma/dev.db
+prisma/dev.db-journal
 
-# Windows / Word temporary files
-Desktop.ini
-**/Desktop.ini
-*.tmp
-**/*.tmp
-*.lnk
-**/*.lnk
-
-# Accidental media files
-*.mp3
-**/*.mp3
+# vitest scratch databases
+tests/.tmp

@@ -1,0 +1,36 @@
+mri-report-manager
+date,stream,content
+2026/07/15 01:04:21,stdout,✓ Ready in 1330ms
+
+2026/07/15 01:04:20,stdout,✓ Starting...
+
+2026/07/15 01:04:20,stdout,
+
+2026/07/15 01:04:20,stdout,- Network:       http://0.0.0.0:3000
+
+2026/07/15 01:04:20,stdout,- Local:         http://localhost:3000
+
+2026/07/15 01:04:19,stdout,▲ Next.js 16.1.3
+
+2026/07/15 01:04:16,stdout,=========================================
+
+2026/07/15 01:04:16,stdout,[entrypoint] Starting application on port 3000...
+
+2026/07/15 01:04:16,stdout,[entrypoint] server.js found.
+
+2026/07/15 01:04:16,stdout,[entrypoint] Prisma engine found: libquery_engine-linux-musl-openssl-3.0.x.so.node
+
+2026/07/15 01:04:16,stdout,[entrypoint] Database tables created/verified.
+
+2026/07/15 01:04:16,stdout,[entrypoint] Setting up database tables...
+
+2026/07/15 01:04:16,stdout,=========================================
+
+2026/07/15 01:04:16,stdout,[entrypoint] Platform: x86_64
+
+2026/07/15 01:04:16,stdout,[entrypoint] Node.js: v20.20.2
+
+2026/07/15 01:04:15,stdout,[entrypoint] MRI Report Manager starting...
+
+2026/07/15 01:04:15,stdout,=========================================
+

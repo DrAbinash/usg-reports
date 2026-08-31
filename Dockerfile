@@ -1,29 +1,38 @@
+# CARE Reporting Studio — Synology ARM-ready image
+# Same hardened pattern as the mri-reports app (node:20-alpine multi-arch).
+
 # ---- Build Stage ----
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install bun — the project uses bun.lock, not package-lock.json
-# This is critical for Synology: ensures reproducible builds on any architecture
-RUN npm install -g bun@1
+# Dependencies first (layer cache). npm ci uses the lockfile for exact versions.
+# --ignore-scripts skips postinstall hooks; prisma generate runs separately below.
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts
 
-# Copy dependency manifests first (Docker layer caching)
-COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile
-
-# Copy Prisma schema and generate client BEFORE copying source
-# This ensures the correct engine binary for Alpine/musl is downloaded
+# Prisma schema + client BEFORE source — downloads the correct engine binary
+# for Alpine/musl on the build architecture (ARM64 on Synology).
 COPY prisma ./prisma/
-RUN bunx prisma generate
+RUN npx prisma generate
 
-# Copy source and build
+# Copy source and build the standalone output
 COPY . .
-
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+RUN npm run build
 
-# Build Next.js standalone output
-RUN bun run build
+# ---- Prisma CLI stage ----
+# prisma 6.16+ CLI depends on @prisma/config -> effect / c12 / … (a deep
+# transitive chain). The runner needs a COMPLETE prisma install for the
+# entrypoint's `prisma db push` — cherry-picking node_modules folders breaks
+# it (that caused the 2026-08-30 "Cannot find module 'effect'" crash loop).
+# The version is read from package-lock.json so it always matches the app.
+FROM node:20-alpine AS prisma-cli
+COPY package-lock.json /tmp/lock.json
+WORKDIR /prisma-cli
+RUN PRISMA_VER=$(node -p "require('/tmp/lock.json').packages['node_modules/prisma'].version") \
+    && npm install "prisma@$PRISMA_VER" --no-audit --no-fund --loglevel=error
 
 # ---- Production Stage ----
 FROM node:20-alpine AS runner
@@ -32,37 +41,35 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+ENV DATABASE_URL=file:/app/data/db/studio.db
 
-# Install sqlite3 CLI for runtime DB table creation and tini for signal handling
-RUN apk add --no-cache sqlite tini
-
-# Copy built standalone output
+# Standalone server + static assets + public files
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# Copy Prisma runtime files — engine binary + generated client
-# The engine binary is platform-specific and MUST match the target architecture
-# Since both stages use node:20-alpine, the binary is correct
+# COMPLETE prisma CLI install (prisma + @prisma/* + effect/c12/… transitive
+# deps + engine binaries) so the entrypoint can `prisma db push` on boot.
+# Docker COPY merges directories — the standalone trace below is preserved.
+COPY --from=prisma-cli /prisma-cli/node_modules ./node_modules
+
+# Generated prisma client + engines from the builder — belt & suspenders on
+# top of the standalone trace, which already bundles @prisma/client.
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/node_modules/.bin ./node_modules/.bin
+COPY --from=builder /app/prisma ./prisma
 
-# Copy SQL schema for entrypoint DB setup
-COPY schema.sql /app/schema.sql
-
-# Create data directories
-RUN mkdir -p /app/data/db /app/data/studies /app/data/exports
-
-# Copy and set up entrypoint
+# Entrypoint: prepare DB, then start the standalone server
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
-RUN chmod +x /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh && mkdir -p /app/data/db
 
 EXPOSE 3000
 
-ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
-ENV DATABASE_URL="file:/app/data/db/usg_companion.db"
-ENV TZ=Asia/Kolkata
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
 
-ENTRYPOINT ["/sbin/tini", "--", "/app/docker-entrypoint.sh"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["node", "server.js"]

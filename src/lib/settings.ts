@@ -111,6 +111,7 @@ export async function updateSettings(patch: SettingsUpdate) {
     "ohifLanUrl", "ohifTailscaleUrl", "loginTheme", "loginBgUrl",
     "usgDoctorName", "usgDoctorQual", "usgDoctorRegNo", "usgMachineLine",
     "usgFooterLine", "usgDeclarationLine", "usgPrintStyle",
+    "usgPrintPaper", "usgSignatureUrl",
   ];
   const data: Record<string, string | boolean> = {};
   for (const k of allowed) {
@@ -142,6 +143,10 @@ export async function updateSettings(patch: SettingsUpdate) {
   // Print style: anything other than "classic" means the premium letterhead.
   if (typeof patch.usgPrintStyle === "string") {
     data.usgPrintStyle = patch.usgPrintStyle.trim() === "classic" ? "classic" : "premium";
+  }
+  // Paper size: anything other than "a5" means A4.
+  if (typeof patch.usgPrintPaper === "string") {
+    data.usgPrintPaper = patch.usgPrintPaper.trim() === "a5" ? "a5" : "a4";
   }
   // Compact print density toggle (same string-checkbox contract).
   if (typeof patch.usgPrintCompact === "string") {

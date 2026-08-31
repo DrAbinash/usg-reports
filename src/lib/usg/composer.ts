@@ -84,6 +84,15 @@ export function substitute(
   });
 }
 
+/** Selected pathology keys of an organ state — `pathologies` (combined)
+ *  wins, legacy single `pathology` falls back. Catalog/click order kept. */
+export function selectedPathologies(o: Pick<UsgOrganState, "pathology" | "pathologies">): string[] {
+  if (Array.isArray(o.pathologies)) {
+    return o.pathologies.filter((k) => typeof k === "string" && k);
+  }
+  return o.pathology ? [o.pathology] : [];
+}
+
 /** Custom pathologies arrive from the DB; builtin set merges on top. */
 export type PathologyLookup = (key: string) => UsgPathologyDef | undefined;
 
@@ -101,15 +110,17 @@ export function normaliseState(raw: unknown, fallbackStudy = "wa-female"): UsgCo
   const study = getStudy(obj.studyKey ?? "") ?? getStudy(fallbackStudy) ?? USG_STUDIES[0];
   const organs: UsgOrganState[] = study.organs.map((def) => {
     const incoming = Array.isArray(obj.organs)
-      ? obj.organs.find((o) => o && typeof o === "object" && o.organ === def.key)
+      ? (obj.organs.find((o) => o && typeof o === "object" && o.organ === def.key) as Partial<UsgOrganState> | undefined)
       : undefined;
     if (!incoming) {
-      return { organ: def.key, pathology: null, custom: false, text: def.normal, vars: {} };
+      return { organ: def.key, pathology: null, pathologies: [], custom: false, text: def.normal, vars: {} };
     }
     const text = typeof incoming.text === "string" && incoming.text.trim() ? incoming.text : def.normal;
+    const keys = selectedPathologies(incoming as UsgOrganState);
     return {
       organ: def.key,
-      pathology: typeof incoming.pathology === "string" ? incoming.pathology : null,
+      pathology: keys[0] ?? null, // legacy mirror of the combined list
+      pathologies: keys,
       custom: !!incoming.custom,
       text,
       vars: incoming.vars && typeof incoming.vars === "object" ? { ...incoming.vars } : {},
@@ -135,8 +146,8 @@ export function switchStudy(state: UsgComposerState, studyKey: string): UsgCompo
     studyKey: target.key,
     organs: target.organs.map((def) => {
       const old = prev.get(def.key);
-      if (old && (old.pathology || old.custom)) return { ...old };
-      return { organ: def.key, pathology: null, custom: false, text: def.normal, vars: {} };
+      if (old && (selectedPathologies(old).length || old.custom)) return { ...old };
+      return { organ: def.key, pathology: null, pathologies: [], custom: false, text: def.normal, vars: {} };
     }),
     impressionOverride: state.impressionOverride,
   };
@@ -151,27 +162,56 @@ export function applyPathology(
   pathologyKey: string | null,
   lookup: PathologyLookup,
 ): UsgComposerState {
+  return applyPathologies(state, organKey, pathologyKey === null ? [] : [pathologyKey], lookup);
+}
+
+/**
+ * Combined findings — set the FULL pathology selection for one organ.
+ *
+ * One organ can carry several pathologies at once (fatty liver + haemangioma +
+ * hepatomegaly…): the finding text concatenates each selected wording as its
+ * own paragraph, the impression unions every line and the composed study
+ * title joins every fragment. Unknown or wrong-organ keys are dropped, so a
+ * stale key from an old draft can never corrupt a report. Typed measurement
+ * values survive whenever any of the new texts uses the same token.
+ */
+export function applyPathologies(
+  state: UsgComposerState,
+  organKey: string,
+  keys: string[],
+  lookup: PathologyLookup,
+): UsgComposerState {
   const study = getStudy(state.studyKey);
   if (!study) return state;
   const def = study.organs.find((o) => o.key === organKey);
   if (!def) return state;
   const organs = state.organs.map((o) => {
     if (o.organ !== organKey) return o;
-    const nextText = pathologyKey === null ? def.normal : lookup(pathologyKey)?.text;
-    if (pathologyKey !== null) {
-      const p = lookup(pathologyKey);
-      if (!p || !pathologyAppliesTo(p.organ, organKey)) return o; // unknown or wrong-organ pathology — ignore
-    }
+    // Keep click order; drop keys that no longer resolve or belong elsewhere.
+    const defs = keys
+      .map((k) => lookup(k))
+      .filter((p): p is UsgPathologyDef => !!p && pathologyAppliesTo(p.organ, organKey));
+    const nextKeys = [...new Set(defs.map((p) => p.key))];
+    const nextText = nextKeys.length ? defs.map((p) => p.text).join("\n\n") : def.normal;
     const kept: Record<string, string> = {};
-    if (nextText) for (const t of extractTokens(nextText)) if (o.vars[t]?.trim()) kept[t] = o.vars[t];
-    return { organ: organKey, pathology: pathologyKey, custom: false, text: nextText ?? def.normal, vars: kept };
+    for (const t of extractTokens(nextText)) if (o.vars[t]?.trim()) kept[t] = o.vars[t];
+    return {
+      organ: organKey,
+      pathology: nextKeys[0] ?? null, // legacy mirror
+      pathologies: nextKeys,
+      custom: false,
+      text: nextText,
+      vars: kept,
+    };
   });
   return { ...state, organs };
 }
 
 /** Hand-edit an organ's text (locks it — chips show as "customised"). */
 export function setOrganText(state: UsgComposerState, organKey: string, text: string): UsgComposerState {
-  const organs = state.organs.map((o) => (o.organ === organKey ? { ...o, custom: true, text } : o));
+  const organs = state.organs.map((o) =>
+    o.organ === organKey ? { ...o, custom: true, text, pathologies: selectedPathologies(o) } : o,
+  );
   return { ...state, organs };
 }
 
@@ -222,17 +262,32 @@ export function resolve(
     const text = substitute(o.text, o.vars, o.organ);
     sections.push({ organ: o.organ, label: def.label, text, kind: def.kind });
 
-    const p = o.pathology ? lookup(o.pathology) : undefined;
-    if (p) {
-      // A wording variant with no impression lines and no title fragment is a
-      // cosmetic swap (e.g. "No gross fetal congenital anomalies detected.") —
-      // it must not turn a normal report into a pathological one.
-      const cosmetic = p.impression.length === 0 && !p.titleFragment;
-      if (!cosmetic) anyPathology = true;
+    // Combined findings: every selected pathology contributes its impression
+    // lines, suggestions and title fragment — in click order, deduplicated.
+    const selected = selectedPathologies(o)
+      .map((k) => lookup(k))
+      .filter((p): p is UsgPathologyDef => !!p);
+    if (selected.length) {
       const lineVars = { ...mergedVars, ...o.vars };
-      for (const line of p.impression) pathologyLines.push(substitute(line, lineVars, o.organ));
-      for (const s of p.suggestions ?? []) if (!suggestions.includes(s)) suggestions.push(s);
-      if (p.titleFragment) fragments.push(substitute(p.titleFragment, lineVars, o.organ));
+      for (const p of selected) {
+        // A wording variant with no impression lines and no title fragment is a
+        // cosmetic swap (e.g. "No gross fetal congenital anomalies detected.") —
+        // it must not turn a normal report into a pathological one.
+        const cosmetic = p.impression.length === 0 && !p.titleFragment;
+        if (!cosmetic) anyPathology = true;
+        for (const line of p.impression) {
+          const s = substitute(line, lineVars, o.organ);
+          if (!pathologyLines.includes(s)) pathologyLines.push(s);
+        }
+        for (const s of p.suggestions ?? []) {
+          const sub = substitute(s, lineVars, o.organ);
+          if (!suggestions.includes(sub)) suggestions.push(sub);
+        }
+        if (p.titleFragment) {
+          const f = substitute(p.titleFragment, lineVars, o.organ);
+          if (!fragments.includes(f)) fragments.push(f);
+        }
+      }
     } else if (def.normalImpression) {
       trailingLines.push(substitute(def.normalImpression, mergedVars));
     }
@@ -254,7 +309,7 @@ export function resolve(
     if (study.upperGroupNormalLine) {
       const upperAllNormal = study.organs
         .filter((d) => UPPER_KEYS.includes(d.key))
-        .every((d) => !state.organs.find((o) => o.organ === d.key)?.pathology);
+        .every((d) => selectedPathologies(state.organs.find((o) => o.organ === d.key) ?? { pathology: null }).length === 0);
       const hasNonUpper = study.organs.some((d) => !UPPER_KEYS.includes(d.key));
       if (upperAllNormal && hasNonUpper) autoLines.unshift(study.upperGroupNormalLine);
     }

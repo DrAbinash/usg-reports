@@ -10,9 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { FileText, Loader2, Plus, Printer, RotateCcw, Search, Trash2, Waves } from "lucide-react";
+import { FileText, Loader2, Plus, Printer, RotateCcw, Search, Trash2, Waves, Repeat } from "lucide-react";
 import type { UsgPathologyDef } from "@/lib/usg/types";
 import type { UsgPrintSettings } from "@/lib/usg/print";
+import { formatUsgSerial } from "@/lib/usg/print";
 import { UsgComposer, type UsgReportRow } from "./UsgComposer";
 
 const EMPTY_SETTINGS: UsgPrintSettings = {
@@ -32,6 +33,8 @@ const EMPTY_SETTINGS: UsgPrintSettings = {
   usgDeclarationLine: "",
   usgPrintStyle: "premium",
   usgPrintCompact: false,
+  usgPrintPaper: "a4",
+  usgSignatureUrl: "",
 };
 
 export function UsgStudioView() {
@@ -71,6 +74,8 @@ export function UsgStudioView() {
         usgDeclarationLine: s.usgDeclarationLine ?? "",
         usgPrintStyle: s.usgPrintStyle ?? "premium",
         usgPrintCompact: s.usgPrintCompact === true || s.usgPrintCompact === "true",
+        usgPrintPaper: s.usgPrintPaper ?? "a4",
+        usgSignatureUrl: s.usgSignatureUrl ?? "",
       });
     }
     if (rRes.ok) setReports(((await rRes.json()).reports ?? []) as UsgReportRow[]);
@@ -118,6 +123,21 @@ export function UsgStudioView() {
     } else {
       toast.error("Delete failed");
     }
+  };
+
+  /** Follow-up — duplicate any report as a fresh editable draft (same patient,
+   *  study and composer state) for the repeat scan. */
+  const duplicate = async (row: UsgReportRow) => {
+    const res = await fetch(`/api/usg/reports/${row.id}/duplicate`, { method: "POST" });
+    if (!res.ok) {
+      toast.error("Could not create the follow-up draft");
+      return;
+    }
+    const { report } = (await res.json()) as { report: UsgReportRow };
+    toast.success(`Follow-up draft created for ${report.patientName}`);
+    setReprintHtml(null);
+    setEditing(report);
+    setCreating(false);
   };
 
   const composerMode = creating || editing !== null;
@@ -174,10 +194,12 @@ export function UsgStudioView() {
         {reprintHtml ? (
           <ReprintOverlay
             html={reprintHtml}
+            serial={editing?.serialNo != null ? formatUsgSerial(editing.serialNo) : undefined}
             onClose={() => {
               setReprintHtml(null);
               setEditing(null);
             }}
+            onFollowUp={() => editing && duplicate(editing)}
           />
         ) : null}
       </div>
@@ -270,6 +292,11 @@ export function UsgStudioView() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="truncate text-[13px] font-bold">{r.patientName}</span>
+                  {r.serialNo != null ? (
+                    <span className="shrink-0 rounded bg-sky-50 px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-sky-700 ring-1 ring-sky-100">
+                      {formatUsgSerial(r.serialNo)}
+                    </span>
+                  ) : null}
                   <span className="text-[11px] text-faint">
                     {r.patientAge ? `${r.patientAge} yrs` : ""} {r.referredBy ? `· ${r.referredBy}` : ""}
                   </span>
@@ -291,8 +318,20 @@ export function UsgStudioView() {
                 {r.status === "FINALIZED" ? "FINAL" : "DRAFT"}
               </Badge>
               <span className="shrink-0 text-[10px] text-faint">
-                {new Date(r.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                {new Date(r.scanDate ?? r.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
               </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0 text-faint opacity-0 transition-opacity hover:text-sky-600 group-hover:opacity-100"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  duplicate(r);
+                }}
+                title="Duplicate as a follow-up draft for the repeat scan"
+              >
+                <Repeat className="h-3.5 w-3.5" />
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -313,14 +352,33 @@ export function UsgStudioView() {
   );
 }
 
-/** Finalized report = frozen snapshot view + reprint. */
-function ReprintOverlay({ html, onClose }: { html: string; onClose: () => void }) {
+/** Finalized report = frozen snapshot view + reprint + follow-up. */
+function ReprintOverlay({
+  html,
+  serial,
+  onClose,
+  onFollowUp,
+}: {
+  html: string;
+  serial?: string;
+  onClose: () => void;
+  onFollowUp: () => void;
+}) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background/95 backdrop-blur">
       <div className="flex items-center gap-2 border-b border-border bg-card px-4 py-2.5">
-        <span className="text-[13px] font-bold">Finalized report — frozen snapshot</span>
+        <span className="text-[13px] font-bold">Finalized report{serial ? ` — ${serial}` : ""}</span>
         <div className="ml-auto flex gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100"
+            onClick={onFollowUp}
+            title="Duplicate this report as an editable draft for the repeat scan"
+          >
+            <Repeat className="mr-1.5 h-4 w-4" /> Follow-up scan
+          </Button>
           <Button
             size="sm"
             className="h-8 bg-rose-600 hover:bg-rose-700"

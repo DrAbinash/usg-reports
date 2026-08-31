@@ -55,6 +55,8 @@ model HospitalSettings {
   usgDeclarationLine String  @default("") // optional PC-PNDT style declaration under the signature
   usgPrintStyle     String   @default("premium") // premium (gradient letterhead) | classic (plain B/W)
   usgPrintCompact   Boolean  @default(false) // compact density for long studies
+  usgPrintPaper     String   @default("a4")    // a4 | a5 (half-sheet for short studies)
+  usgSignatureUrl   String   @default("")      // scanned signature image printed over the name line
 
   updatedAt       DateTime @updatedAt
 }
@@ -246,6 +248,16 @@ model UsgReport {
   status        String    @default("DRAFT") // DRAFT | FINALIZED
   reportHtml    String?   // frozen snapshot at finalize
   finalizedAt   DateTime?
+
+  // Register discipline: sequential number stamped at FIRST finalization —
+  // printed as USG-0001 and never renumbered, even if an earlier report is
+  // deleted. Drafts carry no number until they are finalized.
+  serialNo      Int?      @unique
+  // Scan date as performed — editable so the doctor can back-date a report
+  // typed up after the fact. Printed in the patient strip; falls back to
+  // finalizedAt/createdAt when blank.
+  scanDate      DateTime?
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

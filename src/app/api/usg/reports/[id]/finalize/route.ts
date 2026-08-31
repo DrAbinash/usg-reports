@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
 import { normaliseState, makeLookup, resolve } from "@/lib/usg/composer";
 import { loadAllPathologies } from "@/lib/usg/server";
-import { buildUsgReportHtml } from "@/lib/usg/print";
+import { buildUsgReportHtml, formatUsgSerial } from "@/lib/usg/print";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -19,6 +19,21 @@ export async function POST(_req: Request, ctx: Ctx) {
 
   const report = await db.usgReport.findUnique({ where: { id } });
   if (!report) return Response.json({ error: "Not found" }, { status: 404 });
+
+  // Register discipline: the sequential number is stamped at FIRST
+  // finalization and never changes afterwards — re-finalize rebuilds the
+  // snapshot but keeps the same register number (no renumbering, ever, even
+  // if an earlier report is deleted — the max+1 rule leaves gaps, never
+  // reuses a printed number).
+  let serialNo = report.serialNo;
+  if (serialNo == null) {
+    serialNo = await db.$transaction(async (tx) => {
+      const fresh = await tx.usgReport.findUnique({ where: { id }, select: { serialNo: true } });
+      if (fresh?.serialNo != null) return fresh.serialNo; // raced finalize already stamped it
+      const max = await tx.usgReport.aggregate({ _max: { serialNo: true } });
+      return (max._max.serialNo ?? 0) + 1;
+    });
+  }
 
   // Re-finalize allowed: rebuilds the snapshot from the CURRENT state + settings.
   const settings = await getSettings();
@@ -43,13 +58,20 @@ export async function POST(_req: Request, ctx: Ctx) {
       usgShowMachine: settings.usgShowMachine,
       usgFooterLine: settings.usgFooterLine,
       usgDeclarationLine: settings.usgDeclarationLine,
+      usgPrintStyle: settings.usgPrintStyle,
+      usgPrintCompact: settings.usgPrintCompact,
+      usgPrintPaper: settings.usgPrintPaper,
+      usgSignatureUrl: settings.usgSignatureUrl,
     },
     {
       name: report.patientName,
       age: report.patientAge,
       sex: report.patientSex,
       referredBy: report.referredBy,
-      date: fmtDate(report.finalizedAt ?? report.createdAt),
+      // The printed date is the day the scan was DONE (back-datable), falling
+      // back to the finalization/creation day for older rows.
+      date: fmtDate(report.scanDate ?? report.finalizedAt ?? report.createdAt),
+      serial: formatUsgSerial(serialNo),
     },
     resolved,
   );
@@ -60,12 +82,13 @@ export async function POST(_req: Request, ctx: Ctx) {
       status: "FINALIZED",
       reportHtml: html,
       finalizedAt: new Date(),
+      serialNo,
       studyTitle: resolved.title,
       findings: resolved.sections.map((s) => `${s.label}: ${s.text}`).join("\n\n"),
       impression: resolved.impression.join("\n"),
     },
   });
-  return Response.json({ report: updated, html });
+  return Response.json({ report: updated, html, serialNo });
 }
 
 function safeParse(raw: string): unknown {

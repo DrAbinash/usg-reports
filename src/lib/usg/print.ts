@@ -1,19 +1,26 @@
 /**
- * USG report — A4 print document, version 2.
+ * USG report — print document, version 3.
  *
  * Two letterhead styles, switchable in Settings → USG Studio:
  *   • premium — the studio's gradient masthead and banded sections (default);
  *   • classic — plain black-and-white serif letterhead that behaves like a
  *     traditional printed radiology report (ink-saver, thermal-printer safe).
  *
- * Plus a compact density toggle for long studies (echocardiography, whole
- * abdomen with many findings) so a report fits one sheet where possible.
+ * Paper: A4 (default) or A5 half-sheet — the same document scaled for the
+ * clinic's A5 stock, ideal for short studies and quick prints.
+ *
+ * Density: compact toggle for long studies (echocardiography, whole abdomen).
+ *
+ * Register & legal discipline:
+ *   • a USG serial number cell (USG-0001 from the sequential register);
+ *   • drafts print with a diagonal PROVISIONAL watermark and a red tag — a
+ *     glance shows the sheet is not the frozen final record;
+ *   • a scanned signature image can print over the name line.
  *
  * Layout upgrades over v1:
  *   • measurement sections (organ kind "table", e.g. echo M-mode) render as
  *     real bordered measurement tables with normal ranges in grey;
  *   • the doctor's "Thanks For Your Referral." tagline under the patient strip;
- *   • a USG serial number cell (filled once the report is saved);
  *   • multi-line findings keep line breaks and print with hanging indents.
  */
 import type { UsgResolved } from "./types";
@@ -37,6 +44,10 @@ export type UsgPrintSettings = {
   usgPrintStyle?: string;
   /** Compact density — smaller type + tighter spacing for long reports. */
   usgPrintCompact?: boolean;
+  /** "a4" (default) or "a5" — half-sheet print for short studies. */
+  usgPrintPaper?: string;
+  /** Scanned signature image (URL/data-URL) printed above the name line. */
+  usgSignatureUrl?: string;
 };
 
 export type UsgPrintPatient = {
@@ -47,7 +58,15 @@ export type UsgPrintPatient = {
   date: string; // pre-formatted
   /** Report serial (e.g. "USG-0012") — printed in the patient strip. */
   serial?: string;
+  /** True while the report is still a draft — prints the PROVISIONAL
+   *  watermark so an unfinalized sheet can never be mistaken for the record. */
+  provisional?: boolean;
 };
+
+/** Sequential register number → printed form: 1 → "USG-0001", 12345 → "USG-12345". */
+export function formatUsgSerial(n: number): string {
+  return `USG-${String(Math.max(0, Math.floor(n))).padStart(4, "0")}`;
+}
 
 function esc(s: string): string {
   return String(s ?? "")
@@ -249,8 +268,90 @@ const COMPACT_CSS = `
   .impression-box li { margin: 2.5px 0; }
   .sig-block { margin-top: 16px; }
   .sig .line { height: 16px; }
+  .sig-img { height: 14mm; }
   .pcpndt { margin-top: 10px; }
   .footer { margin-top: 12px; }
+`;
+
+/** A5 half-sheet — the full report scaled onto 148 × 210 mm stock. Applied
+ *  AFTER the style sheet so both premium and classic shrink consistently. */
+const A5_CSS = `
+  @page { size: A5; margin: 8mm; }
+  .sheet { max-width: 132mm; }
+  body { font-size: 8.5pt; line-height: 1.4; }
+  .masthead { padding: 8px 11px 7px; gap: 9px; border-radius: 9px; }
+  .logo { width: 34px; height: 34px; border-radius: 8px; }
+  .masthead .hospital { font-size: 11.5pt; }
+  .masthead .addr { font-size: 6.5pt; margin-top: 1px; }
+  .masthead .brand .t { font-size: 6.5pt; letter-spacing: 1.2px; padding: 2px 7px; }
+  table.patient { margin-top: 6px; border-radius: 6px; border-width: 1px; font-size: 7.5pt; }
+  table.patient td { padding: 2.5px 6px; }
+  table.patient td.k { font-size: 6.5pt; }
+  .thanks { font-size: 7.5pt; margin-top: 4px; }
+  .study { margin-top: 8px; }
+  .study .name { font-size: 10.5pt; letter-spacing: 1.5px; }
+  .study .rule { margin: 3px 10px 0; }
+  .machine { font-size: 7.5pt; margin-top: 4px; }
+  h2.band { font-size: 8pt; letter-spacing: 1.2px; padding: 3.5px 9px; border-radius: 5px; margin: 9px 0 5px; }
+  h2.band .n { min-width: 13px; height: 13px; font-size: 7pt; }
+  p.technique { margin: 2.5px 0; }
+  table.organs th { font-size: 7pt; width: 18mm; letter-spacing: .5px; padding: 3.5px 5px 3.5px 0; }
+  table.organs td { padding: 3.5px 0; }
+  .meas-cap { font-size: 7pt; padding: 3px 0 2px; }
+  table.meas th, table.meas td { font-size: 8pt; padding-top: 2.5px; padding-bottom: 2.5px; }
+  .impression-box { padding: 6px 10px; border-left-width: 3.5px; border-radius: 0 6px 6px 0; }
+  .impression-box ol { margin-left: 15px; }
+  .impression-box li { font-size: 8.5pt; margin: 3px 0; }
+  .suggestions { margin-top: 5px; font-size: 8pt; }
+  .sig-block { margin-top: 14mm; }
+  .sig { min-width: 46mm; }
+  .sig .line { height: 14px; margin-bottom: 3px; }
+  .sig-img { height: 13mm; }
+  .sig .name { font-size: 9.5pt; }
+  .sig .sub { font-size: 7pt; }
+  .declaration { margin-top: 8px; font-size: 6.5pt; padding: 4px 7px; }
+  .pcpndt { margin-top: 9px; padding: 5px 8px; border-radius: 6px; }
+  .pcpndt-title { font-size: 7pt; margin-bottom: 2px; }
+  .pcpndt p { font-size: 7pt; }
+  .footer { margin-top: 8px; padding-top: 3px; font-size: 6.5pt; }
+`;
+
+/** Draft discipline — big diagonal watermark on every printed page plus a
+ *  red tag under the masthead. `position: fixed` repeats on each sheet. */
+const PROVISIONAL_CSS = `
+  .watermark {
+    position: fixed; top: 45%; left: 50%;
+    transform: translate(-50%, -50%) rotate(-28deg);
+    font-size: 44pt; font-weight: 800; letter-spacing: 10px;
+    color: rgba(180, 40, 60, 0.10); z-index: 999; pointer-events: none;
+  }
+  .provisional-tag {
+    text-align: center; margin-top: 6px;
+  }
+  .provisional-tag span {
+    display: inline-block; border: 1.5px solid #B4283C; color: #B4283C;
+    border-radius: 4px; font-size: 8pt; font-weight: 800; letter-spacing: 2px;
+    padding: 2px 10px; text-transform: uppercase;
+  }
+`;
+const PROVISIONAL_CSS_CLASSIC = `
+  .watermark {
+    position: fixed; top: 45%; left: 50%;
+    transform: translate(-50%, -50%) rotate(-28deg);
+    font-size: 44pt; font-weight: 800; letter-spacing: 10px;
+    color: rgba(0, 0, 0, 0.08); z-index: 999; pointer-events: none;
+  }
+  .provisional-tag { text-align: center; margin-top: 6px; }
+  .provisional-tag span {
+    display: inline-block; border: 1.5px solid #000; color: #000;
+    font-size: 8pt; font-weight: 800; letter-spacing: 2px;
+    padding: 2px 10px; text-transform: uppercase;
+  }
+`;
+
+/** Scanned signature image styling — identical for both letterhead styles. */
+const SIGNATURE_CSS = `
+  .sig-img { height: 18mm; max-width: 64mm; object-fit: contain; display: block; margin: 0 auto; }
 `;
 
 export function buildUsgReportHtml(
@@ -260,7 +361,14 @@ export function buildUsgReportHtml(
 ): string {
   const classic = settings.usgPrintStyle === "classic";
   const compact = settings.usgPrintCompact === true;
-  const css = (classic ? CLASSIC_CSS : PREMIUM_CSS) + (compact ? COMPACT_CSS : "");
+  const a5 = settings.usgPrintPaper === "a5";
+  const provisional = patient.provisional === true;
+  const css =
+    (classic ? CLASSIC_CSS : PREMIUM_CSS) +
+    SIGNATURE_CSS +
+    (a5 ? A5_CSS : "") +
+    (compact ? COMPACT_CSS : "") +
+    (provisional ? (classic ? PROVISIONAL_CSS_CLASSIC : PROVISIONAL_CSS) : "");
 
   const logo = settings.logoUrl
     ? `<img src="${esc(settings.logoUrl)}" alt="logo" class="logo" />`
@@ -270,6 +378,18 @@ export function buildUsgReportHtml(
     settings.usgShowMachine && settings.usgMachineLine?.trim()
       ? `<p class="machine">${esc(settings.usgMachineLine.trim())}</p>`
       : "";
+
+  const provisionalTag = provisional
+    ? `<div class="provisional-tag"><span>Provisional — not the final record</span></div>`
+    : "";
+
+  const watermark = provisional ? `<div class="watermark">PROVISIONAL</div>` : "";
+
+  // Scanned signature replaces the empty signature line; the name prints
+  // under the image exactly as before.
+  const sigVisual = settings.usgSignatureUrl?.trim()
+    ? `<img class="sig-img" src="${esc(settings.usgSignatureUrl.trim())}" alt="signature" />`
+    : `<div class="line"></div>`;
 
   const sectionsHtml = renderSections(resolved);
 
@@ -305,6 +425,7 @@ export function buildUsgReportHtml(
 <title>${esc(settings.hospitalName || settings.appTitle)} — ${esc(patient.name)} — ${esc(resolved.title)}</title>
 <style>${css}</style></head>
 <body>
+${watermark}
 <div class="sheet">
   <div class="masthead">
     ${logo}
@@ -314,6 +435,7 @@ export function buildUsgReportHtml(
     </div>
     ${classic ? "" : `<div class="brand"><div class="t">ULTRASOUND REPORT</div></div>`}
   </div>
+  ${provisionalTag}
 
   <table class="patient">
     <tr>
@@ -347,7 +469,7 @@ export function buildUsgReportHtml(
   ${suggestionsHtml}
 
   <div class="sig-block"><div class="sig">
-    <div class="line"></div>
+    ${sigVisual}
     <div class="name">${esc(doctor)}</div>
     ${settings.usgDoctorQual ? `<div class="sub">${esc(settings.usgDoctorQual)}</div>` : ""}
     ${settings.usgDoctorRegNo ? `<div class="sub">Reg. No: ${esc(settings.usgDoctorRegNo)}</div>` : ""}

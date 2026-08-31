@@ -90,8 +90,19 @@ export const USG_SEX_CHILD = "CHILD";
 /** Runtime state of one organ in a report. */
 export type UsgOrganState = {
   organ: string; // organ key
-  /** Selected pathology key, or null = normal. */
+  /**
+   * Selected pathology key, or null = normal. LEGACY mirror of the FIRST
+   * entry in `pathologies` — kept so drafts saved by earlier versions (and
+   * every single-pathology code path) keep working unchanged.
+   */
   pathology: string | null;
+  /**
+   * Combined findings: ALL selected pathology keys for this organ, in
+   * catalog order. An organ can be fatty AND haemangioma AND hepatomegaly
+   * at once — the finding text concatenates each, the impression and the
+   * study title union them. Absent/empty = normal organ.
+   */
+  pathologies?: string[];
   /** True once the doctor hand-edited the resolved text. */
   custom: boolean;
   /** Hand-edited or pathology/normal text BEFORE variable substitution. */

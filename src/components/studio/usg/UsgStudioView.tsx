@@ -146,21 +146,18 @@ export function UsgStudioView() {
   }, []);
 
   const openReport = async (row: UsgReportRow) => {
-    if (row.status === "FINALIZED") {
-      // Finalized = frozen snapshot: open the reprint view.
-      setEditing(row);
-      setCreating(false);
-      setPrefill(null);
-      const res = await fetch(`/api/usg/reports/${row.id}`);
-      if (res.ok) {
-        const fresh = (await res.json()).report as UsgReportRow;
-        setReprintHtml(fresh.reportHtml ?? "");
-      }
+    setEditing(row);
+    setCreating(false);
+    setPrefill(null);
+    // Always fetch the full row — patient phone + attached stills live on it.
+    const res = await fetch(`/api/usg/reports/${row.id}`);
+    if (res.ok) {
+      const fresh = (await res.json()).report as UsgReportRow;
+      setEditing({ ...row, ...fresh });
+      if (fresh.status === "FINALIZED") setReprintHtml(fresh.reportHtml ?? "");
+      else setReprintHtml(null);
     } else {
       setReprintHtml(null);
-      setEditing(row);
-      setCreating(false);
-      setPrefill(null);
     }
   };
 

@@ -127,6 +127,22 @@ model UsgReport {
   @@index([status])
   @@index([patientName])
   @@index([createdAt])
+
+  images UsgReportImage[]
+}
+
+// ── USG Studio — machine stills attached to a report (v5) ────────────────
+// 2–4 sonography stills pasted/dropped onto the draft, printed as a grid on
+// the report. Stored as data URLs (machine stills are small); capped at
+// 1.5 MB per image at the API. Deleting a report cascades its images.
+model UsgReportImage {
+  id        String   @id @default(cuid())
+  reportId  String
+  report    UsgReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  dataUrl   String
+  caption   String   @default("")
+  sortOrder Int      @default(100)
+  createdAt DateTime @default(now())
 }
 
 // ── USG Studio — user-added custom pathologies ──────────────────────────

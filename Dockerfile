@@ -1,4 +1,4 @@
-# CARE Reporting Studio — Synology ARM-ready image
+# CARE USG Studio — Synology ARM-ready image
 # Same hardened pattern as the mri-reports app (node:20-alpine multi-arch).
 
 # ---- Build Stage ----
@@ -61,6 +61,9 @@ COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/.bin ./node_modules/.bin
 COPY --from=builder /app/prisma ./prisma
+
+# v4 USG-only migration helper — run by the entrypoint before `db push`.
+COPY scripts/usg-v4-cleanup.mjs ./scripts/usg-v4-cleanup.mjs
 
 # Entrypoint: prepare DB, then start the standalone server
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh

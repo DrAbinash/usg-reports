@@ -278,13 +278,13 @@ export function SetupScreen({ onDone }: { onDone: () => void }) {
       <style>{KEYFRAME_STYLE}</style>
       <LoginBackdrop theme={theme} bgUrl={branding.bgUrl} />
       <LockCard>
-        <StudioMark accent={theme.accent} title={branding.appTitle || "CARE Reporting Studio"} subtitle={branding.hospitalName || "Radiology · Deoghar"} />
+        <StudioMark accent={theme.accent} title={branding.appTitle || "CARE USG Studio"} subtitle={branding.hospitalName || "Sonography · CARE Diagnostics"} />
         <div className="mt-6 flex items-center gap-2">
           <ShieldCheck className="h-4 w-4" style={{ color: theme.soft }} />
           <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">Welcome — set your PIN</span>
         </div>
         <p className="mt-1.5 text-[12px] leading-relaxed text-slate-500 dark:text-slate-300">
-          This studio belongs to one radiologist. Your 6-digit PIN unlocks it on this device.
+          This studio belongs to one sonologist. Your 6-digit PIN unlocks it on this device.
         </p>
         <div className="mt-6 flex flex-col items-center gap-5">
           <PinDots length={(stage === "first" ? pin : confirm).length} error={!!error} accent={theme.accent} />
@@ -346,7 +346,7 @@ export function LockScreen({ onUnlock }: { onUnlock: () => void }) {
       <style>{KEYFRAME_STYLE}</style>
       <LoginBackdrop theme={theme} bgUrl={branding.bgUrl} />
       <LockCard>
-        <StudioMark accent={theme.accent} title={branding.appTitle || "CARE Reporting Studio"} subtitle={branding.hospitalName || "Radiology · Deoghar"} />
+        <StudioMark accent={theme.accent} title={branding.appTitle || "CARE USG Studio"} subtitle={branding.hospitalName || "Sonography · CARE Diagnostics"} />
 
         <div className="mt-6 flex items-center gap-2">
           <HeartPulse className="h-4 w-4" style={{ color: theme.soft }} />

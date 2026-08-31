@@ -2,11 +2,20 @@
 set -e
 
 echo "========================================="
-echo "[studio] CARE Reporting Studio starting..."
+echo "[studio] CARE USG Studio starting..."
 echo "[studio] Node.js: $(node --version)  Platform: $(uname -m)"
 echo "========================================="
 
 mkdir -p /app/data/db
+
+# v4 (USG-only): remove the legacy v1–v3 radiology structures so the
+# schema push below never needs a destructive change. Idempotent; USG
+# reports, custom pathologies, settings and sessions are never touched.
+# On a fresh or already-migrated database this is a fast no-op.
+if [ -f /app/scripts/usg-v4-cleanup.mjs ]; then
+  echo "[studio] Legacy radiology cleanup check (v4 USG-only)…"
+  node /app/scripts/usg-v4-cleanup.mjs || echo "[studio] v4 cleanup did not run — continuing (db push is the real gate)" >&2
+fi
 
 # Apply the SQLite schema (idempotent — safe on every boot).
 #

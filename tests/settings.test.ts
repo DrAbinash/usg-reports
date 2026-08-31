@@ -1,13 +1,13 @@
 /**
  * Settings persistence tests — against a REAL Prisma client + scratch SQLite
  * database (created by tests/global-setup.ts). This is the exact save/load
- * path the doctor uses on the Synology:
+ * path the doctor uses:
  *
- *   enter CARE base / Orthanc URL / OHIF LAN URL → Save integrations
+ *   edit letterhead / sonologist block / print preferences → Save
  *   → HospitalSettings row must contain those values,
- *   → blank secret inputs must keep the existing secrets,
- *   → ordinary fields must be freely clearable,
- *   → GET /api/settings (masked) must never leak secrets.
+ *   → print enums must be normalised (premium/a4 defaults),
+ *   → legacy MRI/PACS fields must NEVER be written (the columns are gone),
+ *   → GET /api/settings (masked) must never leak the PIN hash.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
@@ -18,288 +18,147 @@ beforeEach(async () => {
   await db.hospitalSettings.deleteMany();
 });
 
-describe("integration URLs persist and reload exactly (Fix B)", () => {
-  it("stores the Synology triple verbatim", async () => {
-    await updateSettings({
-      careApiBase: "http://172.16.1.139:8888",
-      orthancUrl: "http://172.16.1.139:8042",
-      ohifLanUrl: "http://172.16.1.139:3010",
-      ohifTailscaleUrl: "https://care.tail-abc.ts.net",
-      orthancUsername: "",
-      orthancPassword: "",
-    });
-
-    const s = await getSettings();
-
-    expect(s.careApiBase).toBe("http://172.16.1.139:8888");
-    expect(s.orthancUrl).toBe("http://172.16.1.139:8042");
-    expect(s.ohifLanUrl).toBe("http://172.16.1.139:3010");
-    expect(s.ohifTailscaleUrl).toBe("https://care.tail-abc.ts.net");
-    expect(s.orthancUsername).toBe("");
-  });
-
-  it("trims whitespace so a pasted URL can never be corrupted", async () => {
-    await updateSettings({
-      careApiBase: "  http://172.16.1.139:8888 \n",
-      orthancUrl: "\thttp://172.16.1.139:8042 ",
-    });
-    const s = await getSettings();
-    expect(s.careApiBase).toBe("http://172.16.1.139:8888");
-    expect(s.orthancUrl).toBe("http://172.16.1.139:8042");
-  });
-
-  it("allows clearing an ordinary (non-secret) URL", async () => {
-    await updateSettings({ ohifTailscaleUrl: "https://t.ts.net" });
-    expect((await getSettings()).ohifTailscaleUrl).toBe("https://t.ts.net");
-
-    await updateSettings({ ohifTailscaleUrl: "" });
-    expect((await getSettings()).ohifTailscaleUrl).toBe("");
-  });
-
-  it("re-updates an ordinary URL to a new value", async () => {
-    await updateSettings({ careApiBase: "http://172.16.1.139:8888" });
-    await updateSettings({ careApiBase: "http://172.16.1.140:8888" });
-    expect((await getSettings()).careApiBase).toBe("http://172.16.1.140:8888");
-  });
+afterEach(async () => {
+  await db.hospitalSettings.deleteMany();
 });
 
-describe("blank secret input keeps the existing secret (Fix B)", () => {
-  it("keeps careApiKey and orthancPassword when blank strings are submitted", async () => {
-    await updateSettings({ careApiKey: "  live-key-42  ", orthancPassword: "orthanc-secret" });
-
-    // The form submits "" when the secret inputs are untouched:
-    await updateSettings({ careApiKey: "", orthancPassword: "", careApiBase: "http://172.16.1.139:8888" });
-
-    const s = await getSettings();
-    expect(s.careApiKey).toBe("live-key-42"); // trimmed on save, then preserved
-    expect(s.orthancPassword).toBe("orthanc-secret");
-  });
-
-  it("keeps secrets when the keys are absent from the patch entirely", async () => {
-    await updateSettings({ careApiKey: "live-key-42", orthancPassword: "orthanc-secret" });
-    await updateSettings({ appTitle: "CARE Reporting Studio" });
-    const s = await getSettings();
-    expect(s.careApiKey).toBe("live-key-42");
-    expect(s.orthancPassword).toBe("orthanc-secret");
-  });
-
-  it("does not write careApiKey/orthancPassword when only whitespace is entered", async () => {
-    await updateSettings({ careApiKey: "live-key-42" });
-    await updateSettings({ careApiKey: "   " });
-    expect((await getSettings()).careApiKey).toBe("live-key-42");
-  });
-
-  it("stores the API key trimmed (paste artifacts) but the password verbatim", async () => {
-    await updateSettings({ careApiKey: "  abc123 \n" });
-    await updateSettings({ orthancPassword: " leading-and-trailing " });
-    const s = await getSettings();
-    expect(s.careApiKey).toBe("abc123");
-    expect(s.orthancPassword).toBe(" leading-and-trailing ");
-  });
-});
-
-describe("masked settings never leak secrets (Fix B)", () => {
-  it("omits careApiKey / orthancPassword / pinHash and reports presence flags", async () => {
-    await updateSettings({ careApiKey: "super-secret-key", orthancPassword: "super-secret-pw" });
-
-    const m = await getMaskedSettings();
-
-    expect(Object.keys(m as object)).not.toContain("careApiKey");
-    expect(Object.keys(m as object)).not.toContain("orthancPassword");
-    expect(Object.keys(m as object)).not.toContain("pinHash");
-    expect(m.careApiKeySet).toBe(true);
-    expect(m.orthancPasswordSet).toBe(true);
-    expect(m.pinSet).toBe(false); // no PIN yet
-  });
-
-  it("the serialized masked payload does not contain the secret values", async () => {
-    await updateSettings({ careApiKey: "super-secret-key", orthancPassword: "super-secret-pw" });
-    await setPinHash("salt:hash-of-pin");
-
-    const serialized = JSON.stringify(await getMaskedSettings());
-
-    expect(serialized).not.toContain("super-secret-key");
-    expect(serialized).not.toContain("super-secret-pw");
-    expect(serialized).not.toContain("salt:hash-of-pin");
-    const m = await getMaskedSettings();
-    expect(m.pinSet).toBe(true);
-  });
-
-  it("still exposes the integration URLs the form needs", async () => {
-    await updateSettings({
-      careApiBase: "http://172.16.1.139:8888",
-      orthancUrl: "http://172.16.1.139:8042",
-      ohifLanUrl: "http://172.16.1.139:3010",
-    });
-    const m = await getMaskedSettings();
-    expect(m.careApiBase).toBe("http://172.16.1.139:8888");
-    expect(m.orthancUrl).toBe("http://172.16.1.139:8042");
-    expect(m.ohifLanUrl).toBe("http://172.16.1.139:3010");
-  });
-});
-
-describe("untrusted fields can never be written through updateSettings", () => {
-  it("ignores pinHash, id and unknown keys", async () => {
-    await updateSettings({ pinHash: "evil", id: "other-row", nonsense: "x" } as Record<string, string>);
+describe("singleton creation with USG defaults", () => {
+  it("lazily creates the row with the USG studio defaults", async () => {
+    await db.hospitalSettings.deleteMany();
     const s = await getSettings();
     expect(s.id).toBe("singleton");
-    expect(s.pinHash ?? null).toBeNull();
+    expect(s.appTitle).toBe("CARE USG Studio");
+    expect(s.usgPrintStyle).toBe("premium");
+    expect(s.usgPrintPaper).toBe("a4");
+    expect(s.usgShowMachine).toBe(true);
+    expect(s.usgMachineLine).toContain("GE Voluson Pro");
+    expect(s.pinHash).toBeNull();
+    expect(s.usgDoctorName).toBe("");
   });
 });
 
-describe("ship-with-defaults: git pull → integrations preconfigured", () => {
-  const ENV_KEYS = [
-    "CARE_API_BASE", "CARE_API_KEY", "ORTHANC_URL", "ORTHANC_USERNAME",
-    "ORTHANC_PASSWORD", "OHIF_LAN_URL", "OHIF_TAILSCALE_URL", "INTEGRATION_DEFAULTS",
-  ] as const;
-  let savedEnv: Record<string, string | undefined>;
-
-  beforeEach(async () => {
-    savedEnv = {};
-    for (const k of ENV_KEYS) { savedEnv[k] = process.env[k]; delete process.env[k]; }
-    await db.hospitalSettings.deleteMany();
-  });
-  afterEach(() => {
-    for (const k of ENV_KEYS) {
-      if (savedEnv[k] === undefined) delete process.env[k];
-      else process.env[k] = savedEnv[k];
-    }
-  });
-
-  it("a fresh database opens with the clinic LAN defaults", async () => {
-    const s = await getSettings();
-    expect(s.careApiBase).toBe("http://172.16.1.139:8888");
-    expect(s.orthancUrl).toBe("http://172.16.1.139:8042");
-    expect(s.ohifLanUrl).toBe("http://172.16.1.139:3010");
-    expect(s.orthancUsername).toBe("");   // this Orthanc has no auth
-    expect(s.orthancPassword).toBe("");
-    expect(s.ohifTailscaleUrl).toBe("");  // optional — never guessed
-  });
-
-  it("the API key comes from CARE_API_KEY (never hardcoded, still masked)", async () => {
-    process.env.CARE_API_KEY = "env-key-from-dotenv";
-    const s = await getSettings();
-    expect(s.careApiKey).toBe("env-key-from-dotenv");
-    const m = await getMaskedSettings();
-    expect(m.careApiKeySet).toBe(true);
-    expect(JSON.stringify(m)).not.toContain("env-key-from-dotenv");
-  });
-
-  it("a value the doctor SAVED always beats env and defaults", async () => {
-    process.env.CARE_API_BASE = "http://env-should-lose:9999";
-    await updateSettings({ careApiBase: "http://172.16.1.139:8888" });
-    expect((await getSettings()).careApiBase).toBe("http://172.16.1.139:8888");
-  });
-
-  it("a saved API key beats CARE_API_KEY from the environment", async () => {
-    process.env.CARE_API_KEY = "env-key";
-    await updateSettings({ careApiKey: "saved-key" });
-    expect((await getSettings()).careApiKey).toBe("saved-key");
-  });
-
-  it("env overrides beat the built-in LAN defaults", async () => {
-    process.env.ORTHANC_URL = "http://172.16.1.140:8042";
-    process.env.OHIF_TAILSCALE_URL = "https://care.tail-x.ts.net";
-    const s = await getSettings();
-    expect(s.orthancUrl).toBe("http://172.16.1.140:8042");
-    expect(s.ohifTailscaleUrl).toBe("https://care.tail-x.ts.net");
-  });
-
-  it("clearing a URL reverts to the default (appliance semantics)", async () => {
-    await updateSettings({ careApiBase: "http://elsewhere:8888" });
-    expect((await getSettings()).careApiBase).toBe("http://elsewhere:8888");
-    await updateSettings({ careApiBase: "" });
-    expect((await getSettings()).careApiBase).toBe("http://172.16.1.139:8888");
-  });
-
-  it("INTEGRATION_DEFAULTS=off keeps cleared fields blank (read per call)", async () => {
-    await updateSettings({ careApiBase: "http://temp:8888" });
-    await updateSettings({ careApiBase: "" });
-    expect((await getSettings()).careApiBase).toBe("http://172.16.1.139:8888");
-    process.env.INTEGRATION_DEFAULTS = "off";
-    expect((await getSettings()).careApiBase).toBe("");
-    delete process.env.INTEGRATION_DEFAULTS;
-    expect((await getSettings()).careApiBase).toBe("http://172.16.1.139:8888");
-  });
-});
-
-describe("URL normalization — the doctor types 172.16.1.139:8888, we make it a URL", () => {
-  const ENV_KEYS = [
-    "CARE_API_BASE", "CARE_API_KEY", "ORTHANC_URL", "ORTHANC_USERNAME",
-    "ORTHANC_PASSWORD", "OHIF_LAN_URL", "OHIF_TAILSCALE_URL", "INTEGRATION_DEFAULTS",
-  ] as const;
-  let savedEnv: Record<string, string | undefined>;
-
-  beforeEach(async () => {
-    savedEnv = {};
-    for (const k of ENV_KEYS) { savedEnv[k] = process.env[k]; delete process.env[k]; }
-    await db.hospitalSettings.deleteMany();
-  });
-  afterEach(() => {
-    for (const k of ENV_KEYS) {
-      if (savedEnv[k] === undefined) delete process.env[k];
-      else process.env[k] = savedEnv[k];
-    }
-  });
-
-  it("saves a bare host:port with http:// prepended (all three integrations)", async () => {
+describe("USG settings persist and reload exactly", () => {
+  it("stores the sonologist block verbatim", async () => {
     await updateSettings({
-      careApiBase: " 172.16.1.139:8888 ",
-      orthancUrl: "172.16.1.139:8042",
-      ohifLanUrl: "172.16.1.139:3010",
-      ohifTailscaleUrl: "100.101.102.103:80",
+      usgDoctorName: "Dr. Sugandha Priyadarshini",
+      usgDoctorQual: "MBBS, MD",
+      usgDoctorRegNo: "J/12345",
+      usgFooterLine: "Kindly co-relate with clinico-pathological findings.",
     });
     const s = await getSettings();
-    expect(s.careApiBase).toBe("http://172.16.1.139:8888");
-    expect(s.orthancUrl).toBe("http://172.16.1.139:8042");
-    expect(s.ohifLanUrl).toBe("http://172.16.1.139:3010");
-    expect(s.ohifTailscaleUrl).toBe("http://100.101.102.103:80");
+    expect(s.usgDoctorName).toBe("Dr. Sugandha Priyadarshini");
+    expect(s.usgDoctorQual).toBe("MBBS, MD");
+    expect(s.usgDoctorRegNo).toBe("J/12345");
   });
 
-  it("heals LEGACY scheme-less rows at read time — no re-typing, no re-save", async () => {
-    // Simulate the exact production row: values saved by the earlier build
-    // without a scheme (the reported "save integration is not working" state).
-    await db.hospitalSettings.create({
-      data: {
-        id: "singleton",
-        careApiBase: "172.16.1.139:8888",
-        orthancUrl: "172.16.1.139:8042",
-        ohifLanUrl: "172.16.1.139:3010",
-      },
+  it("trims whitespace so a pasted value can never be corrupted", async () => {
+    await updateSettings({
+      hospitalName: "  CARE Diagnostics \n",
+      usgDeclarationLine: "\tPC-PNDT declaration ",
     });
     const s = await getSettings();
-    expect(s.careApiBase).toBe("http://172.16.1.139:8888");
-    expect(s.orthancUrl).toBe("http://172.16.1.139:8042");
-    expect(s.ohifLanUrl).toBe("http://172.16.1.139:3010");
-    // The masked API the Settings form reads shows the healed URLs too:
+    expect(s.hospitalName).toBe("CARE Diagnostics");
+    expect(s.usgDeclarationLine).toBe("PC-PNDT declaration");
+  });
+
+  it("allows clearing an ordinary field (empty string is a valid update)", async () => {
+    await updateSettings({ usgSignatureUrl: "https://example.com/sig.png" });
+    expect((await getSettings()).usgSignatureUrl).toBe("https://example.com/sig.png");
+    await updateSettings({ usgSignatureUrl: "" });
+    expect((await getSettings()).usgSignatureUrl).toBe("");
+  });
+
+  it("re-updates a field to a new value", async () => {
+    await updateSettings({ appTitle: "CARE USG Studio" });
+    await updateSettings({ appTitle: "Sugandha USG" });
+    expect((await getSettings()).appTitle).toBe("Sugandha USG");
+  });
+});
+
+describe("print enum + checkbox normalisation (string form contract)", () => {
+  it("anything other than classic means premium", async () => {
+    await updateSettings({ usgPrintStyle: "classic" });
+    expect((await getSettings()).usgPrintStyle).toBe("classic");
+    await updateSettings({ usgPrintStyle: "premium" });
+    expect((await getSettings()).usgPrintStyle).toBe("premium");
+    await updateSettings({ usgPrintStyle: "gibberish" });
+    expect((await getSettings()).usgPrintStyle).toBe("premium");
+  });
+
+  it("anything other than a5 means a4", async () => {
+    await updateSettings({ usgPrintPaper: "a5" });
+    expect((await getSettings()).usgPrintPaper).toBe("a5");
+    await updateSettings({ usgPrintPaper: "A4" });
+    expect((await getSettings()).usgPrintPaper).toBe("a4");
+  });
+
+  it("string checkboxes parse truthy/falsy words, booleans pass through", async () => {
+    await updateSettings({ usgShowMachine: "off", usgPrintCompact: "true" });
+    let s = await getSettings();
+    expect(s.usgShowMachine).toBe(false);
+    expect(s.usgPrintCompact).toBe(true);
+
+    await updateSettings({ usgShowMachine: true, usgPrintCompact: false });
+    s = await getSettings();
+    expect(s.usgShowMachine).toBe(true);
+    expect(s.usgPrintCompact).toBe(false);
+  });
+});
+
+describe("masked settings never leak the PIN (secret surface is pinHash only)", () => {
+  it("omits pinHash and reports pinSet", async () => {
+    await setPinHash("hashed-value");
+    const m = (await getMaskedSettings()) as Record<string, unknown>;
+    expect(Object.keys(m)).not.toContain("pinHash");
+    expect(m.pinSet).toBe(true);
+    expect(m.usgDoctorName).toBe(""); // ordinary fields still exposed
+  });
+
+  it("the serialized masked payload does not contain the hash", async () => {
+    await setPinHash("super-secret-hash");
     const m = await getMaskedSettings();
-    expect(m.careApiBase).toBe("http://172.16.1.139:8888");
+    expect(JSON.stringify(m)).not.toContain("super-secret-hash");
+    await setPinHash("");
+    expect((await getMaskedSettings()).pinSet).toBe(false);
   });
+});
 
-  it("preserves https:// and keeps empty clearable (reverts to default)", async () => {
-    await updateSettings({ careApiBase: "https://caredeoghar.com" });
-    expect((await getSettings()).careApiBase).toBe("https://caredeoghar.com");
-    await updateSettings({ careApiBase: "" });
-    expect((await getSettings()).careApiBase).toBe("http://172.16.1.139:8888");
-  });
-
-  it("normalizes scheme-less env overrides as well", async () => {
-    process.env.ORTHANC_URL = "172.16.1.140:8042";
+describe("untrusted / legacy fields can never be written (v4 USG-only guard)", () => {
+  it("ignores pinHash, id and unknown keys", async () => {
+    await updateSettings({ pinHash: "hax", id: "other-row", nonsense: "x" });
     const s = await getSettings();
-    expect(s.orthancUrl).toBe("http://172.16.1.140:8042");
+    expect(s.id).toBe("singleton");
+    expect(s.pinHash).toBeNull();
+    expect((s as Record<string, unknown>).nonsense).toBeUndefined();
   });
 
-  it("NEVER normalizes the API key — a key is not a URL (regression guard)", async () => {
-    await updateSettings({ careApiKey: "e46eea8477770ee979324824ea4af992359eef50b29ed7c8" });
-    expect((await getSettings()).careApiKey).toBe("e46eea8477770ee979324824ea4af992359eef50b29ed7c8");
-    process.env.CARE_API_KEY = "env-key-no-scheme";
-    await db.hospitalSettings.deleteMany();
-    expect((await getSettings()).careApiKey).toBe("env-key-no-scheme");
+  it("silently drops the legacy v1-v3 MRI/PACS fields — the columns no longer exist", async () => {
+    // A stale browser tab (or an old backup restore payload) may still send
+    // these; writing them would throw an unknown-column Prisma error.
+    await expect(
+      updateSettings({
+        careApiBase: "http://172.16.1.139:8888",
+        careApiKey: "legacy-key",
+        orthancUrl: "http://172.16.1.139:8042",
+        orthancUsername: "admin",
+        orthancPassword: "legacy-pw",
+        ohifLanUrl: "http://172.16.1.139:3010",
+        ohifTailscaleUrl: "https://care.tail-abc.ts.net",
+        radiologistName: "Dr. Legacy",
+        radiologistQual: "MD",
+        radiologistRegNo: "R/1",
+      } as Record<string, string>),
+    ).resolves.toBeUndefined();
+    const s = await getSettings();
+    expect((s as Record<string, unknown>).radiologistName).toBeUndefined();
+    expect((s as Record<string, unknown>).careApiBase).toBeUndefined();
+    expect((s as Record<string, unknown>).orthancUrl).toBeUndefined();
   });
 
-  it("is idempotent — an already-correct URL round-trips unchanged", async () => {
-    await updateSettings({ orthancUrl: "http://172.16.1.139:8042" });
-    await updateSettings({ orthancUrl: " http://172.16.1.139:8042 " });
-    expect((await getSettings()).orthancUrl).toBe("http://172.16.1.139:8042");
+  it("setPinHash writes the hash and needsSetup flips (auth state path)", async () => {
+    await setPinHash("hash-1");
+    expect((await getSettings()).pinHash).toBe("hash-1");
+    await setPinHash("hash-2");
+    expect((await getSettings()).pinHash).toBe("hash-2");
   });
 });

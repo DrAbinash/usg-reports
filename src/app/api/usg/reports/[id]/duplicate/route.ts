@@ -37,5 +37,14 @@ export async function POST(_req: Request, ctx: Ctx) {
       status: "DRAFT", // editable; serial assigned at its own finalization
     },
   });
-  return Response.json({ report: draft });
+  return Response.json({
+    report: draft,
+    // The previous scan snapshot — the composer's diff panel compares
+    // against this so the doctor sees what changed between visits.
+    source: {
+      id: source.id,
+      serialNo: source.serialNo,
+      scanDate: source.scanDate ?? source.createdAt,
+    },
+  });
 }

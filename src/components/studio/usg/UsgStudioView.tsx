@@ -17,6 +17,7 @@ import type { UsgPathologyDef } from "@/lib/usg/types";
 import type { UsgPrintSettings } from "@/lib/usg/print";
 import { formatUsgSerial } from "@/lib/usg/print";
 import { UsgComposer, type UsgReportRow } from "./UsgComposer";
+import type { DiffSource } from "./UsgDiffPanel";
 
 const EMPTY_SETTINGS: UsgPrintSettings = {
   appTitle: "CARE Reporting Studio",
@@ -66,6 +67,7 @@ export function UsgStudioView() {
   const [creating, setCreating] = useState(false);
   const [reprintHtml, setReprintHtml] = useState<string | null>(null);
   const [prefill, setPrefill] = useState<ComposerPrefill | null>(null);
+  const [diffSource, setDiffSource] = useState<DiffSource | null>(null);
 
   // Registry (Patients mode)
   const [mode, setMode] = useState<"reports" | "patients">("reports");
@@ -175,19 +177,37 @@ export function UsgStudioView() {
   };
 
   /** Follow-up — duplicate any report as a fresh editable draft (same patient,
-   *  study and composer state) for the repeat scan. */
+   *  study and composer state) for the repeat scan. The previous scan travels
+   *  with the draft so the composer can show the “Δ vs previous” panel. */
   const duplicate = async (row: UsgReportRow) => {
     const res = await fetch(`/api/usg/reports/${row.id}/duplicate`, { method: "POST" });
     if (!res.ok) {
       toast.error("Could not create the follow-up draft");
       return;
     }
-    const { report } = (await res.json()) as { report: UsgReportRow };
+    const { report, source } = (await res.json()) as {
+      report: UsgReportRow;
+      source: { id: string; serialNo?: number | null; scanDate: string } | null;
+    };
     toast.success(`Follow-up draft created for ${report.patientName}`);
     setReprintHtml(null);
     setEditing({ ...report, patient: row.patient ?? null });
     setCreating(false);
     setPrefill(null);
+    if (source) {
+      // Fetch the frozen snapshot (stateJson + impression column) for the diff.
+      const prev = await fetch(`/api/usg/reports/${source.id}`);
+      if (prev.ok) {
+        const p = (await prev.json()).report as UsgReportRow;
+        setDiffSource({
+          id: source.id,
+          serial: source.serialNo != null ? formatUsgSerial(source.serialNo) : undefined,
+          date: new Date(source.scanDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+          stateJson: p.stateJson,
+          impression: p.impression ?? "",
+        });
+      }
+    }
   };
 
   const openPatient = useCallback(async (id: string, force = false) => {
@@ -265,13 +285,15 @@ export function UsgStudioView() {
           settings={settings}
           report={editing}
           prefill={prefill}
+          diffSource={diffSource}
           onBack={() => {
             setEditing(null);
             setCreating(false);
             setReprintHtml(null);
             setPrefill(null);
+            setDiffSource(null);
             refreshReports();
-            if (mode === "patients") loadPatients();
+            if (mode === "patients") void loadPatients();
           }}
           onSaved={() => {
             loadAll();

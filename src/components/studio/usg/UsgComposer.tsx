@@ -37,6 +37,7 @@ import { UsgPathologyDialog } from "./UsgPathologyDialog";
 import { UsgDiffPanel, type DiffSource } from "./UsgDiffPanel";
 import { UsgBiometryCalc } from "./UsgBiometryCalc";
 import { UsgCalculators } from "./UsgCalculators";
+import { UsgImagesCard, type ImageRow, type PendingImage } from "./UsgImagesCard";
 
 export type UsgReportRow = {
   id: string;
@@ -59,6 +60,8 @@ export type UsgReportRow = {
   scanDate?: string | null;
   /** Registry patient (v5) — phone travels with the report row. */
   patient?: { id: string; name: string; phone: string } | null;
+  /** Machine stills attached to the report (v5). */
+  images?: ImageRow[];
 };
 
 /** Registry autocomplete entry from /api/usg/patients. */
@@ -123,6 +126,12 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const [dialogOrgan, setDialogOrgan] = useState<string | null>(null);
   const printRef = useRef<HTMLIFrameElement>(null);
 
+  // Machine stills (v5): server rows + locally buffered ones (before the
+  // first save creates the report row they belong to).
+  const [images, setImages] = useState<ImageRow[]>(report?.images ?? []);
+  const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
+  const captionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const lookup = useMemo(() => makeLookup(pathologies), [pathologies]);
   const resolved = useMemo(() => resolve(state, lookup, technique), [state, lookup, technique]);
 
@@ -167,8 +176,9 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
           provisional: !isFinal,
         },
         resolved,
+        [...images, ...pendingImages].map((i) => ({ dataUrl: i.dataUrl, caption: i.caption })),
       ),
-    [settings, patientName, patientAge, patientSex, referredBy, scanDate, serial, resolved, isFinal],
+    [settings, patientName, patientAge, patientSex, referredBy, scanDate, serial, resolved, isFinal, images, pendingImages],
   );
 
   const pickStudy = (k: string) => {
@@ -283,6 +293,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         toast.success("Draft saved");
       }
       onSaved();
+      if (id) await flushPendingImages(id);
       return id;
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");
@@ -290,6 +301,108 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     } finally {
       setBusy("");
     }
+  };
+
+  /** Upload pending stills once the report row exists (called after save). */
+  const flushPendingImages = async (id: string) => {
+    if (!pendingImages.length) return;
+    const queue = [...pendingImages];
+    setPendingImages([]);
+    for (const p of queue) {
+      const res = await fetch(`/api/usg/reports/${id}/images`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(p),
+      });
+      if (res.ok) {
+        const { image } = (await res.json()) as { image: ImageRow };
+        setImages((prev) => [...prev, image]);
+      } else {
+        toast.error((await res.json().catch(() => ({}))).error ?? "Could not attach an image");
+      }
+    }
+  };
+
+  const addImage = (dataUrl: string) => {
+    if (isFinal) {
+      toast.error("Finalized reports keep their images frozen");
+      return;
+    }
+    if (savedIdRef.current) {
+      void (async () => {
+        const res = await fetch(`/api/usg/reports/${savedIdRef.current}/images`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dataUrl }),
+        });
+        if (res.ok) {
+          const { image } = (await res.json()) as { image: ImageRow };
+          setImages((prev) => [...prev, image]);
+        } else {
+          toast.error((await res.json().catch(() => ({}))).error ?? "Could not attach the image");
+        }
+      })();
+    } else {
+      setPendingImages((prev) => [...prev, { dataUrl, caption: "" }]);
+      toast.info("Still attached — saves with the draft (Save to keep it permanently)");
+    }
+  };
+
+  const setCaption = (kind: "server" | "pending", key: string, caption: string) => {
+    if (kind === "pending") {
+      setPendingImages((prev) => prev.map((p, i) => (String(i) === key ? { ...p, caption } : p)));
+      return;
+    }
+    setImages((prev) => prev.map((p) => (p.id === key ? { ...p, caption } : p)));
+    if (captionTimer.current) clearTimeout(captionTimer.current);
+    captionTimer.current = setTimeout(() => {
+      void fetch(`/api/usg/reports/${savedIdRef.current}/images/${key}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caption }),
+      });
+    }, 600);
+  };
+
+  const removeImage = (kind: "server" | "pending", key: string) => {
+    if (kind === "pending") {
+      setPendingImages((prev) => prev.filter((_, i) => String(i) !== key));
+      return;
+    }
+    setImages((prev) => prev.filter((p) => p.id !== key));
+    void fetch(`/api/usg/reports/${savedIdRef.current}/images/${key}`, { method: "DELETE" });
+  };
+
+  const moveImage = (kind: "server" | "pending", key: string, dir: -1 | 1) => {
+    if (kind === "pending") {
+      setPendingImages((prev) => {
+        const i = Number(key);
+        const j = i + dir;
+        if (j < 0 || j >= prev.length) return prev;
+        const next = [...prev];
+        [next[i], next[j]] = [next[j], next[i]];
+        return next;
+      });
+      return;
+    }
+    setImages((prev) => {
+      const i = prev.findIndex((p) => p.id === key);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      // Persist the new order (positions are 1-based × 10).
+      for (const [idx, img] of next.entries()) {
+        if (idx === i || idx === j) {
+          void fetch(`/api/usg/reports/${savedIdRef.current}/images/${img.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sortOrder: (idx + 1) * 10 }),
+          });
+        }
+      }
+      return next.map((img, idx) => (idx === i || idx === j ? { ...img, sortOrder: (idx + 1) * 10 } : img));
+    });
   };
 
   const print = async () => {
@@ -535,6 +648,16 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
               />
             );
           })}
+
+          <UsgImagesCard
+            images={images}
+            pending={pendingImages}
+            readOnly={isFinal}
+            onAdd={addImage}
+            onCaption={setCaption}
+            onRemove={removeImage}
+            onMove={moveImage}
+          />
         </div>
 
         {/* Right rail: impression + live preview */}

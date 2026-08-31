@@ -42,6 +42,12 @@ export async function POST(_req: Request, ctx: Ctx) {
   const state = normaliseState(safeParse(report.stateJson), report.studyKey);
   const resolved = resolve(state, lookup, report.technique);
 
+  // Machine stills embed into the frozen snapshot at finalization.
+  const images = await db.usgReportImage.findMany({
+    where: { reportId: id },
+    orderBy: { sortOrder: "asc" },
+  });
+
   const html = buildUsgReportHtml(
     {
       appTitle: settings.appTitle,
@@ -74,6 +80,7 @@ export async function POST(_req: Request, ctx: Ctx) {
       serial: formatUsgSerial(serialNo),
     },
     resolved,
+    images.map((i) => ({ dataUrl: i.dataUrl, caption: i.caption })),
   );
 
   const updated = await db.usgReport.update({

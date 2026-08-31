@@ -12,7 +12,10 @@ export async function GET(_req: Request, ctx: Ctx) {
   const guard = await requireSession();
   if (guard) return guard;
   const { id } = await ctx.params;
-  const report = await db.usgReport.findUnique({ where: { id }, include: { patient: true } });
+  const report = await db.usgReport.findUnique({
+    where: { id },
+    include: { patient: true, images: { orderBy: { sortOrder: "asc" } } },
+  });
   if (!report) return Response.json({ error: "Not found" }, { status: 404 });
   return Response.json({ report });
 }

@@ -25,6 +25,8 @@
  */
 import type { UsgResolved } from "./types";
 
+export type UsgPrintImage = { dataUrl: string; caption?: string };
+
 export type UsgPrintSettings = {
   appTitle: string;
   hospitalName: string;
@@ -166,6 +168,11 @@ const PREMIUM_CSS = `
   .impression-box ol { margin-left: 19px; }
   .impression-box li { font-weight: 700; margin: 4.5px 0; color: #16222E; }
 
+  .images-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+  .img-cell { border: 1px solid #AFCDE8; border-radius: 8px; padding: 5px; text-align: center; page-break-inside: avoid; }
+  .img-cell img { max-width: 100%; max-height: 45mm; object-fit: contain; }
+  .img-cell figcaption { font-size: 8pt; font-weight: 600; color: #61788C; margin-top: 2px; min-height: 1em; }
+
   .suggestions { margin-top: 7px; font-weight: 700; color: #143E6E; }
   .suggestions p { margin: 3px 0; }
 
@@ -233,6 +240,11 @@ const CLASSIC_CSS = `
   .impression-box { border: 1.5px solid #000; padding: 8px 12px; margin-top: 2px; page-break-inside: avoid; }
   .impression-box ol { margin-left: 20px; }
   .impression-box li { font-weight: 700; margin: 4px 0; }
+
+  .images-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+  .img-cell { border: 1px solid #000; padding: 4px; text-align: center; page-break-inside: avoid; }
+  .img-cell img { max-width: 100%; max-height: 45mm; object-fit: contain; }
+  .img-cell figcaption { font-size: 8pt; font-weight: 600; margin-top: 2px; min-height: 1em; }
 
   .suggestions { margin-top: 7px; font-weight: 700; }
   .suggestions p { margin: 3px 0; }
@@ -302,6 +314,9 @@ const A5_CSS = `
   .impression-box { padding: 6px 10px; border-left-width: 3.5px; border-radius: 0 6px 6px 0; }
   .impression-box ol { margin-left: 15px; }
   .impression-box li { font-size: 8.5pt; margin: 3px 0; }
+  .images-grid { gap: 5px; }
+  .img-cell img { max-height: 32mm; }
+  .img-cell figcaption { font-size: 6.5pt; }
   .suggestions { margin-top: 5px; font-size: 8pt; }
   .sig-block { margin-top: 14mm; }
   .sig { min-width: 46mm; }
@@ -358,6 +373,7 @@ export function buildUsgReportHtml(
   settings: UsgPrintSettings,
   patient: UsgPrintPatient,
   resolved: UsgResolved,
+  images: UsgPrintImage[] = [],
 ): string {
   const classic = settings.usgPrintStyle === "classic";
   const compact = settings.usgPrintCompact === true;
@@ -392,6 +408,19 @@ export function buildUsgReportHtml(
     : `<div class="line"></div>`;
 
   const sectionsHtml = renderSections(resolved);
+
+  // Machine stills — 2-up grid with captions, printed after the findings.
+  const imagesHtml = images.length
+    ? `<div class="images-grid">${images
+        .map(
+          (img) =>
+            `<figure class="img-cell"><img src="${esc(img.dataUrl)}" alt="USG still" /><figcaption>${esc(img.caption ?? "")}</figcaption></figure>`,
+        )
+        .join("")}</div>`
+    : "";
+  const imagesBand = images.length
+    ? `<h2 class="band"><span class="n">${resolved.technique?.trim() ? 3 : 2}</span>USG Images</h2>`
+    : "";
 
   const impressionHtml = resolved.impression.length
     ? `<div class="impression-box"><ol class="impression">${resolved.impression
@@ -464,7 +493,10 @@ ${watermark}
   <h2 class="band"><span class="n">${resolved.technique?.trim() ? 2 : 1}</span>Findings</h2>
   ${sectionsHtml}
 
-  <h2 class="band"><span class="n">${resolved.technique?.trim() ? 3 : 2}</span>Impression</h2>
+  ${imagesBand}
+  ${imagesHtml}
+
+  <h2 class="band"><span class="n">${(resolved.technique?.trim() ? 3 : 2) + (images.length ? 1 : 0)}</span>Impression</h2>
   ${impressionHtml}
   ${suggestionsHtml}
 

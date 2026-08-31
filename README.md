@@ -27,6 +27,45 @@ radiologist workspace lives in the separate
   (letterhead, sonologist block, print preferences, custom findings)
 - **PIN lock** — no usernames, no reset email; the studio is yours alone
 
+## v5 — the clinical upgrade
+
+- **Patient registry & history** — every report links to a patient
+  (name + phone); the Patients tab shows each person's scans, last visit
+  and a one-click "New scan" that prefills her details. Blank-phone saves
+  never merge into phone'd same-name patients — strangers stay separate.
+- **Follow-up diff** — follow-up drafts open with a "Δ vs previous scan"
+  panel: measurement moves (14.2 → 15.6 cm), pathologies new/resolved,
+  wording changes — no noise ("14.2" = "14.20").
+- **Hadlock biometry** — BPD/HC/AC/FL in mm → per-parameter GA, mean GA,
+  EFW ± 15% and the scan-implied EDD; one click fills every biometry slot
+  (published Hadlock 1984/1985 equations).
+- **Bedside calculators** — ovarian/ellipsoid + bladder (PVR) + prostate
+  volumes, AFI with oligo/poly categories, ACR TI-RADS 2017 scoring with
+  size-based FNA guidance — every result copies to the clipboard.
+- **Machine stills** — paste (Ctrl+V), drop or pick 2–4 USG images onto a
+  report; they print as a captioned 2-up grid and travel in backups.
+- **Crash recovery** — the composer autosaves to this device every ~1.2 s;
+  after a crash the banner offers Restore. Ctrl+S saves, Ctrl+Enter
+  finalizes, Ctrl+K switches study, "/" jumps to search.
+- **Voice dictation** — mic buttons on technique, impression and organ
+  findings (Chrome/Edge, en-IN).
+- **Audit trail** — every save, finalization, deletion, image change,
+  backup and login attempt, append-only, in Settings → Data & activity.
+- **Full-clinic backup** — one JSON file with settings, findings, patients,
+  every report and still; optional nightly rotation (after 02:00, newest
+  14 kept in data/backups/).
+- **Editable builtin normals** — retune any organ's normal wording once;
+  every future report uses it (reset to builtin anytime).
+- **PC-PNDT register export** — the sequential register as CSV or a
+  printable A4-landscape page.
+- **Insights** — monthly volume, study mix, most frequent findings and top
+  referrers (counts only).
+- **PDF + WhatsApp** — download any report as a real vector PDF; share it
+  via the mobile share sheet or wa.me.
+- **QR verification** — finalized reports print a signed QR
+  (HMAC over serial + name + date); scanning it opens /verify, which
+  confirms the signature and the register entry.
+
 `formats-usg/` — the doctor's original Word report library, preserved
 verbatim — remains the canonical wording reference for curation.
 

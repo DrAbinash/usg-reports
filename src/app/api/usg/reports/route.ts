@@ -19,7 +19,7 @@ export async function GET(req: Request) {
 
   if (q) {
     // SQLite contains() is case-sensitive; filter in memory for search.
-    const rows = await db.usgReport.findMany({ orderBy: { createdAt: "desc" }, take: 500 });
+    const rows = await db.usgReport.findMany({ orderBy: { createdAt: "desc" }, take: 500, include: { patient: true } });
     const filtered = rows.filter(
       (r) =>
         (!where.status || r.status === where.status) &&
@@ -31,7 +31,7 @@ export async function GET(req: Request) {
     return Response.json({ reports: filtered });
   }
 
-  const reports = await db.usgReport.findMany({ where, orderBy: { createdAt: "desc" }, take: 500 });
+  const reports = await db.usgReport.findMany({ where, orderBy: { createdAt: "desc" }, take: 500, include: { patient: true } });
   return Response.json({ reports });
 }
 

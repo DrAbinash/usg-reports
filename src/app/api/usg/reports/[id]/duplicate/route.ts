@@ -18,7 +18,7 @@ export async function POST(_req: Request, ctx: Ctx) {
   if (guard) return guard;
   const { id } = await ctx.params;
 
-  const source = await db.usgReport.findUnique({ where: { id } });
+  const source = await db.usgReport.findUnique({ where: { id }, include: { patient: true } });
   if (!source) return Response.json({ error: "Not found" }, { status: 404 });
 
   const draft = await db.usgReport.create({

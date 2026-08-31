@@ -132,16 +132,18 @@ describe("untrusted / legacy fields can never be written (v4 USG-only guard)", (
     expect((s as Record<string, unknown>).nonsense).toBeUndefined();
   });
 
-  it("silently drops the legacy v1-v3 MRI/PACS fields — the columns no longer exist", async () => {
+  it("keeps the legacy v1-v3 MRI/OHIF fields dropped, accepts the v6 bridge fields", async () => {
     // A stale browser tab (or an old backup restore payload) may still send
-    // these; writing them would throw an unknown-column Prisma error.
+    // the MRI-era fields; writing them would throw an unknown-column Prisma
+    // error. The v6 CARE/Orthanc bridge columns, however, ARE real now and
+    // must persist (URL normalized, secrets write-only).
     await expect(
       updateSettings({
-        careApiBase: "http://172.16.1.139:8888",
-        careApiKey: "legacy-key",
-        orthancUrl: "http://172.16.1.139:8042",
+        careApiBase: "172.16.1.139:8888",
+        careApiKey: "bridge-key",
+        orthancUrl: "172.16.1.139:8042",
         orthancUsername: "admin",
-        orthancPassword: "legacy-pw",
+        orthancPassword: "bridge-pw",
         ohifLanUrl: "http://172.16.1.139:3010",
         ohifTailscaleUrl: "https://care.tail-abc.ts.net",
         radiologistName: "Dr. Legacy",
@@ -151,8 +153,18 @@ describe("untrusted / legacy fields can never be written (v4 USG-only guard)", (
     ).resolves.toBeUndefined();
     const s = await getSettings();
     expect((s as Record<string, unknown>).radiologistName).toBeUndefined();
-    expect((s as Record<string, unknown>).careApiBase).toBeUndefined();
-    expect((s as Record<string, unknown>).orthancUrl).toBeUndefined();
+    expect((s as Record<string, unknown>).ohifLanUrl).toBeUndefined();
+    expect((s as Record<string, unknown>).careApiBase).toBe("http://172.16.1.139:8888");
+    expect((s as Record<string, unknown>).orthancUrl).toBe("http://172.16.1.139:8042");
+    expect(s.careApiKey).toBe("bridge-key");
+    expect(s.orthancUsername).toBe("admin");
+    expect(s.orthancPassword).toBe("bridge-pw");
+    // Secrets are masked out of the client payload, only their presence flips.
+    const masked = await getMaskedSettings();
+    expect((masked as Record<string, unknown>).careApiKey).toBeUndefined();
+    expect(masked.careApiKeySet).toBe(true);
+    expect((masked as Record<string, unknown>).orthancPassword).toBeUndefined();
+    expect(masked.orthancPasswordSet).toBe(true);
   });
 
   it("setPinHash writes the hash and needsSetup flips (auth state path)", async () => {

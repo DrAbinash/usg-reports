@@ -54,6 +54,25 @@ model HospitalSettings {
   /** HMAC secret for the printed-report verification QR (v5, minted once). */
   qrSecret          String?
 
+  // ── v6 CARE ERP bridge ──────────────────────────────────────────────
+  // Bill-desk worklist sync: the ERP exposes /api/internal/reporting-studio/*
+  // behind a static x-api-key (REPORTING_STUDIO_API_KEY on the ERP side).
+  careApiBase       String   @default("")   // e.g. http://172.16.1.139:8888 (no /api)
+  careApiKey        String?                 // secret — never sent to the browser
+
+  // ── v6 Orthanc PACS ─────────────────────────────────────────────────
+  orthancUrl        String   @default("")   // e.g. http://172.16.1.139:8042
+  orthancUsername   String   @default("")   // empty pair = anonymous (no Basic header)
+  orthancPassword   String?                 // secret — never sent to the browser
+
+  // ── v6 optional Vision OCR (Gemini, same contract as the ERP) ───────
+  geminiApiKey      String?                 // secret — empty = SR-only extraction
+
+  // ── v6 PC-PNDT Form F fixed details (pre-filled on the statutory form)
+  pcpndtCentreName    String   @default("CARE DIAGNOSTICS\nSubhash Chowk, Castair's Town, Near Bajla Mahila College, Deoghar\u2013814112")
+  pcpndtRegistrationNo String  @default("34/2020")
+  pcpndtPlace         String   @default("DEOGHAR")
+
   updatedAt       DateTime @updatedAt
 }
 
@@ -197,4 +216,92 @@ model UsgPathology {
   updatedAt     DateTime @updatedAt
 
   @@unique([organKey, label])
+}
+
+// ── USG Studio — CARE ERP bill-desk worklist orders (v6) ────────────────
+// Pulled from the ERP's /api/internal/reporting-studio/worklist (x-api-key)
+// and filtered to ultrasound. One row per accession; the doctor starts a
+// report from it so the demographics never need retyping. Rows are never
+// deleted by sync — a finalized order stays as the day's record.
+model UsgCareOrder {
+  id              String    @id @default(cuid())
+  accessionNumber String    @unique
+  careWorklistId  String?
+
+  // Bill-desk demographics (as the ERP reports them; the v6 bridge
+  // extension also carries phone/address/bill number — older ERP builds
+  // simply leave them blank)
+  patientName     String
+  patientAge      String    @default("")
+  patientSex      String    @default("F")   // F | M
+  patientPhone    String    @default("")    // bill desk phone → registry link
+  patientAddress  String    @default("")    // Form F prefill
+  billNumber      String    @default("")    // Form F prefill
+  referringDoctor String    @default("")
+  testName        String    @default("")
+  modality        String    @default("USG")
+  studyDate       DateTime?
+
+  // PACS link (matched by accession during sync)
+  studyInstanceUid String?
+
+  billingStatus   String?   // PAID | DUE | UPI_PENDING | null
+  billingUpdatedAt DateTime?
+
+  status          String    @default("PENDING") // PENDING | REPORTING | REPORTED | IGNORED
+  ignored         Boolean   @default(false)
+
+  reportId        String?   // the UsgReport started from this order
+  formFId         String?   // the UsgFormF linked to this order
+  careSyncedAt    DateTime? // ERP accepted our finalize
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([status])
+  @@index([studyDate])
+}
+
+// ── USG Studio — PC-PNDT Form F records (v6) ────────────────────────────
+// The statutory form for every obstetric ultrasound. Demographics are copied
+// from the CARE order at open time; fixed clinic details (centre, registration
+// no, doctor, place) are resolved from settings at print time. Completeness
+// follows the ERP's four-predicate rule (see src/lib/usg/formf.ts).
+model UsgFormF {
+  id                  String   @id @default(cuid())
+  accessionNumber     String   @default("") // link to the CARE order ("" = walk-in)
+  billNumber          String   @default("")
+  patientName         String
+  patientAge          String   @default("")
+  husbandFatherName   String   @default("")
+  address             String   @default("")
+  mobile              String   @default("")
+  childrenDetails     String   @default("") // "Boy: 1, Girl: 2"
+  referredBy          String   @default("Self") // Self | Doctor: <name>
+  lmpWeeks            String   @default("") // "12 weeks" or ISO date
+  previousChildIssue  String   @default("")
+  indicationOther     String   @default("") // routine antenatal when blank
+  gestationalAgeWeeks String   @default("")
+  gestationalAgeDays  String   @default("")
+  ultrasoundResult    String   @default("") // Normal | Abnormal: <finding>
+  abnormality         String   @default("")
+  procedureDate       String   @default("")
+  consentDate         String   @default("")
+  idCardVerified      Boolean  @default(false)
+  reportId            String?  // the OB UsgReport this Form F belongs to
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([patientName])
+  @@index([accessionNumber])
+}
+
+// ── USG Studio — worklist sync state (v6, singleton) ────────────────────
+model UsgSyncState {
+  id            String    @id @default("singleton")
+  lastSyncAt    DateTime?
+  lastCareOk    Boolean   @default(false)
+  lastOrthancOk Boolean   @default(false)
+  lastError     String?
+  updatedAt     DateTime  @updatedAt
 }

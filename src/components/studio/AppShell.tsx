@@ -4,13 +4,15 @@ import { useStudio } from "@/lib/store";
 import { SettingsView } from "./SettingsView";
 import { UsgStudioView } from "./usg/UsgStudioView";
 import { UsgInsightsView } from "./usg/UsgInsightsView";
-import { Waves, Settings2, LogOut, Stethoscope, BarChart3 } from "lucide-react";
+import { UsgWorklistView } from "./usg/UsgWorklistView";
+import { Waves, Settings2, LogOut, Stethoscope, BarChart3, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import type { View } from "@/lib/store";
 
 const NAV: { id: View; label: string; icon: typeof Waves; tint: string }[] = [
+  { id: "worklist", label: "Worklist", icon: ClipboardList, tint: "text-sky-700 bg-sky-50 ring-sky-200" },
   { id: "usg", label: "USG Studio", icon: Waves, tint: "text-rose-700 bg-rose-50 ring-rose-200" },
   { id: "insights", label: "Insights", icon: BarChart3, tint: "text-violet-700 bg-violet-50 ring-violet-200" },
   { id: "settings", label: "Settings", icon: Settings2, tint: "text-amber-700 bg-amber-50 ring-amber-200" },
@@ -84,6 +86,7 @@ export function AppShell() {
 
         {/* Main */}
         <main className="studio-scroll min-h-0 flex-1 overflow-y-auto">
+          {view === "worklist" && <UsgWorklistView />}
           {view === "usg" && <UsgStudioView />}
           {view === "insights" && <UsgInsightsView />}
           {view === "settings" && <SettingsView />}

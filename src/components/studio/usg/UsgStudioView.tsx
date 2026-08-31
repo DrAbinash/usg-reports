@@ -7,6 +7,7 @@
  * Composer mode: organ-based whole-abdomen reporting with live preview.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useStudio } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +18,8 @@ import type { UsgPathologyDef } from "@/lib/usg/types";
 import type { UsgPrintSettings } from "@/lib/usg/print";
 import { formatUsgSerial } from "@/lib/usg/print";
 import { normalOverrideKey, type NormalOverrides } from "@/lib/usg/studies";
-import { UsgComposer, type UsgReportRow } from "./UsgComposer";
+import { UsgComposer, type UsgReportRow, type ReportOrderLite } from "./UsgComposer";
+import type { FormFDefaults } from "./UsgFormFDialog";
 import type { DiffSource } from "./UsgDiffPanel";
 import { shareReportPdf } from "./sharePdf";
 
@@ -74,6 +76,10 @@ export function UsgStudioView() {
   const [registerHtml, setRegisterHtml] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
+  // v6 — bill-desk order behind the open report + Form F fixed details
+  const [order, setOrder] = useState<ReportOrderLite | null>(null);
+  const [formFDefaults, setFormFDefaults] = useState<FormFDefaults | null>(null);
+
   // Registry (Patients mode)
   const [mode, setMode] = useState<"reports" | "patients">("reports");
   const [patients, setPatients] = useState<PatientRow[]>([]);
@@ -100,6 +106,14 @@ export function UsgStudioView() {
     }
     if (sRes.ok) {
       const s = (await sRes.json()).settings ?? {};
+      setFormFDefaults({
+        pcpndtCentreName: s.pcpndtCentreName ?? "",
+        pcpndtRegistrationNo: s.pcpndtRegistrationNo ?? "",
+        pcpndtPlace: s.pcpndtPlace ?? "",
+        usgDoctorName: s.usgDoctorName ?? "",
+        usgDoctorQual: s.usgDoctorQual ?? "",
+        usgDoctorRegNo: s.usgDoctorRegNo ?? "",
+      });
       setSettings({
         appTitle: s.appTitle ?? "",
         hospitalName: s.hospitalName ?? "",
@@ -159,6 +173,30 @@ export function UsgStudioView() {
     if (res.ok) setReports(((await res.json()).reports ?? []) as UsgReportRow[]);
   }, []);
 
+  // v6: the Worklist hands over a freshly created draft via the store.
+  const openReportId = useStudio((s) => s.openReportId);
+  const clearOpenReport = useStudio((s) => s.clearOpenReport);
+  useEffect(() => {
+    if (!openReportId || loading) return;
+    let alive = true;
+    void (async () => {
+      const res = await fetch(`/api/usg/reports/${openReportId}`);
+      if (res.ok && alive) {
+        const d = (await res.json()) as { report: UsgReportRow; order: ReportOrderLite | null };
+        setEditing(d.report);
+        setOrder(d.order ?? null);
+        setCreating(false);
+        setPrefill(null);
+        setDiffSource(null);
+        setReprintHtml(d.report.status === "FINALIZED" ? d.report.reportHtml ?? "" : null);
+      }
+      clearOpenReport();
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [openReportId, loading, clearOpenReport]);
+
   const openReport = async (row: UsgReportRow) => {
     setEditing(row);
     setCreating(false);
@@ -166,11 +204,14 @@ export function UsgStudioView() {
     // Always fetch the full row — patient phone + attached stills live on it.
     const res = await fetch(`/api/usg/reports/${row.id}`);
     if (res.ok) {
-      const fresh = (await res.json()).report as UsgReportRow;
+      const d = (await res.json()) as { report: UsgReportRow; order: ReportOrderLite | null };
+      const fresh = d.report;
+      setOrder(d.order ?? null);
       setEditing({ ...row, ...fresh });
       if (fresh.status === "FINALIZED") setReprintHtml(fresh.reportHtml ?? "");
       else setReprintHtml(null);
     } else {
+      setOrder(null);
       setReprintHtml(null);
     }
   };
@@ -318,9 +359,12 @@ export function UsgStudioView() {
           prefill={prefill}
           diffSource={diffSource}
           normalOverrides={normalOverrides}
+          order={order}
+          formFDefaults={formFDefaults}
           onBack={() => {
             setEditing(null);
             setCreating(false);
+            setOrder(null);
             setReprintHtml(null);
             setPrefill(null);
             setDiffSource(null);

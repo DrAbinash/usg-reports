@@ -6,21 +6,35 @@
 #   sudo docker compose up -d --build
 #
 # The studio keeps its own SQLite database in ./data — survives rebuilds.
+#
+# v6: answers on port 3040 (the MRI studio on the same NAS keeps 3090) and
+# runs under its own container names so both studios coexist:
+#   usg-reporting-studio / usg-reporting-caddy   (this app)
+#   care-reporting-studio / care-studio-caddy    (the MRI studio — untouched)
 
 services:
   studio:
     build: .
-    container_name: usg-studio
+    container_name: usg-reporting-studio
     restart: unless-stopped
     environment:
       - NODE_ENV=production
       - DATABASE_URL=file:/app/data/db/studio.db
       - TZ=${TZ:-Asia/Kolkata}
+      # Integration defaults (see .env.example). Values SAVED in the app always
+      # win; these only pre-fill blanks. CARE_API_KEY is the one line you set
+      # in .env on the NAS — secrets never live in the git repo.
+      - CARE_API_BASE=${CARE_API_BASE:-}
+      - CARE_API_KEY=${CARE_API_KEY:-}
+      - ORTHANC_URL=${ORTHANC_URL:-}
+      - ORTHANC_USERNAME=${ORTHANC_USERNAME:-}
+      - ORTHANC_PASSWORD=${ORTHANC_PASSWORD:-}
+      - INTEGRATION_DEFAULTS=${INTEGRATION_DEFAULTS:-on}
     volumes:
       - ./data/db:/app/data/db
     # Caddy fronts the studio; if you skip Caddy, publish the port instead:
     # ports:
-    #   - "${STUDIO_PORT:-3090}:3000"
+    #   - "${STUDIO_PORT:-3040}:3000"
     deploy:
       resources:
         limits:
@@ -30,10 +44,10 @@ services:
 
   caddy:
     image: caddy:2-alpine
-    container_name: usg-studio-caddy
+    container_name: usg-reporting-caddy
     restart: unless-stopped
     ports:
-      - "${STUDIO_PORT:-3090}:8090"
+      - "${STUDIO_PORT:-3040}:8090"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./data/caddy:/data

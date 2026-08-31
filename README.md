@@ -65,6 +65,18 @@ radiologist workspace lives in the separate
 - **QR verification** — finalized reports print a signed QR
   (HMAC over serial + name + date); scanning it opens /verify, which
   confirms the signature and the register entry.
+- **Worklist (v6)** — the CARE ERP bill desk's ultrasound orders sync in
+  with their demographics (patient, age, sex, phone, address, referral
+  doctor, billing status); one click starts a pre-filled report, and
+  finalize reports back to the ERP (REPORT_FINAL + billing link),
+  retrying automatically until it is accepted.
+- **Form F (v6)** — PC-PNDT statutory form with the clinic's fixed details
+  pre-filled, demographics auto-populated from the bill desk, GA + result
+  lifted from the composer, and the ERP's four-predicate completeness rule
+  before print.
+- **PACS pull (v6)** — key images picked from the Orthanc study and frozen
+  into the report; **“Pull from machine”** fills the biometry slots from the
+  machine's DICOM SR (with optional Vision OCR as fallback).
 
 `formats-usg/` — the doctor's original Word report library, preserved
 verbatim — remains the canonical wording reference for curation.
@@ -74,7 +86,9 @@ verbatim — remains the canonical wording reference for curation.
 ## Deploy on Synology (Container Manager)
 
 1. Copy this folder to the NAS, e.g. `/volume1/docker/usg-studio`
-2. `cp .env.example .env` — set `STUDIO_PORT`
+2. `cp .env.example .env` — set `STUDIO_PORT` (default **3040**; the MRI
+   studio on the same NAS keeps 3090) and, if you want the integrations
+   pre-filled on first boot, `CARE_API_BASE`, `CARE_API_KEY`, `ORTHANC_URL`
 3. SSH in, then:
 
    ```bash
@@ -82,13 +96,23 @@ verbatim — remains the canonical wording reference for curation.
    sudo docker compose up -d --build
    ```
 
-4. Open `http://<NAS-IP>:3090` → log in with the starter PIN **123456**
+4. Open `http://<NAS-IP>:3040` → log in with the starter PIN **123456**
    (demo value — change it in Settings → Security immediately) and fill
-   Settings → USG Studio (sonologist name, qualification, registration).
+   Settings → USG Studio (sonologist name, qualification, registration) and
+   Settings → Integrations (CARE API key, Orthanc URL — use the Test buttons).
 
 The SQLite database lives in `./data/db` — it survives every rebuild.
-Back up that folder and you have every report ever printed. Nothing else
-to configure: no ERP bridge, no PACS, no viewer.
+Back up that folder and you have every report ever printed. Without the
+CARE/Orthanc integrations the studio still works fully standalone; with
+them, the bill desk's worklist lands here and the USG machine's images and
+measurements flow in from Orthanc.
+
+> **v6 deploy note:** the containers renamed to `usg-reporting-studio` /
+> `usg-reporting-caddy` and the default port moved to **3040**. If an older
+> deployment is running, stop it (`docker compose down`) before `up -d` so
+> the old `usg-studio`/`usg-studio-caddy` containers are replaced cleanly.
+> The ERP side needs the one-line `REPORTING_STUDIO_API_KEY=` in its
+> `.env`/compose (same key as Settings → Integrations).
 
 ### Upgrading from the v1–v3 shared app
 

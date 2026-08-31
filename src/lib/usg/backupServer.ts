@@ -37,6 +37,8 @@ export async function collectFullBackup(): Promise<UsgFullBackupFile> {
   const patients = await db.usgPatient.findMany();
   const reports = await db.usgReport.findMany({ orderBy: { createdAt: "asc" } });
   const images = await db.usgReportImage.findMany({ orderBy: { sortOrder: "asc" } });
+  const formFs = await db.usgFormF.findMany({ orderBy: { createdAt: "asc" } });
+  const careOrders = await db.usgCareOrder.findMany({ orderBy: { createdAt: "asc" } });
 
   const base = buildBackup(
     settings as unknown as Record<string, unknown>,
@@ -81,6 +83,53 @@ export async function collectFullBackup(): Promise<UsgFullBackupFile> {
         .filter((i) => i.reportId === r.id)
         .map((i) => ({ id: i.id, dataUrl: i.dataUrl, caption: i.caption, sortOrder: i.sortOrder })),
     })),
+    formFs: formFs.map((f) => ({
+      id: f.id,
+      accessionNumber: f.accessionNumber,
+      billNumber: f.billNumber,
+      patientName: f.patientName,
+      patientAge: f.patientAge,
+      husbandFatherName: f.husbandFatherName,
+      address: f.address,
+      mobile: f.mobile,
+      childrenDetails: f.childrenDetails,
+      referredBy: f.referredBy,
+      lmpWeeks: f.lmpWeeks,
+      previousChildIssue: f.previousChildIssue,
+      indicationOther: f.indicationOther,
+      gestationalAgeWeeks: f.gestationalAgeWeeks,
+      gestationalAgeDays: f.gestationalAgeDays,
+      ultrasoundResult: f.ultrasoundResult,
+      abnormality: f.abnormality,
+      procedureDate: f.procedureDate,
+      consentDate: f.consentDate,
+      idCardVerified: f.idCardVerified,
+      reportId: f.reportId,
+      createdAt: f.createdAt.toISOString(),
+    })),
+    careOrders: careOrders.map((o) => ({
+      id: o.id,
+      accessionNumber: o.accessionNumber,
+      careWorklistId: o.careWorklistId,
+      patientName: o.patientName,
+      patientAge: o.patientAge,
+      patientSex: o.patientSex,
+      patientPhone: o.patientPhone,
+      patientAddress: o.patientAddress,
+      billNumber: o.billNumber,
+      referringDoctor: o.referringDoctor,
+      testName: o.testName,
+      modality: o.modality,
+      studyDate: o.studyDate?.toISOString() ?? null,
+      studyInstanceUid: o.studyInstanceUid,
+      billingStatus: o.billingStatus,
+      status: o.status,
+      ignored: o.ignored,
+      reportId: o.reportId,
+      formFId: o.formFId,
+      careSyncedAt: o.careSyncedAt?.toISOString() ?? null,
+      createdAt: o.createdAt.toISOString(),
+    })),
   };
 }
 
@@ -91,6 +140,8 @@ export type FullRestoreResult = {
   reportsRestored: number;
   reportsSkipped: number;
   imagesRestored: number;
+  formFsRestored: number;
+  careOrdersRestored: number;
 };
 
 /** Apply a full-clinic backup (idempotent disaster recovery). */
@@ -103,6 +154,8 @@ export async function applyFullRestore(raw: unknown): Promise<FullRestoreResult>
     reportsRestored: 0,
     reportsSkipped: 0,
     imagesRestored: 0,
+    formFsRestored: 0,
+    careOrdersRestored: 0,
   };
 
   // Settings + customs — the same whitelist path as personalisation restore.
@@ -194,6 +247,77 @@ export async function applyFullRestore(raw: unknown): Promise<FullRestoreResult>
         data: r.images.map((i) => ({ id: i.id, reportId: r.id, dataUrl: i.dataUrl, caption: i.caption, sortOrder: i.sortOrder })),
       });
       result.imagesRestored += r.images.length;
+    }
+  }
+
+  // v6 — Form F records + bill-desk order links (statutory / workflow state).
+  for (const f of backup.formFs ?? []) {
+    try {
+      await db.usgFormF.upsert({
+        where: { id: f.id },
+        create: {
+          id: f.id,
+          accessionNumber: f.accessionNumber,
+          billNumber: f.billNumber,
+          patientName: f.patientName,
+          patientAge: f.patientAge,
+          husbandFatherName: f.husbandFatherName,
+          address: f.address,
+          mobile: f.mobile,
+          childrenDetails: f.childrenDetails,
+          referredBy: f.referredBy,
+          lmpWeeks: f.lmpWeeks,
+          previousChildIssue: f.previousChildIssue,
+          indicationOther: f.indicationOther,
+          gestationalAgeWeeks: f.gestationalAgeWeeks,
+          gestationalAgeDays: f.gestationalAgeDays,
+          ultrasoundResult: f.ultrasoundResult,
+          abnormality: f.abnormality,
+          procedureDate: f.procedureDate,
+          consentDate: f.consentDate,
+          idCardVerified: f.idCardVerified,
+          reportId: f.reportId,
+          createdAt: new Date(f.createdAt),
+        },
+        update: {},
+      });
+      result.formFsRestored++;
+    } catch {
+      // id clash with different content — keep the local row (idempotent)
+    }
+  }
+  for (const o of backup.careOrders ?? []) {
+    try {
+      await db.usgCareOrder.upsert({
+        where: { accessionNumber: o.accessionNumber },
+        create: {
+          id: o.id,
+          accessionNumber: o.accessionNumber,
+          careWorklistId: o.careWorklistId,
+          patientName: o.patientName,
+          patientAge: o.patientAge,
+          patientSex: o.patientSex,
+          patientPhone: o.patientPhone,
+          patientAddress: o.patientAddress,
+          billNumber: o.billNumber,
+          referringDoctor: o.referringDoctor,
+          testName: o.testName,
+          modality: o.modality,
+          studyDate: o.studyDate ? new Date(o.studyDate) : null,
+          studyInstanceUid: o.studyInstanceUid,
+          billingStatus: o.billingStatus,
+          status: o.status,
+          ignored: o.ignored,
+          reportId: o.reportId,
+          formFId: o.formFId,
+          careSyncedAt: o.careSyncedAt ? new Date(o.careSyncedAt) : null,
+          createdAt: new Date(o.createdAt),
+        },
+        update: {},
+      });
+      result.careOrdersRestored++;
+    } catch {
+      // accession clash — keep the local row (idempotent)
     }
   }
 

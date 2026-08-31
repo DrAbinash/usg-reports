@@ -35,6 +35,8 @@ import { toScanDateInput } from "@/lib/usg/dates";
 import { UsgOrganCard } from "./UsgOrganCard";
 import { UsgPathologyDialog } from "./UsgPathologyDialog";
 import { UsgDiffPanel, type DiffSource } from "./UsgDiffPanel";
+import { UsgBiometryCalc } from "./UsgBiometryCalc";
+import { UsgCalculators } from "./UsgCalculators";
 
 export type UsgReportRow = {
   id: string;
@@ -448,6 +450,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
             <Settings2 className="h-3 w-3" /> Technique
             <ChevronDown className={cn("h-3 w-3 transition-transform", showTechnique && "rotate-180")} />
           </button>
+          <UsgCalculators />
           <span className="font-semibold text-foreground">{resolved.title}</span>
           <span className={cn("rounded-full px-2 py-0.5 font-semibold", abnormalCount ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700")}>
             {abnormalCount ? `${abnormalCount} organ${abnormalCount > 1 ? "s" : ""} affected` : "All normal"}
@@ -497,6 +500,20 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
             )}
           </div>
         </div>
+      ) : null}
+
+      {/* Hadlock biometry calculator — antenatal scans (the format's mm slots) */}
+      {studyKey === "ob" ? (
+        <UsgBiometryCalc
+          scanDate={scanDate}
+          onFill={(vars) =>
+            setState((s) => {
+              let next = s;
+              for (const [k, v] of Object.entries(vars)) next = setOrganVar(next, "biometry", k, v);
+              return next;
+            })
+          }
+        />
       ) : null}
 
       {/* Body: organ cards + preview */}

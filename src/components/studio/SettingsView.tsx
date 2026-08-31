@@ -24,6 +24,7 @@ type Settings = {
   usgDoctorName: string; usgDoctorQual: string; usgDoctorRegNo: string;
   usgMachineLine: string; usgShowMachine: boolean;
   usgFooterLine: string; usgDeclarationLine: string;
+  usgPrintStyle: string; usgPrintCompact: boolean;
 };
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -316,6 +317,36 @@ export function SettingsView() {
           <Field label="Declaration (optional)" hint="Boxed legal line under the signature, e.g. the PC-PNDT declaration. Leave blank to omit.">
             <Textarea value={s.usgDeclarationLine ?? ""} onChange={(e) => set("usgDeclarationLine", e.target.value)} rows={2} className="text-[12px]" />
           </Field>
+          <Field label="Print style" hint="Premium = gradient letterhead with banded sections. Classic = plain black-and-white serif letterhead — traditional look, saves ink and prints fast.">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setS({ ...s, usgPrintStyle: "premium" } as Settings)}
+                className={cn(
+                  "flex-1 rounded-lg border px-3 py-2 text-left text-[12px] font-semibold transition-colors",
+                  (s.usgPrintStyle ?? "premium") !== "classic"
+                    ? "border-rose-300 bg-rose-50 text-rose-800 ring-1 ring-rose-200"
+                    : "border-border bg-panel text-muted-foreground hover:border-rose-200",
+                )}
+              >
+                Premium
+                <span className="block text-[10px] font-normal text-faint">Gradient masthead · banded sections</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setS({ ...s, usgPrintStyle: "classic" } as Settings)}
+                className={cn(
+                  "flex-1 rounded-lg border px-3 py-2 text-left text-[12px] font-semibold transition-colors",
+                  s.usgPrintStyle === "classic"
+                    ? "border-rose-300 bg-rose-50 text-rose-800 ring-1 ring-rose-200"
+                    : "border-border bg-panel text-muted-foreground hover:border-rose-200",
+                )}
+              >
+                Classic
+                <span className="block text-[10px] font-normal text-faint">Plain B/W serif · ink saver</span>
+              </button>
+            </div>
+          </Field>
           <label className="flex cursor-pointer items-center gap-2 text-[12px] font-medium text-muted-foreground">
             <input
               type="checkbox"
@@ -324,6 +355,15 @@ export function SettingsView() {
               className="h-4 w-4 accent-rose-600"
             />
             Show the machine banner on printed USG reports
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-[12px] font-medium text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={s.usgPrintCompact === true}
+              onChange={(e) => setS({ ...s, usgPrintCompact: e.target.checked } as Settings)}
+              className="h-4 w-4 accent-rose-600"
+            />
+            Compact print density (smaller type — long studies like echo fit one page)
           </label>
           <Button onClick={save} className="h-9 text-[12.5px]">Save</Button>
         </TabsContent>

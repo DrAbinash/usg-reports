@@ -3,7 +3,7 @@
  * custom entries and expose a single lookup used by every route.
  */
 import { db } from "@/lib/db";
-import { USG_PATHOLOGIES } from "./pathologies";
+import { USG_PATHOLOGIES_ALL } from "./pathologies";
 import type { UsgPathologyDef } from "./types";
 import { makeLookup, normaliseState, resolve } from "./composer";
 
@@ -25,7 +25,7 @@ export async function loadAllPathologies(): Promise<UsgPathologyDef[]> {
   } catch {
     // Table not created yet (first boot before db push) — builtins still work.
   }
-  return [...USG_PATHOLOGIES, ...customs];
+  return [...USG_PATHOLOGIES_ALL, ...customs];
 }
 
 function safeJsonArray(raw: string): string[] {
@@ -53,7 +53,7 @@ export async function lookupPathology(key: string): Promise<UsgPathologyDef | un
       builtin: false,
     };
   }
-  return USG_PATHOLOGIES.find((p) => p.key === key);
+  return USG_PATHOLOGIES_ALL.find((p) => p.key === key);
 }
 
 /** Resolve a state JSON into the denormalised columns stored on UsgReport. */

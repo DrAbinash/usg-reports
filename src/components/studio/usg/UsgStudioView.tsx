@@ -30,6 +30,8 @@ const EMPTY_SETTINGS: UsgPrintSettings = {
   usgShowMachine: true,
   usgFooterLine: "Kindly co-relate with clinico-pathological findings.",
   usgDeclarationLine: "",
+  usgPrintStyle: "premium",
+  usgPrintCompact: false,
 };
 
 export function UsgStudioView() {
@@ -67,6 +69,8 @@ export function UsgStudioView() {
         usgShowMachine: s.usgShowMachine !== false,
         usgFooterLine: s.usgFooterLine ?? "",
         usgDeclarationLine: s.usgDeclarationLine ?? "",
+        usgPrintStyle: s.usgPrintStyle ?? "premium",
+        usgPrintCompact: s.usgPrintCompact === true || s.usgPrintCompact === "true",
       });
     }
     if (rRes.ok) setReports(((await rRes.json()).reports ?? []) as UsgReportRow[]);

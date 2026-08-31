@@ -11,10 +11,44 @@ import type { UsgComposerState, UsgOrganDef, UsgOrganState, UsgPathologyDef, Usg
 import { getStudy, initialState, USG_STUDIES } from "./studies";
 
 /** Tokens auto-derived from an organ key (kidney_rt → right/Right). */
-const ORGAN_SIDE: Record<string, { side: string; Side: string }> = {
+export const ORGAN_SIDE: Record<string, { side: string; Side: string }> = {
   kidney_rt: { side: "right", Side: "Right" },
   kidney_lt: { side: "left", Side: "Left" },
+  thyroid_rt: { side: "right", Side: "Right" },
+  thyroid_lt: { side: "left", Side: "Left" },
+  breast_rt: { side: "right", Side: "Right" },
+  breast_lt: { side: "left", Side: "Left" },
+  testis_rt: { side: "right", Side: "Right" },
+  testis_lt: { side: "left", Side: "Left" },
+  globe_rt: { side: "right", Side: "Right" },
+  globe_lt: { side: "left", Side: "Left" },
+  carotid_rt: { side: "right", Side: "Right" },
+  carotid_lt: { side: "left", Side: "Left" },
+  pleura_rt: { side: "right", Side: "Right" },
+  pleura_lt: { side: "left", Side: "Left" },
 };
+
+/**
+ * Shared side-agnostic pathology organs: an entry with organ "thyroid-lobe"
+ * applies to BOTH thyroid_rt and thyroid_lt with {side}/{Side} filled from the
+ * card it was clicked on — the kidney pattern generalised to every paired
+ * structure (breast / testis / globe / carotid / pleura).
+ */
+const SIDE_SHARED: Record<string, string[]> = {
+  kidney: ["kidney_rt", "kidney_lt"],
+  "thyroid-lobe": ["thyroid_rt", "thyroid_lt"],
+  breast: ["breast_rt", "breast_lt"],
+  testis: ["testis_rt", "testis_lt"],
+  globe: ["globe_rt", "globe_lt"],
+  carotid: ["carotid_rt", "carotid_lt"],
+  pleura: ["pleura_rt", "pleura_lt"],
+};
+
+/** True when a pathology (organ "x") may be applied to organKey. */
+function pathologyAppliesTo(pathologyOrgan: string, organKey: string): boolean {
+  if (pathologyOrgan === organKey) return true;
+  return (SIDE_SHARED[pathologyOrgan] ?? []).includes(organKey);
+}
 
 const capitalise = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
@@ -121,14 +155,12 @@ export function applyPathology(
   if (!study) return state;
   const def = study.organs.find((o) => o.key === organKey);
   if (!def) return state;
-  const isKidney = organKey === "kidney_rt" || organKey === "kidney_lt";
   const organs = state.organs.map((o) => {
     if (o.organ !== organKey) return o;
     const nextText = pathologyKey === null ? def.normal : lookup(pathologyKey)?.text;
     if (pathologyKey !== null) {
       const p = lookup(pathologyKey);
-      const allowed = !!p && (p.organ === organKey || (isKidney && p.organ === "kidney"));
-      if (!allowed) return o; // unknown or wrong-organ pathology — ignore
+      if (!p || !pathologyAppliesTo(p.organ, organKey)) return o; // unknown or wrong-organ pathology — ignore
     }
     const kept: Record<string, string> = {};
     if (nextText) for (const t of extractTokens(nextText)) if (o.vars[t]?.trim()) kept[t] = o.vars[t];
@@ -156,10 +188,9 @@ export function organDef(study: UsgStudyDef, organKey: string): UsgOrganDef | un
   return study.organs.find((o) => o.key === organKey);
 }
 
-/** Pathologies available for an organ: builtin for the organ + kidney commons. */
+/** Pathologies available for an organ: its own + shared side-organ commons. */
 export function pathologiesForOrgan(all: UsgPathologyDef[], organKey: string): UsgPathologyDef[] {
-  const isKidney = organKey === "kidney_rt" || organKey === "kidney_lt";
-  return all.filter((p) => p.organ === organKey || (isKidney && p.organ === "kidney"));
+  return all.filter((p) => pathologyAppliesTo(p.organ, organKey));
 }
 
 /** The upper-abdomen organ prefix used for the "Normal scan of upper abdomen." rule. */
@@ -189,7 +220,7 @@ export function resolve(
     const def = organDef(study, o.organ);
     if (!def) continue;
     const text = substitute(o.text, o.vars, o.organ);
-    sections.push({ organ: o.organ, label: def.label, text });
+    sections.push({ organ: o.organ, label: def.label, text, kind: def.kind });
 
     const p = o.pathology ? lookup(o.pathology) : undefined;
     if (p) {

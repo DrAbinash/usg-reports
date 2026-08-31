@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { Check, Pencil, Plus, RotateCcw, Stethoscope } from "lucide-react";
 import type { UsgOrganDef, UsgOrganState, UsgPathologyDef, UsgVarDef } from "@/lib/usg/types";
-import { extractTokens, substitute } from "@/lib/usg/composer";
+import { extractTokens, ORGAN_SIDE, substitute } from "@/lib/usg/composer";
 
 export type OrganCardProps = {
   def: UsgOrganDef;
@@ -39,6 +39,11 @@ export function UsgOrganCard({ def, state, pathologies, onSelect, onVar, onText,
   const selected = state.pathology ? pathologies.find((p) => p.key === state.pathology) : null;
   const tokens = useMemo(() => extractTokens(state.text), [state.text]);
   const varDefs = selected?.vars ?? def.vars;
+  // {side}/{Side} on a paired organ card (kidney/thyroid lobe/breast/testis/
+  // globe/carotid/pleura) auto-fills from the card itself — no input for it,
+  // only the real measurements get inputs.
+  const autoSide = ORGAN_SIDE[def.key];
+  const inputTokens = tokens.filter((t) => !autoSide || !(t in autoSide));
 
   const isKidneySlot = def.key === "kidney_rt" || def.key === "kidney_lt";
   const visible = showAll ? pathologies : pathologies.slice(0, 6);
@@ -153,10 +158,10 @@ export function UsgOrganCard({ def, state, pathologies, onSelect, onVar, onText,
         </button>
       </div>
 
-      {/* Measurement inputs for {tokens} */}
-      {tokens.length > 0 ? (
+      {/* Measurement inputs for {tokens} (side tokens auto-fill) */}
+      {inputTokens.length > 0 ? (
         <div className="mb-2.5 flex flex-wrap gap-1.5">
-          {tokens.map((t) => {
+          {inputTokens.map((t) => {
             const { label, unit } = varLabel(varDefs, t);
             return (
               <label key={t} className="flex items-center gap-1 rounded-lg border border-border bg-panel px-2 py-1">

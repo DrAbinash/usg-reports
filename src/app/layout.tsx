@@ -14,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CARE Reporting Studio",
+  title: "CARE USG Studio",
   description:
-    "Single-radiology reporting workspace — worklist, findings, impression and A4 print, linked to CARE billing and Orthanc.",
+    "Standalone sonography reporting — organ-based findings composer, impression, register-serialised A4/A5 print with backup & restore.",
   icons: {
     icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
   },

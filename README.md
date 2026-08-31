@@ -1,109 +1,98 @@
-# CARE Reporting Studio
+# CARE USG Studio
 
-A single-radiologist MRI/CT reporting workspace for **CARE Diagnostics** —
-built for speed: pick a report format, adjust with phrase chips or voice,
-select key images from DICOM, print a premium A4 report in seconds.
+A standalone sonography (USG) reporting studio for **CARE Diagnostics** —
+built for Dr Sugandha: pick a study, tap the findings the probe found,
+print a premium report in seconds. Ultrasound only — the MRI/CT/X-ray
+radiologist workspace lives in the separate
+[`DrAbinash/mri-reports`](https://github.com/DrAbinash/mri-reports) repo.
 
-- **Worklist** — CARE orders joined with Orthanc studies by accession
-  (To report / Awaiting images / Unlinked, one-click match)
-- **One-tap complete reports** — “MRI Brain Normal” or
-  “Fazekas Gr 1 + Senile Changes” fills study, technique, findings,
-  impression & recommendation instantly
-- **Findings composer** — phrase chips with level/side/severity,
-  same-slot replacement (never duplicated), auto-compiled impression
-- **Voice to text** — dictate findings & impression (Chrome/Edge)
-- **Key images in the report** — pick from DICOM (rendered by Orthanc),
-  capture the viewer, or upload/paste; images print inside the report
-- **Premium print** — bright bold A4 report with hospital masthead,
-  numbered section bands and image grid (glossy-paper grade)
-- **Billing link** — finalize creates the billing row in CARE ERP
-  (local-first: the report is never lost if CARE is down)
+- **Organ-based composer** — 8 study profiles (male / female / child whole
+  abdomen, upper, male/female lower, antenatal, early pregnancy) with the
+  doctor's own wording per organ
+- **Quick-select pathologies** — one tap per finding; chips toggle so an
+  organ can carry several pathologies at once (combined findings, merged
+  paragraphs, unioned impression + title)
+- **Auto impression + PC-PNDT declaration** on obstetric reports
+- **LMP calculator** — enter LMP, GA (weeks + days) and EDD (Naegele)
+  autofill the biometry slots
+- **Register discipline** — every finalized report gets a sequential
+  **USG-0001, USG-0002…** number that is never renumbered; back-dated
+  scan dates print as performed
+- **Follow-up drafts** — one click duplicates a finalized report as a
+  fresh editable draft with today's scan date
+- **Premium print** — A4 or A5 (half-sheet), premium gradient letterhead
+  or classic B/W, scanned signature over the name line, PROVISIONAL
+  watermark on drafts
+- **Backup & restore** — one JSON file carries the whole personalisation
+  (letterhead, sonologist block, print preferences, custom findings)
+- **PIN lock** — no usernames, no reset email; the studio is yours alone
 
-The study heading stays short (**MRI BRAIN**) — the composed phrase
-(*“MRI BRAIN WITH FAZEKAS GRADE 1 CHANGES AND SENILE CHANGES”*) prints as
-the bold opening line of the Findings section.
+`formats-usg/` — the doctor's original Word report library, preserved
+verbatim — remains the canonical wording reference for curation.
 
 ---
 
 ## Deploy on Synology (Container Manager)
 
-1. Copy this folder to the NAS, e.g. `/volume1/docker/care-studio`
-2. `cp .env.example .env` — set `STUDIO_PORT` and `OHIF_UPSTREAM`
+1. Copy this folder to the NAS, e.g. `/volume1/docker/usg-studio`
+2. `cp .env.example .env` — set `STUDIO_PORT`
 3. SSH in, then:
 
    ```bash
-   cd /volume1/docker/care-studio
+   cd /volume1/docker/usg-studio
    sudo docker compose up -d --build
    ```
 
-4. Open `http://<NAS-IP>:3090` → first run asks you to **create a PIN**
-   and fill Settings → Identity (hospital name, address, radiologist).
+4. Open `http://<NAS-IP>:3090` → log in with the starter PIN **123456**
+   (demo value — change it in Settings → Security immediately) and fill
+   Settings → USG Studio (sonologist name, qualification, registration).
 
 The SQLite database lives in `./data/db` — it survives every rebuild.
-Back up that folder and you have every report ever printed.
+Back up that folder and you have every report ever printed. Nothing else
+to configure: no ERP bridge, no PACS, no viewer.
 
-### Connect the hospital
+### Upgrading from the v1–v3 shared app
 
-**Settings → Integrations** (all tested with one click from the same screen):
-
-| Setting | Example | For |
-|---|---|---|
-| CARE API base | `http://172.16.1.139:8888` | Worklist + finalize billing |
-| CARE internal API key | *(from CARE ERP .env)* | Authorises the bridge |
-| Orthanc URL | `http://172.16.1.139:8042` | Study matching + DICOM image picker |
-| Orthanc user / password | `admin` / … | DICOMweb rendering |
-| OHIF LAN URL | `http://172.16.1.139:3010` | Embedded viewer (hospital) |
-| OHIF Tailscale URL | `https://…ts.net` | Embedded viewer (from home) |
-
-**CARE ERP side**: the studio needs the three bridge endpoints from
-`docs/care-erp-bridge.md` (ping / worklist / finalize). Paste that spec
-into Cursor on the CARE repo once — everything else is already in place.
-
-### Key images — three ways
-
-1. **From DICOM** (recommended) — browse the study’s series, tap image
-   numbers, add. Orthanc renders the slice; the report freezes it forever.
-2. **Capture** — the camera button in the viewer panel grabs the current
-   OHIF viewport (needs OHIF served under `/ohif` on the studio origin —
-   see the Caddyfile note; otherwise use From DICOM).
-3. **Upload / paste** — any screenshot or image file, Ctrl+V works too.
-
-### Voice to text
-
-Works in Chrome and Edge over **HTTPS or localhost** (microphone security
-rule). On the hospital LAN open the studio through Tailscale
-(`https://…ts.net`) for dictation, or use the plain HTTP address for
-everything else.
+If this machine previously ran the synced full radiology app from this
+repo, the first boot of v4 runs a one-time cleanup: the unused radiology
+tables and MRI/PACS settings columns are dropped, while **every USG
+report, custom finding, PIN and setting is preserved** (the migration is
+idempotent and runs before the schema push; the entrypoint still refuses
+destructive prisma changes as a final guard). Real MRI/CT reports were
+never stored here — they belong to the mri-reports deployment.
 
 ### Print
 
 Always tick **“Background graphics”** in the print dialog — that switch
-carries the blue masthead and section bands onto paper. Use A4, and for
-the glossy look: photo paper + “Best” quality.
+carries the gradient masthead and section bands onto paper. A4 for full
+reports, A5 (Settings → USG Studio → Paper size) for short studies.
 
 ---
 
 ## Daily flow
 
-1. **PIN in** → Worklist shows CARE orders (billing badge on each)
-2. Tap a study → **Report format** → *Normal* or a variant (e.g. Fazekas)
-3. Adjust: phrase chips, dictated findings, key images
-4. **Preview & Print A4** → **Finalize & bill** → back to the worklist
+1. **PIN in** → USG Studio shows the report list (drafts + finalized with
+   their register badges)
+2. **New Report** → patient strip → pick the study → tap findings per organ
+3. **Preview & Print** → **Finalize** → the register number is stamped and
+   announced; the report freezes but stays reprintable forever
+4. Follow-up visit? **↻ on the list row** → the full report returns as an
+   editable draft with today's scan date
 
-Drafts save themselves. The finalized report is frozen — reprintable from
-the **Library** forever, even if CARE or Orthanc change.
+Drafts save themselves. Finalized reports are frozen snapshots —
+reprintable from the list even years later.
 
 ---
 
 ## Repository layout
 
 ```
-src/app/api/…        PIN auth, worklist sync, findings, formats, images, DICOM proxy
-src/components/studio/  Lock screen, worklist, editor, viewer, picker, print overlay
-src/lib/             compile/slot logic, print engine, CARE & Orthanc clients, seeds
-prisma/schema.prisma SQLite schema (reports, findings, formats, key images)
-Dockerfile           Synology ARM-ready build (node:20-alpine multi-arch)
-Caddyfile            Studio + optional same-origin /ohif viewer
+src/app/api/…          PIN auth, USG reports & pathologies, backup, settings
+src/components/studio/  Lock screen, USG composer (organ cards, chips), settings
+src/lib/usg/           studies, composer, pathologies, print engine, LMP, backup
+prisma/schema.prisma   SQLite schema (USG reports, custom pathologies, settings)
+scripts/usg-v4-cleanup.mjs  idempotent v3→v4 legacy-structure migration
+formats-usg/           the doctor's original Word format library (verbatim)
+Dockerfile             Synology ARM-ready build (node:20-alpine multi-arch)
+Caddyfile              front proxy for the studio
 ```
-
-*For the previous MRI Report Manager app, see the `legacy-mri-reports` tag.*

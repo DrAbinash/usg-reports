@@ -1,5 +1,5 @@
 "use client";
-/** Settings — Appearance / Hospital / Radiologist / Security / Integrations. Secrets masked. */
+/** Settings — Appearance / Hospital / USG Studio / Security. Secrets masked. */
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,17 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SectionLabel } from "./bits";
 import { LOGIN_THEMES, type LoginThemeName } from "./LockScreen";
-import { Building2, UserRound, ShieldCheck, PlugZap, Check, X, Palette, Upload, Trash2, Waves, Download, ArchiveRestore } from "lucide-react";
+import { Building2, ShieldCheck, Check, Palette, Upload, Trash2, Waves, Download, ArchiveRestore } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 type Settings = {
   appTitle: string; hospitalName: string; addressLine: string; phone: string; email: string;
   footerMessage: string; logoUrl: string;
-  radiologistName: string; radiologistQual: string; radiologistRegNo: string;
-  careApiBase: string; careApiKeySet: boolean;
-  orthancUrl: string; orthancUsername: string; orthancPasswordSet: boolean;
-  ohifLanUrl: string; ohifTailscaleUrl: string;
   loginTheme: string; loginBgUrl: string;
   pinSet: boolean;
   usgDoctorName: string; usgDoctorQual: string; usgDoctorRegNo: string;
@@ -38,33 +34,17 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
-function TestPill({ state }: { state: { ok: boolean; msg: string } | "loading" | undefined }) {
-  if (!state) return null;
-  if (state === "loading") return <span className="text-[11px] text-faint">Testing…</span>;
-  return (
-    <span className={cn("flex items-center gap-1 text-[11px] font-medium", state.ok ? "text-ok" : "text-bad")}>
-      {state.ok ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />} {state.msg}
-    </span>
-  );
-}
-
 export function SettingsView() {
   const [s, setS] = useState<Settings | null>(null);
-  const [careApiKey, setCareApiKey] = useState("");
-  const [orthancPassword, setOrthancPassword] = useState("");
-  const [tests, setTests] = useState<Record<string, { ok: boolean; msg: string } | "loading">>({});
   const [pin, setPin] = useState({ current: "", next: "" });
   const [bgUploading, setBgUploading] = useState(false);
   const bgFileRef = useRef<HTMLInputElement>(null);
   const restoreFileRef = useRef<HTMLInputElement>(null);
   const [restoring, setRestoring] = useState(false);
-  /** Snapshot of the last SAVED state — used to warn before testing unsaved edits. */
-  const savedRef = useRef<Settings | null>(null);
 
   useEffect(() => {
     fetch("/api/settings").then((r) => r.json()).then((d) => {
       setS(d.settings);
-      savedRef.current = d.settings;
     });
   }, []);
 
@@ -74,18 +54,12 @@ export function SettingsView() {
 
   const save = async () => {
     const body: Record<string, string> = { ...s } as unknown as Record<string, string>;
-    body.careApiKey = careApiKey;
-    body.orthancPassword = orthancPassword;
     const r = await fetch("/api/settings", {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }).then((res) => res.json());
     if (r.settings) {
-      setS({ ...s, careApiKeySet: r.settings.careApiKeySet, orthancPasswordSet: r.settings.orthancPasswordSet });
-      savedRef.current = { ...s, careApiKeySet: r.settings.careApiKeySet, orthancPasswordSet: r.settings.orthancPasswordSet } as Settings;
-      setCareApiKey("");
-      setOrthancPassword("");
       toast.success("Settings saved");
     } else {
       toast.error("Could not save settings");
@@ -110,7 +84,6 @@ export function SettingsView() {
       const fresh = await fetch("/api/settings").then((r) => r.json());
       if (fresh.settings) {
         setS(fresh.settings);
-        savedRef.current = fresh.settings;
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Restore failed");
@@ -118,34 +91,6 @@ export function SettingsView() {
       setRestoring(false);
       if (restoreFileRef.current) restoreFileRef.current.value = "";
     }
-  };
-
-  const runTest = async (target: string, network?: string) => {
-    const key = network ? `${target}:${network}` : target;
-    // Tests run against the SAVED settings — if the form holds unsaved
-    // integration edits, say so instead of reporting a confusing failure.
-    const dirty = (() => {
-      if (!s || !savedRef.current) return false;
-      const fields: Record<string, (keyof Settings)[]> = {
-        care: ["careApiBase"],
-        orthanc: ["orthancUrl", "orthancUsername"],
-        ohif: network === "tailscale" ? ["ohifTailscaleUrl"] : ["ohifLanUrl"],
-      };
-      return (fields[target] ?? []).some((f) => s[f] !== savedRef.current![f])
-        || (target === "care" && careApiKey !== "")
-        || (target === "orthanc" && orthancPassword !== "");
-    })();
-    if (dirty) {
-      setTests((t) => ({ ...t, [key]: { ok: false, msg: "Save integrations first — tests use saved values" } }));
-      return;
-    }
-    setTests((t) => ({ ...t, [key]: "loading" }));
-    const r = await fetch("/api/settings/test", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ target, network }),
-    }).then((res) => res.json());
-    setTests((t) => ({ ...t, [key]: { ok: r.ok, msg: r.ok ? r.message : r.error } }));
   };
 
   const changePin = async () => {
@@ -222,10 +167,8 @@ export function SettingsView() {
         <TabsList className="bg-panel">
           <TabsTrigger value="appearance" className="text-[12px]"><Palette className="mr-1.5 h-3.5 w-3.5" />Appearance</TabsTrigger>
           <TabsTrigger value="hospital" className="text-[12px]"><Building2 className="mr-1.5 h-3.5 w-3.5" />Hospital</TabsTrigger>
-          <TabsTrigger value="radiologist" className="text-[12px]"><UserRound className="mr-1.5 h-3.5 w-3.5" />Radiologist</TabsTrigger>
           <TabsTrigger value="usg" className="text-[12px]"><Waves className="mr-1.5 h-3.5 w-3.5" />USG Studio</TabsTrigger>
           <TabsTrigger value="security" className="text-[12px]"><ShieldCheck className="mr-1.5 h-3.5 w-3.5" />Security</TabsTrigger>
-          <TabsTrigger value="integrations" className="text-[12px]"><PlugZap className="mr-1.5 h-3.5 w-3.5" />Integrations</TabsTrigger>
         </TabsList>
 
         <TabsContent value="appearance" className="mt-4 space-y-5 rounded-xl border border-border bg-card p-5">
@@ -317,18 +260,9 @@ export function SettingsView() {
           <Button onClick={save} className="h-9 text-[12.5px]">Save</Button>
         </TabsContent>
 
-        <TabsContent value="radiologist" className="mt-4 space-y-4 rounded-xl border border-border bg-card p-5">
-          <Field label="Name"><Input value={s.radiologistName} onChange={(e) => set("radiologistName", e.target.value)} className="h-9 text-[13px]" /></Field>
-          <Field label="Qualification" hint="Printed under the signature, e.g. MBBS, MD (Radiodiagnosis).">
-            <Input value={s.radiologistQual} onChange={(e) => set("radiologistQual", e.target.value)} className="h-9 text-[13px]" />
-          </Field>
-          <Field label="Registration number"><Input value={s.radiologistRegNo} onChange={(e) => set("radiologistRegNo", e.target.value)} className="h-9 text-[13px]" /></Field>
-          <Button onClick={save} className="h-9 text-[12.5px]">Save</Button>
-        </TabsContent>
-
         <TabsContent value="usg" className="mt-4 space-y-4 rounded-xl border border-border bg-card p-5">
           <div className="flex items-center gap-2 rounded-lg bg-rose-50 px-3 py-2 text-[12px] font-semibold text-rose-700 ring-1 ring-rose-200">
-            <Waves className="h-4 w-4" /> Sonologist block printed on every USG report — separate from the radiologist above
+            <Waves className="h-4 w-4" /> Sonologist block printed on every USG report
           </div>
           <Field label="Sonologist name" hint="e.g. Dr. Sugandha Priyadarshini">
             <Input value={s.usgDoctorName ?? ""} onChange={(e) => set("usgDoctorName", e.target.value)} className="h-9 text-[13px]" />
@@ -437,8 +371,8 @@ export function SettingsView() {
             </div>
             <p className="text-[11px] leading-relaxed text-rose-700/90">
               One JSON file carries everything that makes the studio personal — letterhead &amp; identity settings,
-              print preferences and every custom quick-select finding you added. Patient reports and secrets
-              (PIN, integration keys) never travel in a backup. Restore on any machine and the studio is yours again.
+              print preferences and every custom quick-select finding you added. Patient reports and the PIN
+              never travel in a backup. Restore on any machine and the studio is yours again.
             </p>
             <div className="flex flex-wrap gap-2">
               <a href="/api/usg/backup" download>
@@ -485,80 +419,6 @@ export function SettingsView() {
             Sessions last 12 hours, or 30 days when you tick “Trust this device”. No usernames, no reset email —
             the studio is yours alone.
           </p>
-        </TabsContent>
-
-        <TabsContent value="integrations" className="mt-4 space-y-5">
-          <p className="rounded-lg bg-muted/60 px-3 py-2 text-[11px] leading-relaxed text-faint">
-            Pre-filled with the clinic LAN defaults (CARE :8888 · Orthanc :8042 · OHIF :3010) and the
-            CARE API key from this NAS’s <code>.env</code> — nothing to type on a fresh install.
-            You can enter just 172.16.1.139:8888 — http:// is added automatically.
-            Saved values always win; clearing a URL reverts it to its default.
-          </p>
-          {/* CARE */}
-          <div className="space-y-4 rounded-xl border border-border bg-card p-5">
-            <div className="flex items-center justify-between">
-              <p className="text-[13px] font-bold">CARE ERP bridge</p>
-              <Button size="sm" variant="outline" className="h-8 border-border text-[11.5px]" onClick={() => runTest("care")}>Test connection</Button>
-            </div>
-            <Field label="API base URL" hint="e.g. https://care.caredeoghar.com — the ERP exposes /api/internal/reporting-studio/*.">
-              <Input value={s.careApiBase} onChange={(e) => set("careApiBase", e.target.value)} placeholder="https://…" className="h-9 text-[13px]" />
-            </Field>
-            <Field label="API key" hint={s.careApiKeySet ? "Key saved — enter a new one to replace it." : "Sent as x-api-key header; stored server-side only."}>
-              <div className="flex items-center gap-2">
-                <Input type="password" value={careApiKey} onChange={(e) => setCareApiKey(e.target.value)} placeholder={s.careApiKeySet ? "•••••••• (saved)" : "paste key"} className="h-9 font-mono text-[13px]" />
-                {s.careApiKeySet ? <span className="flex items-center gap-1 text-[11px] font-medium text-ok"><Check className="h-3 w-3" /> saved</span> : null}
-              </div>
-            </Field>
-            <TestPill state={tests["care"]} />
-          </div>
-
-          {/* Orthanc */}
-          <div className="space-y-4 rounded-xl border border-border bg-card p-5">
-            <div className="flex items-center justify-between">
-              <p className="text-[13px] font-bold">Orthanc PACS</p>
-              <Button size="sm" variant="outline" className="h-8 border-border text-[11.5px]" onClick={() => runTest("orthanc")}>Test connection</Button>
-            </div>
-            <Field label="Orthanc URL" hint="e.g. http://172.16.1.139:8042 — /system + /studies power the worklist match. Leave username/password blank when Orthanc has no auth.">
-              <Input value={s.orthancUrl} onChange={(e) => set("orthancUrl", e.target.value)} placeholder="http://…" className="h-9 text-[13px]" />
-            </Field>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Username"><Input value={s.orthancUsername} onChange={(e) => set("orthancUsername", e.target.value)} className="h-9 text-[13px]" /></Field>
-              <Field label="Password">
-                <div className="flex items-center gap-2">
-                  <Input type="password" value={orthancPassword} onChange={(e) => setOrthancPassword(e.target.value)} placeholder={s.orthancPasswordSet ? "•••••••• (saved)" : "password"} className="h-9 font-mono text-[13px]" />
-                  {s.orthancPasswordSet ? <span className="flex items-center gap-1 text-[11px] font-medium text-ok"><Check className="h-3 w-3" /> saved</span> : null}
-                </div>
-              </Field>
-            </div>
-            <TestPill state={tests["orthanc"]} />
-          </div>
-
-          {/* OHIF */}
-          <div className="space-y-4 rounded-xl border border-border bg-card p-5">
-            <p className="text-[13px] font-bold">OHIF viewer</p>
-            <div className="grid gap-4">
-              <div className="flex items-end gap-2">
-                <div className="flex-1">
-                  <Field label="LAN URL" hint="In-hospital address, e.g. http://172.16.1.139:3010">
-                    <Input value={s.ohifLanUrl} onChange={(e) => set("ohifLanUrl", e.target.value)} placeholder="http://…" className="h-9 text-[13px]" />
-                  </Field>
-                </div>
-                <Button size="sm" variant="outline" className="h-9 border-border text-[11.5px]" onClick={() => runTest("ohif", "lan")}>Test</Button>
-              </div>
-              <div className="flex items-end gap-2">
-                <div className="flex-1">
-                  <Field label="Tailscale URL" hint="Outside-hospital address via your Tailnet">
-                    <Input value={s.ohifTailscaleUrl} onChange={(e) => set("ohifTailscaleUrl", e.target.value)} placeholder="http://…" className="h-9 text-[13px]" />
-                  </Field>
-                </div>
-                <Button size="sm" variant="outline" className="h-9 border-border text-[11.5px]" onClick={() => runTest("ohif", "tailscale")}>Test</Button>
-              </div>
-            </div>
-            <TestPill state={tests["ohif:lan"]} />
-            <TestPill state={tests["ohif:tailscale"]} />
-          </div>
-
-          <Button onClick={save} className="h-9 text-[12.5px]">Save integrations</Button>
         </TabsContent>
       </Tabs>
     </div>

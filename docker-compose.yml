@@ -1,8 +1,8 @@
-# CARE Reporting Studio — Synology Container Manager
-# Project folder example: /volume1/docker/care-studio
+# CARE USG Studio — Synology Container Manager
+# Project folder example: /volume1/docker/usg-studio
 #
-#   cd /volume1/docker/care-studio
-#   cp .env.example .env      (edit ports/URLs)
+#   cd /volume1/docker/usg-studio
+#   cp .env.example .env      (edit the port if needed)
 #   sudo docker compose up -d --build
 #
 # The studio keeps its own SQLite database in ./data — survives rebuilds.
@@ -10,23 +10,12 @@
 services:
   studio:
     build: .
-    container_name: care-reporting-studio
+    container_name: usg-studio
     restart: unless-stopped
     environment:
       - NODE_ENV=production
       - DATABASE_URL=file:/app/data/db/studio.db
       - TZ=${TZ:-Asia/Kolkata}
-      # Integration defaults (see .env.example). Values SAVED in the app always
-      # win; these only pre-fill blanks. CARE_API_KEY is the one line you set
-      # in .env on the NAS — secrets never live in the git repo.
-      - CARE_API_BASE=${CARE_API_BASE:-}
-      - CARE_API_KEY=${CARE_API_KEY:-}
-      - ORTHANC_URL=${ORTHANC_URL:-}
-      - ORTHANC_USERNAME=${ORTHANC_USERNAME:-}
-      - ORTHANC_PASSWORD=${ORTHANC_PASSWORD:-}
-      - OHIF_LAN_URL=${OHIF_LAN_URL:-}
-      - OHIF_TAILSCALE_URL=${OHIF_TAILSCALE_URL:-}
-      - INTEGRATION_DEFAULTS=${INTEGRATION_DEFAULTS:-on}
     volumes:
       - ./data/db:/app/data/db
     # Caddy fronts the studio; if you skip Caddy, publish the port instead:
@@ -35,13 +24,13 @@ services:
     deploy:
       resources:
         limits:
-          memory: 768M
+          memory: 512M
         reservations:
-          memory: 192M
+          memory: 128M
 
   caddy:
     image: caddy:2-alpine
-    container_name: care-studio-caddy
+    container_name: usg-studio-caddy
     restart: unless-stopped
     ports:
       - "${STUDIO_PORT:-3090}:8090"
@@ -49,14 +38,9 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./data/caddy:/data
       - ./data/caddy-config:/config
-    environment:
-      # Where your EXISTING OHIF listens (care-pacs compose, same NAS or LAN).
-      # When set, the viewer loads under /ohif on the SAME origin as the
-      # studio — the Capture button in the viewer panel then works.
-      - OHIF_UPSTREAM=${OHIF_UPSTREAM:-172.16.1.139:3010}
     depends_on:
       - studio
     deploy:
       resources:
         limits:
-          memory: 128M
+          memory: 96M

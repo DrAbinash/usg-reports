@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { FileText, Loader2, Phone, Plus, Printer, RotateCcw, Search, Stethoscope, Trash2, Users, Waves, Repeat, History } from "lucide-react";
+import { BookOpen, Download, FileText, Loader2, Phone, Plus, Printer, RotateCcw, Search, Stethoscope, Trash2, Users, Waves, Repeat, History } from "lucide-react";
 import type { UsgPathologyDef } from "@/lib/usg/types";
 import type { UsgPrintSettings } from "@/lib/usg/print";
 import { formatUsgSerial } from "@/lib/usg/print";
@@ -70,6 +70,7 @@ export function UsgStudioView() {
   const [reprintHtml, setReprintHtml] = useState<string | null>(null);
   const [prefill, setPrefill] = useState<ComposerPrefill | null>(null);
   const [diffSource, setDiffSource] = useState<DiffSource | null>(null);
+  const [registerHtml, setRegisterHtml] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   // Registry (Patients mode)
@@ -245,6 +246,12 @@ export function UsgStudioView() {
     setCreating(true);
   };
 
+  const openRegister = async () => {
+    const res = await fetch("/api/usg/register?format=html");
+    if (res.ok) setRegisterHtml(await res.text());
+    else toast.error("Could not build the register");
+  };
+
   const composerMode = creating || editing !== null;
 
   // "/" focuses the search box on the list screens (keyboard-first flow).
@@ -335,6 +342,12 @@ export function UsgStudioView() {
             onFollowUp={() => editing && duplicate(editing)}
           />
         ) : null}
+        {registerHtml ? (
+          <RegisterOverlay
+            html={registerHtml}
+            onClose={() => setRegisterHtml(null)}
+          />
+        ) : null}
       </div>
     );
   }
@@ -361,6 +374,14 @@ export function UsgStudioView() {
             className="ml-auto h-10 bg-white text-rose-700 shadow hover:bg-white/90"
           >
             <Plus className="mr-1.5 h-4 w-4" /> New Report
+          </Button>
+          <Button
+            onClick={openRegister}
+            variant="outline"
+            title="The sequential USG register — print or export (PC-PNDT discipline)"
+            className="h-10 border-white/40 bg-white/10 px-3 text-[12px] font-semibold text-white backdrop-blur hover:bg-white/20"
+          >
+            <BookOpen className="mr-1.5 h-4 w-4" /> Register
           </Button>
         </div>
         <div className="mt-3 flex flex-wrap gap-4 text-[11px] font-semibold text-white/80">
@@ -743,6 +764,43 @@ function ReprintOverlay({
         </div>
       </div>
       <iframe ref={frameRef} title="finalized-report" srcDoc={html} className="min-h-0 flex-1 bg-white" />
+    </div>
+  );
+}
+
+/** The sequential register — full-screen printable view + CSV export. */
+function RegisterOverlay({ html, onClose }: { html: string; onClose: () => void }) {
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-background/95 backdrop-blur">
+      <div className="flex items-center gap-2 border-b border-border bg-card px-4 py-2.5">
+        <BookOpen className="h-4 w-4 text-rose-600" />
+        <span className="text-[13px] font-bold">USG Register — sequential, never renumbered</span>
+        <div className="ml-auto flex gap-2">
+          <a href="/api/usg/register?format=csv" download>
+            <Button size="sm" variant="outline" className="h-8 border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100">
+              <Download className="mr-1.5 h-4 w-4" /> CSV
+            </Button>
+          </a>
+          <Button
+            size="sm"
+            className="h-8 bg-rose-600 hover:bg-rose-700"
+            onClick={() => {
+              const win = frameRef.current?.contentWindow;
+              if (win) {
+                win.focus();
+                win.print();
+              }
+            }}
+          >
+            <Printer className="mr-1.5 h-4 w-4" /> Print
+          </Button>
+          <Button size="sm" variant="outline" className="h-8" onClick={onClose}>
+            <RotateCcw className="mr-1.5 h-4 w-4" /> Back
+          </Button>
+        </div>
+      </div>
+      <iframe ref={frameRef} title="usg-register" srcDoc={html} className="min-h-0 flex-1 bg-white" />
     </div>
   );
 }

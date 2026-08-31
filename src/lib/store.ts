@@ -5,7 +5,7 @@
  */
 import { create } from "zustand";
 
-export type View = "usg" | "settings";
+export type View = "usg" | "insights" | "settings";
 
 type StudioState = {
   bootstrapped: boolean;

@@ -110,7 +110,7 @@ export async function updateSettings(patch: SettingsUpdate) {
     "careApiBase", "careApiKey", "orthancUrl", "orthancUsername", "orthancPassword",
     "ohifLanUrl", "ohifTailscaleUrl", "loginTheme", "loginBgUrl",
     "usgDoctorName", "usgDoctorQual", "usgDoctorRegNo", "usgMachineLine",
-    "usgFooterLine", "usgDeclarationLine",
+    "usgFooterLine", "usgDeclarationLine", "usgPrintStyle",
   ];
   const data: Record<string, string | boolean> = {};
   for (const k of allowed) {
@@ -138,6 +138,16 @@ export async function updateSettings(patch: SettingsUpdate) {
     data.usgShowMachine = !/^(0|false|off|no)$/i.test(patch.usgShowMachine.trim());
   } else if (typeof patch.usgShowMachine === "boolean") {
     data.usgShowMachine = patch.usgShowMachine;
+  }
+  // Print style: anything other than "classic" means the premium letterhead.
+  if (typeof patch.usgPrintStyle === "string") {
+    data.usgPrintStyle = patch.usgPrintStyle.trim() === "classic" ? "classic" : "premium";
+  }
+  // Compact print density toggle (same string-checkbox contract).
+  if (typeof patch.usgPrintCompact === "string") {
+    data.usgPrintCompact = !/^(0|false|off|no)$/i.test(patch.usgPrintCompact.trim());
+  } else if (typeof patch.usgPrintCompact === "boolean") {
+    data.usgPrintCompact = patch.usgPrintCompact;
   }
   await getSettings(); // ensure row exists
   await db.hospitalSettings.update({ where: { id: "singleton" }, data });

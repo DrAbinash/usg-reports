@@ -4,8 +4,8 @@
  * impression, and the whole thing prints on the letterhead.
  */
 import { describe, expect, test } from "vitest";
-import { initialState, getStudy, USG_STUDIES } from "@/lib/usg/studies";
-import { USG_PATHOLOGIES } from "@/lib/usg/pathologies";
+import { initialState, getStudy, USG_STUDIES, STUDY_GROUPS } from "@/lib/usg/studies";
+import { USG_PATHOLOGIES, USG_PATHOLOGIES_ALL } from "@/lib/usg/pathologies";
 import {
   applyPathology,
   extractTokens,
@@ -22,15 +22,20 @@ import { buildUsgReportHtml } from "@/lib/usg/print";
 const lookup = makeLookup(USG_PATHOLOGIES);
 
 describe("USG studies", () => {
-  test("eight study types exist with unique organ lists", () => {
+  test("22 study types exist with unique organ lists", () => {
     expect(USG_STUDIES.map((s) => s.key)).toEqual([
       "wa-female", "wa-male", "ua", "la-female", "la-male", "wa-child", "ob", "ep",
+      "kub", "thyroid", "breast", "scrotum", "tvs", "trus", "echo",
+      "doppler-lower", "doppler-upper", "carotid", "chest", "cranium", "orbit", "swelling",
     ]);
     for (const s of USG_STUDIES) {
-      expect(s.organs.length).toBeGreaterThan(2);
+      expect(s.organs.length).toBeGreaterThanOrEqual(2); // TRUS = prostate + seminal vesicles
       expect(s.allNormalImpression.length).toBeGreaterThan(0);
       const keys = s.organs.map((o) => o.key);
       expect(new Set(keys).size).toBe(keys.length);
+      // Every study sits in a real dropdown group so the 22-study select stays scannable.
+      expect(s.group ?? "").toBeTruthy();
+      expect(STUDY_GROUPS.some((g) => g.key === s.group)).toBe(true);
     }
   });
 

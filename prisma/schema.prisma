@@ -53,6 +53,8 @@ model HospitalSettings {
   usgShowMachine    Boolean  @default(true)
   usgFooterLine     String   @default("Kindly co-relate with clinico-pathological findings.")
   usgDeclarationLine String  @default("") // optional PC-PNDT style declaration under the signature
+  usgPrintStyle     String   @default("premium") // premium (gradient letterhead) | classic (plain B/W)
+  usgPrintCompact   Boolean  @default(false) // compact density for long studies
 
   updatedAt       DateTime @updatedAt
 }

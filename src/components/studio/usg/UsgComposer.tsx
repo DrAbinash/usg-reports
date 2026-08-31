@@ -34,6 +34,7 @@ import { lmpSummary, parseLmpInput } from "@/lib/usg/lmp";
 import { toScanDateInput } from "@/lib/usg/dates";
 import { UsgOrganCard } from "./UsgOrganCard";
 import { UsgPathologyDialog } from "./UsgPathologyDialog";
+import { UsgDiffPanel, type DiffSource } from "./UsgDiffPanel";
 
 export type UsgReportRow = {
   id: string;
@@ -67,6 +68,8 @@ export type UsgComposerProps = {
   report: UsgReportRow | null; // existing draft to continue, or null = new
   /** "New scan for patient" prefill from the registry (report stays null). */
   prefill?: { patientName?: string; patientPhone?: string; patientAge?: string; patientSex?: string } | null;
+  /** Previous-scan snapshot for the follow-up diff panel (follow-up drafts). */
+  diffSource?: DiffSource | null;
   onBack: () => void;
   onSaved: () => void; // refresh list
 };
@@ -78,7 +81,7 @@ function fmtPrintDate(iso: string): string {
     : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-export function UsgComposer({ pathologies, settings, report, prefill, onBack, onSaved }: UsgComposerProps) {
+export function UsgComposer({ pathologies, settings, report, prefill, diffSource, onBack, onSaved }: UsgComposerProps) {
   const initial = useMemo(() => {
     if (!report) return null;
     try {
@@ -465,6 +468,11 @@ export function UsgComposer({ pathologies, settings, report, prefill, onBack, on
             className="mt-2 border-border bg-panel text-[12px]" />
         ) : null}
       </div>
+
+      {/* Follow-up diff — what changed vs the previous scan */}
+      {diffSource && !isFinal ? (
+        <UsgDiffPanel source={diffSource} state={state} pathologies={pathologies} />
+      ) : null}
 
       {/* LMP calculator — pregnancy studies */}
       {isPregnancyStudy ? (

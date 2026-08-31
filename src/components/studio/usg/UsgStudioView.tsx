@@ -16,6 +16,7 @@ import { FileText, Loader2, Phone, Plus, Printer, RotateCcw, Search, Stethoscope
 import type { UsgPathologyDef } from "@/lib/usg/types";
 import type { UsgPrintSettings } from "@/lib/usg/print";
 import { formatUsgSerial } from "@/lib/usg/print";
+import { normalOverrideKey, type NormalOverrides } from "@/lib/usg/studies";
 import { UsgComposer, type UsgReportRow } from "./UsgComposer";
 import type { DiffSource } from "./UsgDiffPanel";
 
@@ -59,6 +60,7 @@ type ComposerPrefill = {
 export function UsgStudioView() {
   const [pathologies, setPathologies] = useState<UsgPathologyDef[]>([]);
   const [settings, setSettings] = useState<UsgPrintSettings>(EMPTY_SETTINGS);
+  const [normalOverrides, setNormalOverrides] = useState<NormalOverrides>({});
   const [reports, setReports] = useState<UsgReportRow[]>([]);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"" | "DRAFT" | "FINALIZED">("");
@@ -79,12 +81,21 @@ export function UsgStudioView() {
   >(null);
 
   const loadAll = useCallback(async () => {
-    const [pRes, sRes, rRes] = await Promise.all([
+    const [pRes, sRes, rRes, nRes] = await Promise.all([
       fetch("/api/usg/pathologies"),
       fetch("/api/settings"),
       fetch("/api/usg/reports"),
+      fetch("/api/usg/normals"),
     ]);
     if (pRes.ok) setPathologies(((await pRes.json()).pathologies ?? []) as UsgPathologyDef[]);
+    if (nRes.ok) {
+      const rows = ((await nRes.json()).overrides ?? []) as { studyKey: string; organKey: string; text: string }[];
+      const map: NormalOverrides = {};
+      for (const r of rows) {
+        if (r.text.trim()) map[normalOverrideKey(r.studyKey, r.organKey)] = r.text.trim();
+      }
+      setNormalOverrides(map);
+    }
     if (sRes.ok) {
       const s = (await sRes.json()).settings ?? {};
       setSettings({
@@ -298,6 +309,7 @@ export function UsgStudioView() {
           report={editing}
           prefill={prefill}
           diffSource={diffSource}
+          normalOverrides={normalOverrides}
           onBack={() => {
             setEditing(null);
             setCreating(false);

@@ -679,9 +679,46 @@ export function getStudy(key: string): UsgStudyDef | undefined {
   return USG_STUDIES.find((s) => s.key === key);
 }
 
+/** Normal-wording override map — key `${studyKey}:${organKey}` → text (v5). */
+export type NormalOverrides = Record<string, string>;
+
+export function normalOverrideKey(studyKey: string, organKey: string): string {
+  return `${studyKey}:${organKey}`;
+}
+
+/** A study clone whose organ normals carry the doctor's own wording. */
+export function applyNormalOverrides(
+  study: UsgStudyDef,
+  overrides: NormalOverrides | undefined | null,
+): UsgStudyDef {
+  if (!overrides || Object.keys(overrides).length === 0) return study;
+  let changed = false;
+  const organs = study.organs.map((o) => {
+    const text = overrides[normalOverrideKey(study.key, o.key)];
+    if (typeof text === "string" && text.trim() && text.trim() !== o.normal) {
+      changed = true;
+      return { ...o, normal: text.trim() };
+    }
+    return o;
+  });
+  return changed ? { ...study, organs } : study;
+}
+
+/** getStudy + the doctor's normal-wording overrides applied. */
+export function getStudyWithOverrides(
+  key: string,
+  overrides?: NormalOverrides | null,
+): UsgStudyDef | undefined {
+  const study = getStudy(key);
+  return study ? applyNormalOverrides(study, overrides) : undefined;
+}
+
 /** Fresh composer state for a study — every organ normal, no variables. */
-export function initialState(studyKey: string): UsgComposerState {
-  const study = getStudy(studyKey) ?? USG_STUDIES[0];
+export function initialState(
+  studyKey: string,
+  overrides?: NormalOverrides | null,
+): UsgComposerState {
+  const study = getStudyWithOverrides(studyKey, overrides) ?? USG_STUDIES[0];
   return {
     studyKey: study.key,
     organs: study.organs.map((o) => ({

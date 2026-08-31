@@ -8,7 +8,7 @@
  * doctor's trailing normal-summary lines.
  */
 import type { UsgComposerState, UsgOrganDef, UsgOrganState, UsgPathologyDef, UsgResolved, UsgStudyDef } from "./types";
-import { getStudy, initialState, USG_STUDIES } from "./studies";
+import { getStudy, getStudyWithOverrides, initialState, USG_STUDIES, type NormalOverrides } from "./studies";
 
 /** Tokens auto-derived from an organ key (kidney_rt → right/Right). */
 export const ORGAN_SIDE: Record<string, { side: string; Side: string }> = {
@@ -103,11 +103,15 @@ export function makeLookup(extra: UsgPathologyDef[] = []): PathologyLookup {
 }
 
 /** Normalise arbitrary JSON (DB row / client payload) into a valid state. */
-export function normaliseState(raw: unknown, fallbackStudy = "wa-female"): UsgComposerState {
-  const base = initialState(fallbackStudy);
+export function normaliseState(
+  raw: unknown,
+  fallbackStudy = "wa-female",
+  overrides?: NormalOverrides | null,
+): UsgComposerState {
+  const base = initialState(fallbackStudy, overrides);
   if (!raw || typeof raw !== "object") return base;
   const obj = raw as Partial<UsgComposerState>;
-  const study = getStudy(obj.studyKey ?? "") ?? getStudy(fallbackStudy) ?? USG_STUDIES[0];
+  const study = getStudyWithOverrides(obj.studyKey ?? "", overrides) ?? getStudyWithOverrides(fallbackStudy, overrides) ?? USG_STUDIES[0];
   const organs: UsgOrganState[] = study.organs.map((def) => {
     const incoming = Array.isArray(obj.organs)
       ? (obj.organs.find((o) => o && typeof o === "object" && o.organ === def.key) as Partial<UsgOrganState> | undefined)
@@ -137,9 +141,13 @@ export function normaliseState(raw: unknown, fallbackStudy = "wa-female"): UsgCo
 /** Switch study type. Pathology selections, manual edits and their filled
  *  measurements carry over; plain-normal organs reset to the new study's own
  *  normal wording (e.g. adult → child normals, with measurement slots). */
-export function switchStudy(state: UsgComposerState, studyKey: string): UsgComposerState {
+export function switchStudy(
+  state: UsgComposerState,
+  studyKey: string,
+  overrides?: NormalOverrides | null,
+): UsgComposerState {
   if (state.studyKey === studyKey) return state;
-  const target = getStudy(studyKey);
+  const target = getStudyWithOverrides(studyKey, overrides);
   if (!target) return state;
   const prev = new Map(state.organs.map((o) => [o.organ, o]));
   return {
@@ -161,8 +169,9 @@ export function applyPathology(
   organKey: string,
   pathologyKey: string | null,
   lookup: PathologyLookup,
+  overrides?: NormalOverrides | null,
 ): UsgComposerState {
-  return applyPathologies(state, organKey, pathologyKey === null ? [] : [pathologyKey], lookup);
+  return applyPathologies(state, organKey, pathologyKey === null ? [] : [pathologyKey], lookup, overrides);
 }
 
 /**
@@ -180,8 +189,9 @@ export function applyPathologies(
   organKey: string,
   keys: string[],
   lookup: PathologyLookup,
+  overrides?: NormalOverrides | null,
 ): UsgComposerState {
-  const study = getStudy(state.studyKey);
+  const study = getStudyWithOverrides(state.studyKey, overrides);
   if (!study) return state;
   const def = study.organs.find((o) => o.key === organKey);
   if (!def) return state;
@@ -241,8 +251,9 @@ export function resolve(
   state: UsgComposerState,
   lookup: PathologyLookup,
   technique: string,
+  overrides?: NormalOverrides | null,
 ): UsgResolved {
-  const study = getStudy(state.studyKey) ?? getStudy("wa-female")!;
+  const study = getStudyWithOverrides(state.studyKey, overrides) ?? getStudyWithOverrides("wa-female", overrides)!;
   const sections: UsgResolved["sections"] = [];
   const pathologyLines: string[] = [];
   const trailingLines: string[] = [];

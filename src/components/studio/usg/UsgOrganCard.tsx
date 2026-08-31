@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { Check, Pencil, Plus, RotateCcw, Stethoscope } from "lucide-react";
+import { Check, Pencil, Plus, RotateCcw, Stethoscope, Type } from "lucide-react";
 import type { UsgOrganDef, UsgOrganState, UsgPathologyDef, UsgVarDef } from "@/lib/usg/types";
 import { extractTokens, ORGAN_SIDE, selectedPathologies, substitute } from "@/lib/usg/composer";
 import { appendTranscript } from "@/lib/usg/dictation";
@@ -25,6 +25,12 @@ export type OrganCardProps = {
   def: UsgOrganDef;
   state: UsgOrganState;
   pathologies: UsgPathologyDef[];
+  /** The doctor's saved override for this organ's normal wording (v5). */
+  normalOverride?: string | null;
+  /** Save a new normal wording (persisted — every future report uses it). */
+  onSaveNormal: (text: string) => void;
+  /** Drop the override — back to the builtin wording. */
+  onResetNormal: () => void;
   /** null = clear to normal; a key = toggle that pathology on/off. */
   onToggle: (pathologyKey: string | null) => void;
   onVar: (key: string, value: string) => void;
@@ -38,10 +44,12 @@ function varLabel(defs: UsgVarDef[] | undefined, token: string): { label: string
   return { label: token.replace(/_/g, " ") };
 }
 
-export function UsgOrganCard({ def, state, pathologies, onToggle, onVar, onText, onAddCustom }: OrganCardProps) {
+export function UsgOrganCard({ def, state, pathologies, normalOverride, onSaveNormal, onResetNormal, onToggle, onVar, onText, onAddCustom }: OrganCardProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(state.text);
   const [showAll, setShowAll] = useState(false);
+  const [editingNormal, setEditingNormal] = useState(false);
+  const [normalDraft, setNormalDraft] = useState("");
 
   const selectedKeys = selectedPathologies(state);
   const selected = selectedKeys
@@ -90,7 +98,24 @@ export function UsgOrganCard({ def, state, pathologies, onToggle, onVar, onText,
             edited
           </Badge>
         ) : null}
+        {normalOverride && !anySelected ? (
+          <Badge variant="outline" className="h-5 border-violet-300 bg-violet-50 px-1.5 text-[9px] font-semibold text-violet-700" title="The normal wording is the doctor's own (customised in settings-free one click)">
+            my wording
+          </Badge>
+        ) : null}
         <div className="ml-auto flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn("h-7 w-7 p-0", normalOverride ? "text-violet-500" : "text-muted-foreground")}
+            title={normalOverride ? "Customise the normal wording (currently your own)" : "Customise this organ's normal wording — saved for every future report"}
+            onClick={() => {
+              setNormalDraft(normalOverride ?? def.normal);
+              setEditingNormal((v) => !v);
+            }}
+          >
+            <Type className="h-3.5 w-3.5" />
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -125,6 +150,58 @@ export function UsgOrganCard({ def, state, pathologies, onToggle, onVar, onText,
           ) : null}
         </div>
       </div>
+
+      {/* Normal-wording editor (v5) — retunes the builtin normal itself */}
+      {editingNormal ? (
+        <div className="mb-2.5 rounded-lg border border-violet-200 bg-violet-50/60 p-2.5">
+          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-violet-700">
+            Normal wording — saved for every future {def.label} report
+          </p>
+          <Textarea
+            value={normalDraft}
+            onChange={(e) => setNormalDraft(e.target.value)}
+            rows={4}
+            className="resize-y border-violet-200 bg-white text-[12px] leading-relaxed"
+          />
+          <div className="mt-1.5 flex items-center gap-1.5">
+            <Button
+              size="sm"
+              className="h-7 bg-violet-600 px-2.5 text-[11px] hover:bg-violet-700"
+              disabled={!normalDraft.trim()}
+              onClick={() => {
+                onSaveNormal(normalDraft);
+                setEditingNormal(false);
+              }}
+            >
+              Save wording
+            </Button>
+            {normalOverride ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-2.5 text-[11px]"
+                onClick={() => {
+                  onResetNormal();
+                  setEditingNormal(false);
+                }}
+              >
+                Reset to builtin
+              </Button>
+            ) : null}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2.5 text-[11px]"
+              onClick={() => setEditingNormal(false)}
+            >
+              Cancel
+            </Button>
+            {def.vars?.length ? (
+              <span className="ml-auto text-[10px] text-violet-500">{`{tokens} stay fill-in slots`}</span>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       {/* Pathology chips — multi-select toggles */}
       <div className="mb-2.5 flex flex-wrap gap-1.5">

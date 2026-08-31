@@ -21,7 +21,10 @@ import {
   type UsgBackupFile, type UsgFullBackupFile,
 } from "./backup";
 
-const BACKUP_DIR = path.join(process.cwd(), "data", "backups");
+/** Backup directory — overridable (tests point it at a scratch dir). */
+function backupDir(): string {
+  return process.env.USG_BACKUP_DIR ?? path.join(process.cwd(), "data", "backups");
+}
 const NIGHTLY_PREFIX = "usg-auto-";
 const NIGHTLY_KEEP = 14;
 
@@ -29,6 +32,8 @@ const NIGHTLY_KEEP = 14;
 export async function collectFullBackup(): Promise<UsgFullBackupFile> {
   const settings = await getSettings();
   const customs = await db.usgPathology.findMany({ orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] });
+  const normalOverrideRows = await db.usgNormalOverride.findMany().catch(() => []);
+  const normalOverrides = normalOverrideRows.map((r) => ({ studyKey: r.studyKey, organKey: r.organKey, text: r.text }));
   const patients = await db.usgPatient.findMany();
   const reports = await db.usgReport.findMany({ orderBy: { createdAt: "asc" } });
   const images = await db.usgReportImage.findMany({ orderBy: { sortOrder: "asc" } });
@@ -43,11 +48,13 @@ export async function collectFullBackup(): Promise<UsgFullBackupFile> {
       titleFragment: r.titleFragment,
       sortOrder: r.sortOrder,
     })),
+    normalOverrides,
   );
 
   return {
     ...base,
     format: "usg-clinic-backup",
+    normalOverrides: base.normalOverrides?.length ? base.normalOverrides : normalOverrides,
     patients: patients.map((p) => ({
       id: p.id, name: p.name, phone: p.phone, normName: p.normName, normPhone: p.normPhone, notes: p.notes,
     })),
@@ -112,6 +119,14 @@ export async function applyFullRestore(raw: unknown): Promise<FullRestoreResult>
     await updateSettings(patch);
     result.settingsRestored = Object.keys(patch).length;
   }
+  for (const n of asPersonalisation.normalOverrides ?? []) {
+    await db.usgNormalOverride.upsert({
+      where: { studyKey_organKey: { studyKey: n.studyKey, organKey: n.organKey } },
+      create: { studyKey: n.studyKey, organKey: n.organKey, text: n.text },
+      update: { text: n.text },
+    }).catch(() => undefined);
+  }
+
   for (const c of asPersonalisation.customPathologies) {
     await db.usgPathology.upsert({
       where: { organKey_label: { organKey: c.organKey, label: c.label } },
@@ -194,8 +209,9 @@ export type BackupStatus = {
 };
 
 export async function backupsDir(): Promise<string> {
-  await fs.mkdir(BACKUP_DIR, { recursive: true });
-  return BACKUP_DIR;
+  const dir = backupDir();
+  await fs.mkdir(dir, { recursive: true });
+  return dir;
 }
 
 export async function backupStatus(): Promise<BackupStatus> {
@@ -203,9 +219,10 @@ export async function backupStatus(): Promise<BackupStatus> {
   let files: BackupStatus["files"] = [];
   let lastNightlyAt: string | null = null;
   try {
-    const names = (await fs.readdir(BACKUP_DIR)).filter((n) => n.endsWith(".json"));
+    const dir = backupDir();
+    const names = (await fs.readdir(dir)).filter((n) => n.endsWith(".json"));
     const stats = await Promise.all(names.map(async (name) => {
-      const st = await fs.stat(path.join(BACKUP_DIR, name));
+      const st = await fs.stat(path.join(dir, name));
       return { name, bytes: st.size, modifiedAt: st.mtime.toISOString() };
     }));
     files = stats.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt)).slice(0, 20);

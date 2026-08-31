@@ -165,6 +165,21 @@ model UsgAudit {
   @@index([action])
 }
 
+// ── USG Studio — normal-wording overrides (v5) ──────────────────────────
+// The doctor can retune any builtin organ normal ("Liver appears normal…")
+// to her own phrasing without touching code. Keyed by (study, organ); the
+// composer applies them at every normal-text resolution point.
+model UsgNormalOverride {
+  id        String   @id @default(cuid())
+  studyKey  String
+  organKey  String
+  text      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studyKey, organKey])
+}
+
 // ── USG Studio — user-added custom pathologies ──────────────────────────
 // Builtin pathology entries live in code (src/lib/usg/pathologies.ts);
 // anything the doctor adds in the UI is persisted here and merged at runtime.

@@ -562,6 +562,8 @@ export function UsgStudioView() {
           )}
         </>
       )}
+
+      {registerHtml ? <RegisterOverlay html={registerHtml} onClose={() => setRegisterHtml(null)} /> : null}
     </div>
   );
 }

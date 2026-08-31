@@ -12,13 +12,14 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { BookOpen, Download, FileText, Loader2, Phone, Plus, Printer, RotateCcw, Search, Stethoscope, Trash2, Users, Waves, Repeat, History } from "lucide-react";
+import { BookOpen, Download, FileText, Loader2, MessageCircle, Phone, Plus, Printer, RotateCcw, Search, Stethoscope, Trash2, Users, Waves, Repeat, History } from "lucide-react";
 import type { UsgPathologyDef } from "@/lib/usg/types";
 import type { UsgPrintSettings } from "@/lib/usg/print";
 import { formatUsgSerial } from "@/lib/usg/print";
 import { normalOverrideKey, type NormalOverrides } from "@/lib/usg/studies";
 import { UsgComposer, type UsgReportRow } from "./UsgComposer";
 import type { DiffSource } from "./UsgDiffPanel";
+import { shareReportPdf } from "./sharePdf";
 
 const EMPTY_SETTINGS: UsgPrintSettings = {
   appTitle: "CARE Reporting Studio",
@@ -331,21 +332,24 @@ export function UsgStudioView() {
             loadPatients();
           }}
         />
-        {reprintHtml ? (
+        {registerHtml ? (
+          <RegisterOverlay
+            html={registerHtml}
+            onClose={() => setRegisterHtml(null)}
+          />
+        ) : null}
+        {reprintHtml && editing ? (
           <ReprintOverlay
             html={reprintHtml}
             serial={editing?.serialNo != null ? formatUsgSerial(editing.serialNo) : undefined}
+            reportId={editing.id}
+            patientName={editing.patientName}
+            date={new Date(editing.scanDate ?? editing.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
             onClose={() => {
               setReprintHtml(null);
               setEditing(null);
             }}
             onFollowUp={() => editing && duplicate(editing)}
-          />
-        ) : null}
-        {registerHtml ? (
-          <RegisterOverlay
-            html={registerHtml}
-            onClose={() => setRegisterHtml(null)}
           />
         ) : null}
       </div>
@@ -718,24 +722,42 @@ function PatientHistory({
   );
 }
 
-/** Finalized report = frozen snapshot view + reprint + follow-up. */
+/** Finalized report = frozen snapshot view + reprint + follow-up + share. */
 function ReprintOverlay({
-  html,
-  serial,
-  onClose,
-  onFollowUp,
+  html, serial, reportId, patientName, date, onClose, onFollowUp,
 }: {
   html: string;
   serial?: string;
+  reportId: string;
+  patientName: string;
+  date: string;
   onClose: () => void;
   onFollowUp: () => void;
 }) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background/95 backdrop-blur">
-      <div className="flex items-center gap-2 border-b border-border bg-card px-4 py-2.5">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-4 py-2.5">
         <span className="text-[13px] font-bold">Finalized report{serial ? ` — ${serial}` : ""}</span>
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex flex-wrap gap-2">
+          <a href={`/api/usg/reports/${reportId}/pdf`} target="_blank" rel="noreferrer" download>
+            <Button size="sm" variant="outline" className="h-8 border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100" title="Open / download the PDF">
+              <Download className="mr-1.5 h-4 w-4" /> PDF
+            </Button>
+          </a>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+            title="Share on WhatsApp — PDF via the mobile share sheet, or download + wa.me on desktop"
+            onClick={() => {
+              void shareReportPdf({ reportId, patientName, serial, date }).then((r) => {
+                if (r === "failed") toast.error("Could not build the PDF");
+              });
+            }}
+          >
+            <MessageCircle className="mr-1.5 h-4 w-4" /> WhatsApp
+          </Button>
           <Button
             size="sm"
             variant="outline"

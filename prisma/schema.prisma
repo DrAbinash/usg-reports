@@ -51,6 +51,8 @@ model HospitalSettings {
   usgSignatureUrl   String   @default("")      // scanned signature image printed over the name line
   /** Nightly full-clinic backup to data/backups (v5) — off by default. */
   usgAutoBackup     Boolean  @default(false)
+  /** HMAC secret for the printed-report verification QR (v5, minted once). */
+  qrSecret          String?
 
   updatedAt       DateTime @updatedAt
 }

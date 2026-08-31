@@ -1,5 +1,6 @@
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { audit } from "@/lib/usg/audit";
 
 type Ctx = { params: Promise<{ id: string; imageId: string }> };
 
@@ -33,5 +34,6 @@ export async function DELETE(_req: Request, ctx: Ctx) {
   const image = await db.usgReportImage.findFirst({ where: { id: imageId, reportId: id } });
   if (!image) return Response.json({ error: "Not found" }, { status: 404 });
   await db.usgReportImage.delete({ where: { id: imageId } });
+  await audit({ action: "image.remove", reportId: id, detail: "still removed" });
   return Response.json({ ok: true });
 }

@@ -5,6 +5,7 @@ import { normaliseState } from "@/lib/usg/composer";
 import { resolveColumns } from "@/lib/usg/server";
 import { parseScanDate } from "@/lib/usg/dates";
 import { linkPatient } from "@/lib/usg/patients";
+import { audit } from "@/lib/usg/audit";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -67,6 +68,12 @@ export async function PUT(req: Request, ctx: Ctx) {
   }
 
   const report = await db.usgReport.update({ where: { id }, data });
+  await audit({
+    action: "report.update",
+    reportId: report.id,
+    patientName: report.patientName,
+    detail: "draft saved",
+  });
   return Response.json({ report });
 }
 
@@ -77,5 +84,12 @@ export async function DELETE(_req: Request, ctx: Ctx) {
   const existing = await db.usgReport.findUnique({ where: { id } });
   if (!existing) return Response.json({ error: "Not found" }, { status: 404 });
   await db.usgReport.delete({ where: { id } });
+  await audit({
+    action: "report.delete",
+    reportId: id,
+    patientName: existing.patientName,
+    serialNo: existing.serialNo,
+    detail: existing.serialNo != null ? `register no. ${existing.serialNo} removed from the list (gaps remain)` : "draft deleted",
+  });
   return Response.json({ ok: true });
 }

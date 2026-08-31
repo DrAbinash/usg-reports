@@ -5,6 +5,7 @@ import { normaliseState } from "@/lib/usg/composer";
 import { resolveColumns } from "@/lib/usg/server";
 import { parseScanDate } from "@/lib/usg/dates";
 import { linkPatient } from "@/lib/usg/patients";
+import { audit } from "@/lib/usg/audit";
 
 export async function GET(req: Request) {
   const guard = await requireSession();
@@ -66,6 +67,12 @@ export async function POST(req: Request) {
       scanDate: parseScanDate(body.scanDate),
       ...cols,
     },
+  });
+  await audit({
+    action: "report.create",
+    reportId: report.id,
+    patientName: report.patientName,
+    detail: `${study.label} draft created`,
   });
   return Response.json({ report });
 }

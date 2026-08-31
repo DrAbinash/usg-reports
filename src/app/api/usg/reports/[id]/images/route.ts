@@ -1,6 +1,7 @@
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { validateImageDataUrl } from "@/lib/usg/images";
+import { audit } from "@/lib/usg/audit";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -34,6 +35,12 @@ export async function POST(req: Request, ctx: Ctx) {
       caption: typeof body.caption === "string" ? body.caption.trim().slice(0, 120) : "",
       sortOrder: (max._max.sortOrder ?? 0) + 10,
     },
+  });
+  await audit({
+    action: "image.attach",
+    reportId: id,
+    patientName: report.patientName,
+    detail: `still attached (${Math.round((check.ok ? check.bytes : 0) / 1000)} KB)`,
   });
   return Response.json({ image });
 }

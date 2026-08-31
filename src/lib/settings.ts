@@ -72,6 +72,12 @@ export async function updateSettings(patch: SettingsUpdate) {
   } else if (typeof patch.usgPrintCompact === "boolean") {
     data.usgPrintCompact = patch.usgPrintCompact;
   }
+  // Nightly full-clinic backup toggle (v5).
+  if (typeof patch.usgAutoBackup === "string") {
+    data.usgAutoBackup = !/^(0|false|off|no)$/i.test(patch.usgAutoBackup.trim());
+  } else if (typeof patch.usgAutoBackup === "boolean") {
+    data.usgAutoBackup = patch.usgAutoBackup;
+  }
   await getSettings(); // ensure row exists
   await db.hospitalSettings.update({ where: { id: "singleton" }, data });
 }

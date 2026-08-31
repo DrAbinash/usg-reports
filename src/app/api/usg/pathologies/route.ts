@@ -1,5 +1,6 @@
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { audit } from "@/lib/usg/audit";
 import { loadAllPathologies } from "@/lib/usg/server";
 import { USG_PATHOLOGIES } from "@/lib/usg/pathologies";
 
@@ -59,6 +60,7 @@ export async function POST(req: Request) {
       sortOrder,
     },
   });
+  await audit({ action: "pathology.add", detail: `custom finding added: ${row.label}` });
   return Response.json({
     pathology: {
       key: "custom:" + row.id,

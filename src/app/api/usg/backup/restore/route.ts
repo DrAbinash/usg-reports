@@ -1,23 +1,35 @@
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { updateSettings } from "@/lib/settings";
-import { parseBackup, type UsgBackupFile } from "@/lib/usg/backup";
+import { parseBackup } from "@/lib/usg/backup";
+import { applyFullRestore } from "@/lib/usg/backupServer";
+import { audit } from "@/lib/usg/audit";
 
 /**
- * Restore a studio personalisation backup: settings go through the SAME
- * whitelist as the Settings screen (updateSettings — secrets and unknown
- * fields can never be injected from a backup file), and custom pathologies
- * are upserted by their (organKey, label) unique key so restoring the same
- * file twice is idempotent. Customs on this machine that are NOT in the
- * backup are left in place — a restore adds back what was saved, it never
- * silently deletes work done since.
+ * Restore a backup — both kinds, auto-detected by the format marker:
+ *
+ *   usg-studio-backup  → personalisation only (settings through the SAME
+ *                        whitelist as the Settings screen; custom findings
+ *                        upserted by (organ, label) — idempotent).
+ *   usg-clinic-backup  → full disaster recovery: patients and reports
+ *                        upserted by id, images replaced per report, serial
+ *                        clashes skipped (never corrupt the register).
  */
 export async function POST(req: Request) {
   const guard = await requireSession();
   if (guard) return guard;
 
   const body = await req.json().catch(() => null);
-  let backup: UsgBackupFile;
+  if (body && typeof body === "object" && (body as Record<string, unknown>).format === "usg-clinic-backup") {
+    const result = await applyFullRestore(body);
+    await audit({
+      action: "backup.restore",
+      detail: `full clinic restore — ${result.reportsRestored} reports, ${result.patientsRestored} patients, ${result.imagesRestored} stills${result.reportsSkipped ? `, ${result.reportsSkipped} skipped (serial clash)` : ""}`,
+    });
+    return Response.json({ ok: true, mode: "full", ...result });
+  }
+
+  let backup;
   try {
     backup = parseBackup(body);
   } catch (e) {
@@ -57,8 +69,14 @@ export async function POST(req: Request) {
     restored++;
   }
 
+  await audit({
+    action: "backup.restore",
+    detail: `personalisation restore — ${Object.keys(patch).length} settings, ${restored} custom findings`,
+  });
+
   return Response.json({
     ok: true,
+    mode: "personalisation",
     settingsRestored: Object.keys(patch).length,
     customPathologiesRestored: restored,
     exportedAt: backup.exportedAt,

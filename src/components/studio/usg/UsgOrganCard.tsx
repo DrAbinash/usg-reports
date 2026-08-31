@@ -18,6 +18,8 @@ import { cn } from "@/lib/utils";
 import { Check, Pencil, Plus, RotateCcw, Stethoscope } from "lucide-react";
 import type { UsgOrganDef, UsgOrganState, UsgPathologyDef, UsgVarDef } from "@/lib/usg/types";
 import { extractTokens, ORGAN_SIDE, selectedPathologies, substitute } from "@/lib/usg/composer";
+import { appendTranscript } from "@/lib/usg/dictation";
+import { DictationButton } from "./DictationButton";
 
 export type OrganCardProps = {
   def: UsgOrganDef;
@@ -203,17 +205,26 @@ export function UsgOrganCard({ def, state, pathologies, onToggle, onVar, onText,
 
       {/* Finding text */}
       {editing ? (
-        <Textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => {
-            setEditing(false);
-            if (draft !== state.text) onText(draft);
-          }}
-          rows={5}
-          className="resize-y text-[12px] leading-relaxed"
-          placeholder="Finding text…"
-        />
+        <div>
+          <Textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => {
+              setEditing(false);
+              if (draft !== state.text) onText(draft);
+            }}
+            rows={5}
+            className="resize-y text-[12px] leading-relaxed"
+            placeholder="Finding text…"
+          />
+          <div className="mt-1 flex items-center gap-1">
+            <DictationButton
+              onText={(t) => setDraft((prev) => appendTranscript(prev, t))}
+              title="Dictate this finding — recognised speech appends to the text"
+            />
+            <span className="text-[10px] text-faint">dictate into this finding</span>
+          </div>
+        </div>
       ) : (
         <p
           className={cn(

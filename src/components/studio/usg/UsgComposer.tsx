@@ -15,13 +15,14 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, CalendarDays, ChevronDown, FileCheck2, Loader2, Phone, Printer, Save, Search, Settings2 } from "lucide-react";
+import { ArrowLeft, CalendarDays, ChevronDown, Command, FileCheck2, Loader2, Phone, Printer, Save, Search, Settings2 } from "lucide-react";
 import type { UsgComposerState, UsgPathologyDef } from "@/lib/usg/types";
 import { USG_SEX_CHILD } from "@/lib/usg/types";
 import { USG_STUDIES, STUDY_GROUPS, getStudy } from "@/lib/usg/studies";
 import {
   applyPathologies,
   makeLookup,
+  normaliseState,
   pathologiesForOrgan,
   resolve,
   selectedPathologies,
@@ -38,6 +39,10 @@ import { UsgDiffPanel, type DiffSource } from "./UsgDiffPanel";
 import { UsgBiometryCalc } from "./UsgBiometryCalc";
 import { UsgCalculators } from "./UsgCalculators";
 import { UsgImagesCard, type ImageRow, type PendingImage } from "./UsgImagesCard";
+import { DictationButton } from "./DictationButton";
+import { UsgStudyPicker } from "./UsgStudyPicker";
+import { appendTranscript } from "@/lib/usg/dictation";
+import { clearDraft, draftKey, loadDraft, saveDraft, snapshotDiffers, type DraftSnapshot } from "@/lib/usg/drafts";
 
 export type UsgReportRow = {
   id: string;
@@ -132,6 +137,16 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
   const captionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Crash recovery (v5): a local snapshot newer than the saved row is offered
+  // for restore; a debounced autosave keeps the snapshot fresh.
+  const dKey = useMemo(() => draftKey(report?.id ?? null), [report]);
+  const [restoreSnap, setRestoreSnap] = useState<DraftSnapshot | null>(null);
+  const [lastAutosave, setLastAutosave] = useState<number | null>(null);
+  const dirtyRef = useRef(false);
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
+  const [pickerOpen, setPickerOpen] = useState(false);
+
   const lookup = useMemo(() => makeLookup(pathologies), [pathologies]);
   const resolved = useMemo(() => resolve(state, lookup, technique), [state, lookup, technique]);
 
@@ -159,6 +174,96 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
 
   const isPregnancyStudy = studyKey === "ob" || studyKey === "ep";
   const isFinal = report?.status === "FINALIZED" || finalizedHere;
+
+  // ── Crash recovery: detect a local snapshot ahead of the saved row ──────
+  const initialSnap = useMemo(
+    () => ({
+      patientName,
+      patientPhone,
+      patientAge,
+      patientSex,
+      referredBy,
+      studyKey,
+      technique,
+      scanDate,
+      state,
+    }),
+    // Intentionally computed once from the initial mount values.
+    [],
+  );
+
+
+  useEffect(() => {
+    if (isFinal) return;
+    const snap = loadDraft(dKey);
+    if (snap && snapshotDiffers(snap, initialSnap)) setRestoreSnap(snap);
+  }, [dKey, initialSnap]);
+
+  // ── Debounced autosave of the composer snapshot ────────────────────────
+  const currentSnap = useMemo<DraftSnapshot>(
+    () => ({ savedAt: Date.now(), ...initialSnap, patientName, patientPhone, patientAge, patientSex, referredBy, studyKey, technique, scanDate, state }),
+    [initialSnap, patientName, patientPhone, patientAge, patientSex, referredBy, studyKey, technique, scanDate, state],
+  );
+
+  useEffect(() => {
+    if (isFinal) return;
+    dirtyRef.current = snapshotDiffers({ ...currentSnap, savedAt: 0 }, initialSnap);
+    if (!dirtyRef.current) return;
+    const t = setTimeout(() => {
+      if (saveDraft(dKey, { ...currentSnap, savedAt: Date.now() })) setLastAutosave(Date.now());
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [dKey, currentSnap, isFinal, initialSnap]);
+
+  // ── Unsaved-changes guard on tab close / reload ──────────────────────
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (dirtyRef.current && !isFinal) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [isFinal]);
+
+  // ── Keyboard-first flow: Ctrl+S save · Ctrl+Enter finalize · Ctrl+K study ─
+  const persistRef = useRef<((status: "" | "finalize") => Promise<string | null>) | null>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      if (e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        if (!isFinal) setPickerOpen(true);
+      } else if (e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        if (!isFinal && !busyRef.current) void persistRef.current?.("");
+      } else if (e.key === "Enter") {
+        if (!isFinal && !busyRef.current) {
+          e.preventDefault();
+          void persistRef.current?.("finalize");
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isFinal]);
+
+  const restoreDraft = () => {
+    if (!restoreSnap) return;
+    setPatientName(restoreSnap.patientName);
+    setPatientPhone(restoreSnap.patientPhone);
+    setPatientAge(restoreSnap.patientAge);
+    setPatientSex(restoreSnap.patientSex as "F" | "M" | typeof USG_SEX_CHILD);
+    setReferredBy(restoreSnap.referredBy);
+    setScanDate(restoreSnap.scanDate);
+    if (restoreSnap.technique) setTechnique(restoreSnap.technique);
+    setState(normaliseState(restoreSnap.state, restoreSnap.studyKey));
+    if (getStudy(restoreSnap.studyKey)) setStudyKey(restoreSnap.studyKey);
+    setRestoreSnap(null);
+    toast.success("Local draft restored");
+  };
 
   const previewHtml = useMemo(
     () =>
@@ -288,8 +393,11 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         const body = (await res.json()) as { serialNo?: number };
         if (typeof body.serialNo === "number") setSerial(formatUsgSerial(body.serialNo));
         setFinalizedHere(true);
+        dirtyRef.current = false;
+        clearDraft(dKey);
         toast.success(`Report finalized — register no. ${formatUsgSerial(body.serialNo ?? 0)} frozen for reprint`);
       } else {
+        dirtyRef.current = false;
         toast.success("Draft saved");
       }
       onSaved();
@@ -302,6 +410,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
       setBusy("");
     }
   };
+  persistRef.current = persist;
 
   /** Upload pending stills once the report row exists (called after save). */
   const flushPendingImages = async (id: string) => {
@@ -564,6 +673,17 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
             <ChevronDown className={cn("h-3 w-3 transition-transform", showTechnique && "rotate-180")} />
           </button>
           <UsgCalculators />
+          {lastAutosave && !isFinal ? (
+            <span
+              className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700"
+              title="A crash-recovery copy is kept on this device while you type"
+            >
+              autosaved {new Date(lastAutosave).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          ) : null}
+          <span className="hidden items-center gap-1 rounded-full border border-border bg-panel px-2 py-0.5 text-[10px] font-medium text-faint md:flex" title="Keyboard shortcuts">
+            <Command className="h-3 w-3" /> K study · Ctrl+S save · Ctrl+↵ finalize
+          </span>
           <span className="font-semibold text-foreground">{resolved.title}</span>
           <span className={cn("rounded-full px-2 py-0.5 font-semibold", abnormalCount ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700")}>
             {abnormalCount ? `${abnormalCount} organ${abnormalCount > 1 ? "s" : ""} affected` : "All normal"}
@@ -580,10 +700,60 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
           )}
         </div>
         {showTechnique ? (
-          <Textarea value={technique} onChange={(e) => setTechnique(e.target.value)} rows={2}
-            className="mt-2 border-border bg-panel text-[12px]" />
+          <div className="mt-2 flex items-start gap-1">
+            <Textarea
+              value={technique}
+              onChange={(e) => setTechnique(e.target.value)}
+              rows={2}
+              disabled={isFinal}
+              className="border-border bg-panel text-[12px]"
+              placeholder="Technique…"
+            />
+            <DictationButton
+              onText={(t) => setTechnique((prev) => appendTranscript(prev, t))}
+              title="Dictate the technique — recognised speech appends here"
+            />
+          </div>
         ) : null}
       </div>
+
+      {/* Crash-recovery banner — a local snapshot newer than the saved row */}
+      {restoreSnap ? (
+        <div className="shrink-0 border-b border-amber-200 bg-amber-50/90 px-4 py-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11.5px] font-semibold text-amber-800">
+              Unsaved draft found on this device from{" "}
+              {new Date(restoreSnap.savedAt).toLocaleString("en-IN", {
+                day: "2-digit",
+                month: "short",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}{" "}
+              — newer than the saved copy.
+            </span>
+            <div className="ml-auto flex gap-1.5">
+              <Button
+                size="sm"
+                className="h-7 bg-amber-600 px-2.5 text-[11px] hover:bg-amber-700"
+                onClick={restoreDraft}
+              >
+                Restore
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-2.5 text-[11px]"
+                onClick={() => {
+                  clearDraft(dKey);
+                  setRestoreSnap(null);
+                }}
+              >
+                Discard
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {/* Follow-up diff — what changed vs the previous scan */}
       {diffSource && !isFinal ? (
@@ -665,8 +835,17 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
           <div className="rounded-xl border border-border bg-card p-3.5 shadow-sm">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-[12px] font-bold tracking-wide">IMPRESSION</span>
-              <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                manual
+              <div className="flex items-center gap-1.5">
+                {impressionManual ? (
+                  <DictationButton
+                    onText={(t) =>
+                      setState((s) => ({ ...s, impressionOverride: appendTranscript(s.impressionOverride ?? "", t) }))
+                    }
+                    title="Dictate the impression"
+                  />
+                ) : null}
+                <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  manual
                 <Switch
                   checked={impressionManual}
                   onCheckedChange={(v) => {
@@ -723,6 +902,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
           </div>
         </div>
       </div>
+      </div>
 
       {/* Hidden print frame */}
       <iframe ref={printRef} title="print" className="hidden" />
@@ -734,6 +914,13 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         editing={null}
         onClose={() => setDialogOrgan(null)}
         onSaved={onSaved}
+      />
+
+      <UsgStudyPicker
+        open={pickerOpen}
+        currentKey={studyKey}
+        onPick={pickStudy}
+        onClose={() => setPickerOpen(false)}
       />
     </div>
   );

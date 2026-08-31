@@ -68,6 +68,7 @@ export function UsgStudioView() {
   const [reprintHtml, setReprintHtml] = useState<string | null>(null);
   const [prefill, setPrefill] = useState<ComposerPrefill | null>(null);
   const [diffSource, setDiffSource] = useState<DiffSource | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   // Registry (Patients mode)
   const [mode, setMode] = useState<"reports" | "patients">("reports");
@@ -235,6 +236,20 @@ export function UsgStudioView() {
 
   const composerMode = creating || editing !== null;
 
+  // "/" focuses the search box on the list screens (keyboard-first flow).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "/" || composerMode) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if (mode === "patients" && patientDetail) return;
+      e.preventDefault();
+      searchRef.current?.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
   const filtered = useMemo(
     () =>
       reports.filter((r) => {
@@ -386,9 +401,10 @@ export function UsgStudioView() {
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
               <Input
+                ref={searchRef}
                 value={patientQuery}
                 onChange={(e) => setPatientQuery(e.target.value)}
-                placeholder="Search patient name or phone…"
+                placeholder="Search patient name or phone… ( / )"
                 className="h-9 border-border bg-panel pl-8 text-[13px]"
               />
             </div>
@@ -459,9 +475,10 @@ export function UsgStudioView() {
             <div className="relative min-w-[220px] flex-1">
               <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
               <Input
+                ref={searchRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search patient, study, doctor, impression…"
+                placeholder="Search patient, study, doctor, impression… ( / )"
                 className="h-9 border-border bg-panel pl-8 text-[13px]"
               />
             </div>

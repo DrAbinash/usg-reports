@@ -505,6 +505,171 @@ export const USG_PATHOLOGIES: UsgPathologyDef[] = [
     titleFragment: "mesenteric lymphadenopathy",
     vars: [V("d1", "Largest node L"), V("d2", "Largest node W")],
   }),
+
+  // ── PAEDIATRIC (child whole abdomen — her Child/ formats) ─────────────────
+  P({
+    key: "others-intestinal-obstruction", organ: "others", label: "Intestinal Obstruction", category: "Paediatric",
+    text: "Distended fluid and feces filled small bowel loops with to and fro movement of the contents. Mild interloop collection in peritoneal cavity.",
+    impression: ["Distended fluid and feces filled small bowel loops with to and fro movement of the contents S/O Intestinal Obstruction.", "Mild interloop collection in peritoneal cavity."],
+    titleFragment: "intestinal obstruction",
+  }),
+  P({
+    key: "others-chps", organ: "others", label: "CHPS (Pyloric Stenosis)", category: "Paediatric",
+    text: "Distended stomach. Thickened and elongated pyloric canal. No peristaltic movements through the canal. Canal length {len} cm & canal diameter {dia} cm. No enlarged mesenteric lymph nodes or intraperitoneal collection.",
+    impression: ["Thickened and elongated pyloric canal S/O Congenital hypertrophic pyloric stenosis."],
+    titleFragment: "congenital hypertrophic pyloric stenosis",
+    suggestions: ["Suggested: Clinical correlation"],
+    vars: [V("len", "Canal length"), V("dia", "Canal diameter")],
+  }),
+  P({
+    key: "others-gastric-outlet-obstruction", organ: "others", label: "Gastric Outlet Obstruction", category: "Paediatric",
+    text: "Grossly distended stomach filled with undigested food particles and fluid with to & fro movement of contents.",
+    impression: ["Grossly distended stomach filled with undigested food particles and fluid S/O Gastric outlet obstruction."],
+    titleFragment: "gastric outlet obstruction",
+  }),
+
+  // ── PREGNANCY — FETUS & PRESENTATION (antenatal) ─────────────────────────
+  P({
+    key: "fetus-breech", organ: "fetus", label: "Breech Presentation", category: "Pregnancy",
+    text: "There is a Single live intrauterine fetus in breech presentation at the time of examination.",
+    impression: ["A single live intrauterine fetus at {gaw} wk {gad} days of average gestational age in breech presentation."],
+  }),
+  P({
+    key: "fetus-transverse", organ: "fetus", label: "Transverse Lie", category: "Pregnancy",
+    text: "There is a Single live intrauterine fetus in transverse lie ( Head towards left) at the time of examination.",
+    impression: ["A single live intrauterine fetus at {gaw} wk {gad} days of average gestational age in transverse lie ( Head towards left)."],
+  }),
+  P({
+    key: "fetus-oblique", organ: "fetus", label: "Oblique Lie", category: "Pregnancy",
+    text: "There is a Single live intrauterine fetus in Oblique lie ( Head downwards and towards left) at the time of examination.",
+    impression: ["A single live intrauterine fetus at {gaw} wk {gad} days of average gestational age in Oblique lie ( Head downwards and towards left)."],
+  }),
+  P({
+    key: "fetus-variable", organ: "fetus", label: "Variable Presentation", category: "Pregnancy",
+    text: "There is a Single live intrauterine fetus in variable presentation at the time of examination.",
+    impression: ["A single live intrauterine fetus at {gaw} wk {gad} days of average gestational age in variable presentation."],
+  }),
+  P({
+    key: "fetus-tachycardia", organ: "fetus", label: "Fetal Tachycardia", category: "Pregnancy",
+    text: "There is a Single live intrauterine fetus in cephalic presentation at the time of examination.\nFetal tachycardia ( {fhr2} bpm ).",
+    impression: ["A single live intrauterine fetus at {gaw} wk {gad} days of average gestational age in cephalic presentation.", "Fetal tachycardia ( {fhr2} bpm )."],
+    vars: [V("fhr2", "FHR recorded", "bpm")],
+  }),
+  P({
+    key: "fetus-twins", organ: "fetus", label: "Twin Pregnancy", category: "Pregnancy",
+    text: "There are two live intrauterine fetuses, both in variable presentation at the time of examination. F.H.R noted in both foetuses. Intertwin membrane is seen.",
+    impression: ["Twin pregnancy at {gaw} weeks of average gestational age."],
+  }),
+  P({
+    key: "fetus-iud", organ: "fetus", label: "IUD (No Cardiac Activity)", category: "Pregnancy",
+    text: "There is a Single intrauterine fetus in cephalic presentation at the time of examination. No cardiac activity / fetal somatic movements seen.",
+    impression: ["A single intrauterine fetus at {gaw} wk {gad} days of average gestational age with no cardiac activity — S/O Intrauterine death."],
+    suggestions: ["Suggested: Follow up scan"],
+  }),
+
+  // ── PREGNANCY — FETAL SURVEY (antenatal) ─────────────────────────────────
+  P({
+    key: "anatomy-no-gross-anomaly", organ: "anatomy", label: "No Gross Anomalies Detected", category: "Pregnancy",
+    // Cosmetic wording variant — no impression lines, no title fragment, so a
+    // normal report stays "normal" when this alternative survey line is used.
+    text: "No gross fetal congenital anomalies detected.",
+    impression: [],
+  }),
+  P({
+    key: "anatomy-anencephaly", organ: "anatomy", label: "Anencephaly", category: "Pregnancy",
+    text: "The fetal skull vault and cerebral hemispheres are not visualised above the level of orbits — S/O Anencephaly. Rest of the fetal survey appears normal.",
+    impression: ["Anencephaly fetus at {gaw} wk {gad} days of average gestational age."],
+    titleFragment: "anencephaly",
+  }),
+
+  // ── PREGNANCY — PLACENTA & OS (antenatal) ────────────────────────────────
+  P({
+    key: "placenta-low-lying-reaching", organ: "placenta", label: "Low-lying — Reaching Os", category: "Pregnancy",
+    text: "Placenta is located {position} ( maturity Grade {grade} ). The lower part is extending upto the lower segment, the lower margin of placenta is reaching upto the internal Os. Internal os is closed.",
+    impression: ["{Position} low lying placenta, lower margin reaching upto the internal Os."],
+    titleFragment: "low lying placenta",
+    vars: [V("position", "Position (ant/post)", ""), V("grade", "Maturity grade", "")],
+  }),
+  P({
+    key: "placenta-low-lying-distance", organ: "placenta", label: "Low-lying — {d} cm from Os", category: "Pregnancy",
+    text: "Placenta is located {position} ( maturity Grade {grade} ). The lower part is extending upto the lower segment, the lower margin of placenta is {d} cm from the internal Os. Internal os is closed.",
+    impression: ["{Position} low lying placenta, lower margin {d} cm from the internal Os."],
+    titleFragment: "low lying placenta",
+    vars: [V("position", "Position (ant/post)", ""), V("grade", "Maturity grade", ""), V("d", "Margin–Os distance")],
+  }),
+  P({
+    key: "placenta-previa-partial", organ: "placenta", label: "Placenta Previa — Partial", category: "Pregnancy",
+    text: "Placenta is located {position} ( maturity Grade {grade} ). The lower part is extending upto the lower segment, lower margin is partially covering internal Os. Internal os is closed.",
+    impression: ["{Position} placenta previa, lower margin partially covering the internal Os."],
+    titleFragment: "placenta previa",
+    vars: [V("position", "Position (ant/post)", ""), V("grade", "Maturity grade", "")],
+  }),
+  P({
+    key: "placenta-previa-complete", organ: "placenta", label: "Placenta Previa — Complete", category: "Pregnancy",
+    text: "Placenta is located {position} ( maturity Grade {grade} ). The lower part is extending upto the lower segment, lower margin is completely covering internal Os. Internal os is closed.",
+    impression: ["{Position} placenta previa, lower margin completely covering the internal Os."],
+    titleFragment: "placenta previa",
+    vars: [V("position", "Position (ant/post)", ""), V("grade", "Maturity grade", "")],
+  }),
+
+  // ── PREGNANCY — LIQUOR (antenatal) ───────────────────────────────────────
+  P({
+    key: "liquor-oligohydramnios", organ: "liquor", label: "Oligohydramnios", category: "Pregnancy",
+    text: "Liquor AFI- {afi} cm (Oligohydramnios).",
+    impression: ["Oligohydramnios ( AFI- {afi} cm)."],
+    titleFragment: "oligohydramnios",
+    vars: [V("afi", "AFI")],
+  }),
+  P({
+    key: "liquor-polyhydramnios", organ: "liquor", label: "Polyhydramnios", category: "Pregnancy",
+    text: "Liquor AFI- {afi} cm ( Largest pocket – {lp} cm ).",
+    impression: ["Polyhydramnios ( AFI- {afi} cm)."],
+    titleFragment: "polyhydramnios",
+    vars: [V("afi", "AFI"), V("lp", "Largest pocket")],
+  }),
+
+  // ── PREGNANCY — GRAVID UTERUS (early pregnancy, ≤13 wks) ─────────────────
+  P({
+    key: "gravid-very-early", organ: "gravid-uterus", label: "Very Early (≤5 wks)", category: "Pregnancy",
+    text: "Gravid uterus containing a single echogenic intrauterine embryo corresponding to {gaw} weeks & {gad} days of gestational age. Cardiac activity could not be visualised or traced.",
+    impression: ["Gravid uterus containing a single echogenic intrauterine embryo corresponding to {gaw} weeks & {gad} days of gestational age. Cardiac activity could not be visualised or traced."],
+    suggestions: ["Suggested: Follow up scan"],
+    vars: [V("gaw", "GA weeks", ""), V("gad", "GA days", "")],
+  }),
+  P({
+    key: "gravid-blighted-ovum", organ: "gravid-uterus", label: "Blighted Ovum", category: "Pregnancy",
+    text: "Measures {u1} x {u2} x {u3} cm. Gravid uterus with a well defined intrauterine gestational sac corresponding to {gaw} wks {gad} days of average gestational age. No embryonic pole or yolk sac seen.",
+    impression: ["Gravid uterus with a well defined intrauterine gestational sac corresponding to {gaw} wks {gad} days of average gestational age. No embryonic pole or yolk sac seen S/o Blighted Ovum."],
+    suggestions: ["Suggested: Follow up scan"],
+    vars: [V("u1", "Uterus L"), V("u2", "Uterus W"), V("u3", "Uterus H"), V("gaw", "GA weeks", ""), V("gad", "GA days", "")],
+  }),
+  P({
+    key: "gravid-missed-abortion", organ: "gravid-uterus", label: "Missed Abortion", category: "Pregnancy",
+    text: "Bulky anteverted uterus contains solitary intrauterine gestational sac with an foetus node within. The gestational sac is double walled with irregular outline. The foetal node shows:\n- No cardiac flickering.\n- No somatic movement.\n- No M-mode cardiac tracing (Heart Rate: Nil).\nOs is closed. Cervix appears long. The gestational age is {gaw} weeks {gad} days as per C.R.L measurements.\n\nC.R.L. measures : {crl} mm = {gaw} weeks {gad} days.",
+    impression: ["A single intrauterine embryo at {gaw} weeks {gad} days of average gestational age. No cardiac activity or somatic movements seen.", "? Missed abortion."],
+    suggestions: ["Suggested: Follow up scan"],
+    vars: [V("crl", "C.R.L", "mm"), V("gaw", "GA weeks", ""), V("gad", "GA days", "")],
+  }),
+  P({
+    key: "gravid-subchorionic-hematoma", organ: "gravid-uterus", label: "Subchorionic Hematoma", category: "Pregnancy",
+    text: "Bulky anteverted uterus contains solitary intrauterine gestational sac with an alive foetus node within. The gestational sac is double walled with regular outline. An ill defined hypoechoic collection ( {d1} x {d2} cm) in the subchorionic region ? hematoma. The foetal node shows:\n- Active cardiac flickering.\n- Active somatic movement.\n- Regular M-mode cardiac tracing (Heart Rate: {fhr} bpm).\nOs is closed. Cervix appears long. The gestational age is {gaw} weeks {gad} days as per C.R.L measurements.\n\nC.R.L. measures : {crl} mm = {gaw} weeks {gad} days\n\nE.D.D : {edd}",
+    impression: ["A single live intrauterine embryo at {gaw} weeks {gad} days of average gestational age with subchorionic hematoma."],
+    vars: [V("d1", "Collection L"), V("d2", "Collection W"), V("crl", "C.R.L", "mm"), V("fhr", "Heart rate", "bpm"), V("edd", "E.D.D", "date"), V("gaw", "GA weeks", ""), V("gad", "GA days", "")],
+  }),
+  P({
+    key: "gravid-rpoc", organ: "gravid-uterus", label: "RPOC", category: "Pregnancy",
+    text: "Measures {u1} x {u2} x {u3} cm. The uterus is positioned in anteversion. An ill defined mixed echogenicity structure ( {d1} x {d2} cm ) is seen in the uterine cavity S/O ? Retained product conception. No focal pathology or abnormalities of outline are noted. The cervical echo is normal.",
+    impression: ["An ill defined mixed echogenicity structure in the uterine cavity S/O ? Retained product conception."],
+    titleFragment: "retained product conception",
+    vars: [V("u1", "Uterus L"), V("u2", "Uterus W"), V("u3", "Uterus H"), V("d1", "Structure L"), V("d2", "Structure W")],
+  }),
+  P({
+    key: "gravid-twin-early", organ: "gravid-uterus", label: "Twin (Early)", category: "Pregnancy",
+    text: "Bulky anteverted uterus contains two intrauterine gestational sac with alive embryonic node within. The gestational sac is double walled with regular outline. The foetal node shows:\n- Active cardiac flickering.\n- Active somatic movement.\n- Regular M-mode cardiac tracing of embryo one (Heart Rate: {fhr1} bpm).\n- Regular M-mode cardiac tracing of embryo two (Heart Rate: {fhr2} bpm).\nOs is closed. Cervix appears long. The average gestational age is {gaw} weeks & {gad} days as per C.R.L measurements.\n\nC.R.L. measures of embryo one: {crl1} mm = {gaw} weeks {gad} days\nC.R.L. measures of embryo two: {crl2} mm = {gaw} weeks {gad} days\n\nE.D.D : {edd}",
+    impression: ["Twin intrauterine pregnancy at {gaw} weeks {gad} days of average gestational age."],
+    titleFragment: "twin pregnancy",
+    vars: [V("crl1", "CRL embryo 1", "mm"), V("crl2", "CRL embryo 2", "mm"), V("fhr1", "HR embryo 1", "bpm"), V("fhr2", "HR embryo 2", "bpm"), V("edd", "E.D.D", "date"), V("gaw", "GA weeks", ""), V("gad", "GA days", "")],
+  }),
 ];
 
 /** Quick lookup by key. */

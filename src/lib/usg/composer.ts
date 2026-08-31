@@ -16,6 +16,8 @@ const ORGAN_SIDE: Record<string, { side: string; Side: string }> = {
   kidney_lt: { side: "left", Side: "Left" },
 };
 
+const capitalise = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+
 /** All {tokens} used by a text, in order of first appearance. */
 export function extractTokens(text: string): string[] {
   const out: string[] = [];
@@ -39,6 +41,10 @@ export function substitute(
   return text.replace(/\{([a-zA-Z0-9_]+)\}/g, (whole, token: string) => {
     const v = vars[token];
     if (v && v.trim()) return v.trim();
+    // Capitalised twin of a filled token ({Position} ⇆ {position})
+    const lower = token.charAt(0).toLowerCase() + token.slice(1);
+    const lv = vars[lower];
+    if (lv && lv.trim()) return capitalise(lv.trim());
     if (side && side[token as keyof typeof side]) return side[token as keyof typeof side];
     return "___";
   });
@@ -83,7 +89,9 @@ export function normaliseState(raw: unknown, fallbackStudy = "wa-female"): UsgCo
   };
 }
 
-/** Switch study type, carrying over whatever still applies. */
+/** Switch study type. Pathology selections, manual edits and their filled
+ *  measurements carry over; plain-normal organs reset to the new study's own
+ *  normal wording (e.g. adult → child normals, with measurement slots). */
 export function switchStudy(state: UsgComposerState, studyKey: string): UsgComposerState {
   if (state.studyKey === studyKey) return state;
   const target = getStudy(studyKey);
@@ -93,14 +101,16 @@ export function switchStudy(state: UsgComposerState, studyKey: string): UsgCompo
     studyKey: target.key,
     organs: target.organs.map((def) => {
       const old = prev.get(def.key);
-      if (old) return { ...old };
+      if (old && (old.pathology || old.custom)) return { ...old };
       return { organ: def.key, pathology: null, custom: false, text: def.normal, vars: {} };
     }),
     impressionOverride: state.impressionOverride,
   };
 }
 
-/** Select a pathology for an organ (or null = back to normal). */
+/** Select a pathology for an organ (or null = back to normal). Already-typed
+ *  measurement values survive the swap whenever the new wording uses the same
+ *  token (e.g. AFI typed on a normal liquor line is kept for Oligohydramnios). */
 export function applyPathology(
   state: UsgComposerState,
   organKey: string,
@@ -114,13 +124,15 @@ export function applyPathology(
   const isKidney = organKey === "kidney_rt" || organKey === "kidney_lt";
   const organs = state.organs.map((o) => {
     if (o.organ !== organKey) return o;
-    if (pathologyKey === null) {
-      return { organ: organKey, pathology: null, custom: false, text: def.normal, vars: {} };
+    const nextText = pathologyKey === null ? def.normal : lookup(pathologyKey)?.text;
+    if (pathologyKey !== null) {
+      const p = lookup(pathologyKey);
+      const allowed = !!p && (p.organ === organKey || (isKidney && p.organ === "kidney"));
+      if (!allowed) return o; // unknown or wrong-organ pathology — ignore
     }
-    const p = lookup(pathologyKey);
-    const allowed = !!p && (p.organ === organKey || (isKidney && p.organ === "kidney"));
-    if (!allowed) return o; // unknown or wrong-organ pathology — ignore
-    return { organ: organKey, pathology: pathologyKey, custom: false, text: p.text, vars: {} };
+    const kept: Record<string, string> = {};
+    if (nextText) for (const t of extractTokens(nextText)) if (o.vars[t]?.trim()) kept[t] = o.vars[t];
+    return { organ: organKey, pathology: pathologyKey, custom: false, text: nextText ?? def.normal, vars: kept };
   });
   return { ...state, organs };
 }
@@ -167,6 +179,12 @@ export function resolve(
   const fragments: string[] = [];
   let anyPathology = false;
 
+  // Obstetric impressions quote values typed on OTHER cards (mean GA lives on
+  // the biometry card, the presentation line lives on the fetus card), so
+  // impression lines substitute against the union of every organ's vars.
+  const mergedVars: Record<string, string> = {};
+  for (const o of state.organs) Object.assign(mergedVars, o.vars);
+
   for (const o of state.organs) {
     const def = organDef(study, o.organ);
     if (!def) continue;
@@ -175,24 +193,33 @@ export function resolve(
 
     const p = o.pathology ? lookup(o.pathology) : undefined;
     if (p) {
-      anyPathology = true;
-      for (const line of p.impression) pathologyLines.push(substitute(line, o.vars, o.organ));
+      // A wording variant with no impression lines and no title fragment is a
+      // cosmetic swap (e.g. "No gross fetal congenital anomalies detected.") —
+      // it must not turn a normal report into a pathological one.
+      const cosmetic = p.impression.length === 0 && !p.titleFragment;
+      if (!cosmetic) anyPathology = true;
+      const lineVars = { ...mergedVars, ...o.vars };
+      for (const line of p.impression) pathologyLines.push(substitute(line, lineVars, o.organ));
       for (const s of p.suggestions ?? []) if (!suggestions.includes(s)) suggestions.push(s);
-      if (p.titleFragment) fragments.push(substitute(p.titleFragment, o.vars, o.organ));
+      if (p.titleFragment) fragments.push(substitute(p.titleFragment, lineVars, o.organ));
     } else if (def.normalImpression) {
-      trailingLines.push(def.normalImpression);
+      trailingLines.push(substitute(def.normalImpression, mergedVars));
     }
   }
 
   // Impression rule (the doctor's pattern): pathology lines first in organ
   // order, then the trailing normal-summary lines; all-normal reports use the
   // study's normal impression; a fully-normal upper group in an otherwise
-  // abnormal whole-abdomen report opens with "Normal scan of upper abdomen."
+  // abnormal whole-abdomen report opens with "Normal scan of upper abdomen.".
+  // Obstetric family (normalImpressionFirst): the leading normal line ("A
+  // single live intrauterine fetus at 28 wk 05 days…") prints FIRST.
   let autoLines: string[];
   if (!anyPathology) {
-    autoLines = [...study.allNormalImpression];
+    autoLines = study.allNormalImpression.map((l) => substitute(l, mergedVars));
   } else {
-    autoLines = [...pathologyLines];
+    autoLines = study.normalImpressionFirst
+      ? [...trailingLines, ...pathologyLines]
+      : [...pathologyLines];
     if (study.upperGroupNormalLine) {
       const upperAllNormal = study.organs
         .filter((d) => UPPER_KEYS.includes(d.key))
@@ -200,16 +227,18 @@ export function resolve(
       const hasNonUpper = study.organs.some((d) => !UPPER_KEYS.includes(d.key));
       if (upperAllNormal && hasNonUpper) autoLines.unshift(study.upperGroupNormalLine);
     }
-    autoLines.push(...trailingLines);
+    if (!study.normalImpressionFirst) autoLines.push(...trailingLines);
   }
 
   const impression = state.impressionOverride?.trim()
     ? state.impressionOverride.split(/\n+/).map((l) => l.trim()).filter(Boolean)
     : autoLines;
 
+  const finalSuggestions = anyPathology ? suggestions : study.defaultSuggestions ?? [];
+
   const title = fragments.length
     ? `${study.title} WITH ${fragments.map((f) => f.toUpperCase()).join(" AND ")}`
     : study.title;
 
-  return { study, title, sections, impression, suggestions, technique };
+  return { study, title, sections, impression, suggestions: finalSuggestions, technique };
 }

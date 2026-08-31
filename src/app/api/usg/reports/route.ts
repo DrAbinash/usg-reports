@@ -52,7 +52,7 @@ export async function POST(req: Request) {
     data: {
       patientName,
       patientAge: String(body.patientAge ?? "").trim(),
-      patientSex: body.patientSex === "M" ? "M" : "F",
+      patientSex: body.patientSex === "M" || body.patientSex === "CHILD" ? body.patientSex : "F",
       referredBy: String(body.referredBy ?? "").trim(),
       technique,
       stateJson: JSON.stringify(state),

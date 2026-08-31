@@ -30,7 +30,7 @@ export async function PUT(req: Request, ctx: Ctx) {
 
   if (typeof body.patientName === "string" && body.patientName.trim()) data.patientName = body.patientName.trim();
   if (typeof body.patientAge === "string") data.patientAge = body.patientAge.trim();
-  if (body.patientSex === "M" || body.patientSex === "F") data.patientSex = body.patientSex;
+  if (body.patientSex === "M" || body.patientSex === "F" || body.patientSex === "CHILD") data.patientSex = body.patientSex;
   if (typeof body.referredBy === "string") data.referredBy = body.referredBy.trim();
 
   let stateJson: string | null = null;

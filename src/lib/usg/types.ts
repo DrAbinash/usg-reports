@@ -57,6 +57,16 @@ export type UsgStudyDef = {
   organs: UsgOrganDef[];
   /** Impression lines when every organ is normal. */
   allNormalImpression: string[];
+  /** Suggestion lines printed under the impression of an all-normal report. */
+  defaultSuggestions?: string[];
+  /**
+   * Obstetric family: the leading normal line ("A single live intrauterine
+   * fetus at 28 wk 05 days…") prints BEFORE pathology lines — the opposite
+   * of the whole-abdomen family where pathology lines come first.
+   */
+  normalImpressionFirst?: boolean;
+  /** PC-PNDT: print the mandatory sex-determination declaration block. */
+  pcpndt?: boolean;
   /**
    * Line inserted when all "upper" organs (liver→kidneys) are normal but the
    * report carries a lower/pelvic pathology — the doctor's
@@ -64,6 +74,9 @@ export type UsgStudyDef = {
    */
   upperGroupNormalLine?: string;
 };
+
+/** Patient sex value for the child profile (prints as "Child"). */
+export const USG_SEX_CHILD = "CHILD";
 
 /** Runtime state of one organ in a report. */
 export type UsgOrganState = {

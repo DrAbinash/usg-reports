@@ -70,11 +70,20 @@ export function buildUsgReportHtml(
     ? `<div class="suggestions">${resolved.suggestions.map((s) => `<p>${esc(s)}</p>`).join("")}</div>`
     : "";
 
+  const doctor = settings.usgDoctorName?.trim() || "Sonologist";
+
   const declaration = settings.usgDeclarationLine?.trim()
     ? `<p class="declaration">${esc(settings.usgDeclarationLine.trim())}</p>`
     : "";
 
-  const doctor = settings.usgDoctorName?.trim() || "Sonologist";
+  // PC-PNDT Act: every obstetric scan carries the doctor's statutory
+  // declaration that the sex of the foetus was neither detected nor disclosed.
+  const pcpndt = resolved.study.pcpndt
+    ? `<div class="pcpndt">
+      <div class="pcpndt-title">DECLARATION OF DOCTOR PERFORMING ULTRA SONOGRAPHY</div>
+      <p>I ${esc(doctor)}${settings.usgDoctorQual ? `, ${esc(settings.usgDoctorQual)}` : ""} declare that while conducting USG on above patient, I have neither detected nor disclosed the sex of the foetus to anybody in any manner.</p>
+    </div>`
+    : "";
 
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8" />
@@ -131,6 +140,10 @@ export function buildUsgReportHtml(
 
   .declaration { margin-top: 16px; font-size: 8pt; font-weight: 600; color: #61788C; border: 1px solid #AFCDE8; border-radius: 7px; padding: 6px 10px; text-align: justify; }
 
+  .pcpndt { margin-top: 18px; border: 1.5px solid #1B4F8A; border-radius: 8px; padding: 8px 12px; background: #F4F8FC; page-break-inside: avoid; }
+  .pcpndt-title { font-size: 9pt; font-weight: 800; letter-spacing: 1.2px; color: #143E6E; text-transform: uppercase; margin-bottom: 4px; }
+  .pcpndt p { font-size: 8.5pt; font-weight: 600; color: #16222E; text-align: justify; line-height: 1.55; }
+
   .footer { margin-top: 22px; border-top: 2.5px solid #1B4F8A; padding-top: 5px; font-size: 8pt; font-weight: 600; color: #61788C; display: flex; justify-content: space-between; }
 </style></head>
 <body>
@@ -179,6 +192,7 @@ export function buildUsgReportHtml(
     ${settings.usgDoctorRegNo ? `<div class="sub">Reg. No: ${esc(settings.usgDoctorRegNo)}</div>` : ""}
   </div></div>
 
+  ${pcpndt}
   ${declaration}
 
   <div class="footer">

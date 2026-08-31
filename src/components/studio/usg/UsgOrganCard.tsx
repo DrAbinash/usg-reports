@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { Check, Pencil, Plus, RotateCcw, Stethoscope } from "lucide-react";
 import type { UsgOrganDef, UsgOrganState, UsgPathologyDef, UsgVarDef } from "@/lib/usg/types";
-import { extractTokens } from "@/lib/usg/composer";
+import { extractTokens, substitute } from "@/lib/usg/composer";
 
 export type OrganCardProps = {
   def: UsgOrganDef;
@@ -214,7 +214,7 @@ export function UsgOrganCard({ def, state, pathologies, onSelect, onVar, onText,
         <div className="mt-2 rounded-lg border-l-[3px] border-rose-300 bg-rose-50/60 px-2.5 py-1.5">
           {selected.impression.map((line, i) => (
             <p key={i} className="text-[11px] font-semibold leading-snug text-rose-800">
-              ⇒ {line}
+              ⇒ {substitute(line, state.vars, def.key)}
             </p>
           ))}
         </div>

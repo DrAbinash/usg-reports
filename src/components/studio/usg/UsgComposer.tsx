@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, ChevronDown, FileCheck2, Loader2, Printer, Save, Search, Settings2 } from "lucide-react";
 import type { UsgComposerState, UsgPathologyDef } from "@/lib/usg/types";
+import { USG_SEX_CHILD } from "@/lib/usg/types";
 import { USG_STUDIES, getStudy } from "@/lib/usg/studies";
 import {
   applyPathology,
@@ -95,7 +96,7 @@ export function UsgComposer({ pathologies, settings, report, onBack, onSaved }: 
     () =>
       buildUsgReportHtml(
         settings,
-        { name: patientName || "—", age: patientAge, sex: patientSex, referredBy, date: today() },
+        { name: patientName || "—", age: patientAge, sex: patientSex === USG_SEX_CHILD ? "Child" : patientSex, referredBy, date: today() },
         resolved,
       ),
     [settings, patientName, patientAge, patientSex, referredBy, resolved],
@@ -107,17 +108,29 @@ export function UsgComposer({ pathologies, settings, report, onBack, onSaved }: 
     setStudyKey(k);
     setTechnique(target.technique);
     setState((s) => switchStudy(s, k));
+    // Study drives patient type: pregnancy studies are female, the child
+    // scaffold switches the strip to the Child profile.
+    if (k === "wa-child") setPatientSex(USG_SEX_CHILD);
+    else if (target.sex) setPatientSex(target.sex);
   };
 
-  const changeSex = (sex: "F" | "M") => {
+  const changeSex = (sex: "F" | "M" | typeof USG_SEX_CHILD) => {
     setPatientSex(sex);
-    // Follow the doctor's convention: whole/lower abdomen track patient sex.
-    if (sex === "M" && (studyKey === "wa-female" || studyKey === "la-female")) {
+    // Follow the doctor's convention: whole/lower abdomen track patient sex;
+    // Child swaps to the paediatric scaffold; picking M/F on the child study
+    // only changes what prints in the Sex box (the scaffold stays paediatric).
+    const adultSexStudy =
+      studyKey === "wa-female" || studyKey === "wa-male" || studyKey === "la-female" || studyKey === "la-male";
+    if (sex === USG_SEX_CHILD) {
+      if (adultSexStudy) pickStudy("wa-child");
+    } else if (sex === "M" && (studyKey === "wa-female" || studyKey === "la-female")) {
       pickStudy(studyKey === "wa-female" ? "wa-male" : "la-male");
     } else if (sex === "F" && (studyKey === "wa-male" || studyKey === "la-male")) {
       pickStudy(studyKey === "wa-male" ? "wa-female" : "la-female");
     }
   };
+
+  const printedSex = patientSex === USG_SEX_CHILD ? "Child" : patientSex;
 
   const abnormalCount = state.organs.filter((o) => o.pathology).length;
 
@@ -232,13 +245,14 @@ export function UsgComposer({ pathologies, settings, report, onBack, onSaved }: 
             <Input value={patientAge} onChange={(e) => setPatientAge(e.target.value)} placeholder="Yrs"
               className="h-9 border-border bg-panel text-[13px]" />
           </div>
-          <div className="grid w-[80px] gap-1">
+          <div className="grid w-[92px] gap-1">
             <Label className="text-[10px] font-semibold uppercase tracking-wide text-faint">Sex</Label>
-            <Select value={patientSex} onValueChange={(v) => changeSex(v as "F" | "M")}>
+            <Select value={patientSex} onValueChange={(v) => changeSex(v as "F" | "M" | typeof USG_SEX_CHILD)}>
               <SelectTrigger className="h-9 border-border bg-panel text-[13px]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="F">F</SelectItem>
                 <SelectItem value="M">M</SelectItem>
+                <SelectItem value={USG_SEX_CHILD}>Child</SelectItem>
               </SelectContent>
             </Select>
           </div>

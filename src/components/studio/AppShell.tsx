@@ -1,10 +1,12 @@
 "use client";
 /** App shell: slim header + left nav + main region. Single-screen USG studio. */
+import { useEffect, useState } from "react";
 import { useStudio } from "@/lib/store";
 import { SettingsView } from "./SettingsView";
 import { UsgStudioView } from "./usg/UsgStudioView";
 import { UsgInsightsView } from "./usg/UsgInsightsView";
 import { UsgWorklistView } from "./usg/UsgWorklistView";
+import { UsgBirthdayGreeting, BirthdayHeaderButton, birthdayDismissed, rememberBirthdayDismissed, useBirthdayFlag } from "./usg/UsgBirthdayGreeting";
 import { Waves, Settings2, LogOut, Stethoscope, BarChart3, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -21,6 +23,20 @@ const NAV: { id: View; label: string; icon: typeof Waves; tint: string }[] = [
 export function AppShell() {
   const { view, setView } = useStudio();
   const router = useRouter();
+
+  // v6.1 Sonologist's Day — the card auto-opens once on the birthday, then
+  // a cake stays in the header for the rest of the day to reopen it.
+  const bday = useBirthdayFlag();
+  const [bdayCard, setBdayCard] = useState(false);
+  useEffect(() => {
+    if (!bday?.today) return;
+    const year = new Date().getFullYear();
+    if (!birthdayDismissed(year)) setBdayCard(true);
+  }, [bday]);
+  const closeBirthdayCard = () => {
+    rememberBirthdayDismissed(new Date().getFullYear());
+    setBdayCard(false);
+  };
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -48,6 +64,7 @@ export function AppShell() {
         </div>
 
         <div className="ml-auto flex items-center gap-3">
+          {bday?.today ? <BirthdayHeaderButton onClick={() => setBdayCard(true)} /> : null}
           <button
             onClick={logout}
             className="flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
@@ -92,6 +109,10 @@ export function AppShell() {
           {view === "settings" && <SettingsView />}
         </main>
       </div>
+
+      {bday?.today ? (
+        <UsgBirthdayGreeting open={bdayCard} onClose={closeBirthdayCard} name={bday.name} birthday={bday.birthday} />
+      ) : null}
     </div>
   );
 }

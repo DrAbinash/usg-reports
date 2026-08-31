@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SectionLabel } from "./bits";
 import { LOGIN_THEMES, type LoginThemeName } from "./LockScreen";
-import { Building2, UserRound, ShieldCheck, PlugZap, Check, X, Palette, Upload, Trash2, Waves } from "lucide-react";
+import { Building2, UserRound, ShieldCheck, PlugZap, Check, X, Palette, Upload, Trash2, Waves, Download, ArchiveRestore } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +25,7 @@ type Settings = {
   usgMachineLine: string; usgShowMachine: boolean;
   usgFooterLine: string; usgDeclarationLine: string;
   usgPrintStyle: string; usgPrintCompact: boolean;
+  usgPrintPaper: string; usgSignatureUrl: string;
 };
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -55,6 +56,8 @@ export function SettingsView() {
   const [pin, setPin] = useState({ current: "", next: "" });
   const [bgUploading, setBgUploading] = useState(false);
   const bgFileRef = useRef<HTMLInputElement>(null);
+  const restoreFileRef = useRef<HTMLInputElement>(null);
+  const [restoring, setRestoring] = useState(false);
   /** Snapshot of the last SAVED state — used to warn before testing unsaved edits. */
   const savedRef = useRef<Settings | null>(null);
 
@@ -86,6 +89,34 @@ export function SettingsView() {
       toast.success("Settings saved");
     } else {
       toast.error("Could not save settings");
+    }
+  };
+
+  /** Restore a studio personalisation backup — settings + custom findings. */
+  const restoreBackup = async (file: File) => {
+    setRestoring(true);
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      const res = await fetch("/api/usg/backup/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(json),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Restore failed");
+      toast.success(`Backup restored — ${body.settingsRestored ?? 0} settings, ${body.customPathologiesRestored ?? 0} custom findings`);
+      // Reload settings so the restored values show immediately.
+      const fresh = await fetch("/api/settings").then((r) => r.json());
+      if (fresh.settings) {
+        setS(fresh.settings);
+        savedRef.current = fresh.settings;
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Restore failed");
+    } finally {
+      setRestoring(false);
+      if (restoreFileRef.current) restoreFileRef.current.value = "";
     }
   };
 
@@ -347,6 +378,39 @@ export function SettingsView() {
               </button>
             </div>
           </Field>
+          <Field label="Paper size" hint="A4 = full sheet. A5 = half-sheet — the whole report scales down for A5 stock; ideal for short studies and quick prints.">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setS({ ...s, usgPrintPaper: "a4" } as Settings)}
+                className={cn(
+                  "flex-1 rounded-lg border px-3 py-2 text-left text-[12px] font-semibold transition-colors",
+                  (s.usgPrintPaper ?? "a4") !== "a5"
+                    ? "border-rose-300 bg-rose-50 text-rose-800 ring-1 ring-rose-200"
+                    : "border-border bg-panel text-muted-foreground hover:border-rose-200",
+                )}
+              >
+                A4
+                <span className="block text-[10px] font-normal text-faint">Full sheet · 210 × 297 mm</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setS({ ...s, usgPrintPaper: "a5" } as Settings)}
+                className={cn(
+                  "flex-1 rounded-lg border px-3 py-2 text-left text-[12px] font-semibold transition-colors",
+                  s.usgPrintPaper === "a5"
+                    ? "border-rose-300 bg-rose-50 text-rose-800 ring-1 ring-rose-200"
+                    : "border-border bg-panel text-muted-foreground hover:border-rose-200",
+                )}
+              >
+                A5
+                <span className="block text-[10px] font-normal text-faint">Half sheet · 148 × 210 mm</span>
+              </button>
+            </div>
+          </Field>
+          <Field label="Scanned signature (optional)" hint="Image URL (or data-URL) of the doctor's scanned signature — printed over the name line instead of the empty rule. Scan the signature on white paper, crop tightly.">
+            <Input value={s.usgSignatureUrl ?? ""} onChange={(e) => set("usgSignatureUrl", e.target.value)} placeholder="https://… or data:image/png;base64,…" className="h-9 text-[13px]" />
+          </Field>
           <label className="flex cursor-pointer items-center gap-2 text-[12px] font-medium text-muted-foreground">
             <input
               type="checkbox"
@@ -365,6 +429,45 @@ export function SettingsView() {
             />
             Compact print density (smaller type — long studies like echo fit one page)
           </label>
+
+          {/* Backup & restore — the whole studio personalisation as one JSON file */}
+          <div className="space-y-2.5 rounded-xl border border-rose-200 bg-rose-50/40 p-3.5">
+            <div className="flex items-center gap-2 text-[12px] font-bold text-rose-800">
+              <ArchiveRestore className="h-4 w-4" /> Backup &amp; restore
+            </div>
+            <p className="text-[11px] leading-relaxed text-rose-700/90">
+              One JSON file carries everything that makes the studio personal — letterhead &amp; identity settings,
+              print preferences and every custom quick-select finding you added. Patient reports and secrets
+              (PIN, integration keys) never travel in a backup. Restore on any machine and the studio is yours again.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <a href="/api/usg/backup" download>
+                <Button size="sm" variant="outline" className="h-8 border-rose-200 bg-white text-[11.5px] text-rose-700 hover:bg-rose-100">
+                  <Download className="mr-1.5 h-3.5 w-3.5" /> Download backup (.json)
+                </Button>
+              </a>
+              <input
+                ref={restoreFileRef}
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) restoreBackup(f);
+                }}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 border-rose-200 bg-white text-[11.5px] text-rose-700 hover:bg-rose-100"
+                disabled={restoring}
+                onClick={() => restoreFileRef.current?.click()}
+              >
+                <Upload className="mr-1.5 h-3.5 w-3.5" /> {restoring ? "Restoring…" : "Restore from file"}
+              </Button>
+            </div>
+          </div>
+
           <Button onClick={save} className="h-9 text-[12.5px]">Save</Button>
         </TabsContent>
 

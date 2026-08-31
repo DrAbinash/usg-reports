@@ -2,8 +2,12 @@
 /**
  * One organ card: pathology chips (Normal + library), measurement inputs for
  * the {tokens} in the finding text, inline text editor, and the organ's
- * contribution to the impression. Selecting "Fatty Liver — Gr I" here
- * replaces ONLY this organ's finding — the rest of the report stays normal.
+ * contribution to the impression.
+ *
+ * Combined findings: chips TOGGLE — an organ can carry several pathologies at
+ * once (fatty liver + haemangioma + hepatomegaly…). The finding text prints
+ * each selected wording as its own paragraph and the impression unions every
+ * line. "Normal" clears the whole selection.
  */
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -13,13 +17,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { Check, Pencil, Plus, RotateCcw, Stethoscope } from "lucide-react";
 import type { UsgOrganDef, UsgOrganState, UsgPathologyDef, UsgVarDef } from "@/lib/usg/types";
-import { extractTokens, ORGAN_SIDE, substitute } from "@/lib/usg/composer";
+import { extractTokens, ORGAN_SIDE, selectedPathologies, substitute } from "@/lib/usg/composer";
 
 export type OrganCardProps = {
   def: UsgOrganDef;
   state: UsgOrganState;
   pathologies: UsgPathologyDef[];
-  onSelect: (pathologyKey: string | null) => void;
+  /** null = clear to normal; a key = toggle that pathology on/off. */
+  onToggle: (pathologyKey: string | null) => void;
   onVar: (key: string, value: string) => void;
   onText: (text: string) => void;
   onAddCustom: (organKey: string, after?: string) => void;
@@ -31,14 +36,19 @@ function varLabel(defs: UsgVarDef[] | undefined, token: string): { label: string
   return { label: token.replace(/_/g, " ") };
 }
 
-export function UsgOrganCard({ def, state, pathologies, onSelect, onVar, onText, onAddCustom }: OrganCardProps) {
+export function UsgOrganCard({ def, state, pathologies, onToggle, onVar, onText, onAddCustom }: OrganCardProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(state.text);
   const [showAll, setShowAll] = useState(false);
 
-  const selected = state.pathology ? pathologies.find((p) => p.key === state.pathology) : null;
+  const selectedKeys = selectedPathologies(state);
+  const selected = selectedKeys
+    .map((k) => pathologies.find((p) => p.key === k))
+    .filter((p): p is UsgPathologyDef => !!p);
+  const anySelected = selected.length > 0;
   const tokens = useMemo(() => extractTokens(state.text), [state.text]);
-  const varDefs = selected?.vars ?? def.vars;
+  // Measurement labels: first definition that mentions the token wins.
+  const varDefs = selected.length ? selected.find((p) => p.vars?.length)?.vars ?? selected[0].vars : def.vars;
   // {side}/{Side} on a paired organ card (kidney/thyroid lobe/breast/testis/
   // globe/carotid/pleura) auto-fills from the card itself — no input for it,
   // only the real measurements get inputs.
@@ -48,23 +58,31 @@ export function UsgOrganCard({ def, state, pathologies, onSelect, onVar, onText,
   const isKidneySlot = def.key === "kidney_rt" || def.key === "kidney_lt";
   const visible = showAll ? pathologies : pathologies.slice(0, 6);
 
+  // Reset target: the merged wording of the current selection (or normal).
+  const selectedText = selected.length ? selected.map((p) => p.text).join("\n\n") : def.normal;
+
   return (
     <div
       className={cn(
         "rounded-xl border bg-card p-3.5 shadow-sm transition-colors",
-        selected ? "border-rose-300 ring-1 ring-rose-200" : "border-border",
+        anySelected ? "border-rose-300 ring-1 ring-rose-200" : "border-border",
       )}
     >
       <div className="mb-2.5 flex items-center gap-2">
         <span
           className={cn(
             "flex h-6 w-6 items-center justify-center rounded-md text-[10px] font-bold uppercase",
-            selected ? "bg-rose-100 text-rose-700" : "bg-muted text-muted-foreground",
+            anySelected ? "bg-rose-100 text-rose-700" : "bg-muted text-muted-foreground",
           )}
         >
-          {selected ? "!" : "✓"}
+          {anySelected ? (selected.length > 1 ? selected.length : "!") : "✓"}
         </span>
         <span className="text-[13px] font-bold tracking-wide">{def.label}</span>
+        {selected.length > 1 ? (
+          <Badge variant="outline" className="h-5 border-rose-300 bg-rose-50 px-1.5 text-[9px] font-semibold text-rose-700">
+            combined ×{selected.length}
+          </Badge>
+        ) : null}
         {state.custom && !editing ? (
           <Badge variant="outline" className="h-5 border-amber-300 bg-amber-50 px-1.5 text-[9px] font-semibold text-amber-700">
             edited
@@ -96,8 +114,8 @@ export function UsgOrganCard({ def, state, pathologies, onSelect, onVar, onText,
               title="Reset to selected wording"
               onClick={() => {
                 setEditing(false);
-                setDraft(selected ? selected.text : def.normal);
-                onText(selected ? selected.text : def.normal);
+                setDraft(selectedText);
+                onText(selectedText);
               }}
             >
               <RotateCcw className="h-3.5 w-3.5" />
@@ -106,41 +124,44 @@ export function UsgOrganCard({ def, state, pathologies, onSelect, onVar, onText,
         </div>
       </div>
 
-      {/* Pathology chips */}
+      {/* Pathology chips — multi-select toggles */}
       <div className="mb-2.5 flex flex-wrap gap-1.5">
         <button
           onClick={() => {
             setEditing(false);
-            onSelect(null);
+            onToggle(null);
           }}
           className={cn(
             "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
-            state.pathology === null && !state.custom
+            !anySelected && !state.custom
               ? "border-emerald-300 bg-emerald-50 text-emerald-700"
               : "border-border bg-muted/40 text-muted-foreground hover:border-emerald-200 hover:text-emerald-700",
           )}
         >
           Normal
         </button>
-        {visible.map((p) => (
-          <button
-            key={p.key}
-            onClick={() => {
-              setEditing(false);
-              onSelect(p.key);
-            }}
-            className={cn(
-              "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
-              state.pathology === p.key
-                ? "border-rose-300 bg-rose-50 text-rose-700"
-                : "border-border bg-muted/40 text-muted-foreground hover:border-rose-200 hover:text-rose-700",
-              !p.builtin ? "italic" : "",
-            )}
-            title={p.builtin ? undefined : "Custom entry"}
-          >
-            {p.label}
-          </button>
-        ))}
+        {visible.map((p) => {
+          const on = selectedKeys.includes(p.key);
+          return (
+            <button
+              key={p.key}
+              onClick={() => {
+                setEditing(false);
+                onToggle(p.key);
+              }}
+              className={cn(
+                "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
+                on
+                  ? "border-rose-300 bg-rose-50 text-rose-700"
+                  : "border-border bg-muted/40 text-muted-foreground hover:border-rose-200 hover:text-rose-700",
+                !p.builtin ? "italic" : "",
+              )}
+              title={p.builtin ? (on ? "Selected — click to remove" : "Click to add (combine with others)") : `Custom entry${on ? " — click to remove" : ""}`}
+            >
+              {p.label}
+            </button>
+          );
+        })}
         {pathologies.length > 6 && !showAll ? (
           <button
             onClick={() => setShowAll(true)}
@@ -197,7 +218,7 @@ export function UsgOrganCard({ def, state, pathologies, onSelect, onVar, onText,
         <p
           className={cn(
             "cursor-text rounded-lg bg-panel px-2.5 py-2 text-[12px] leading-relaxed text-muted-foreground",
-            state.pathology || state.custom ? "text-foreground" : "",
+            anySelected || state.custom ? "text-foreground" : "",
           )}
           onClick={() => {
             setDraft(state.text);
@@ -214,10 +235,10 @@ export function UsgOrganCard({ def, state, pathologies, onSelect, onVar, onText,
         </p>
       )}
 
-      {/* Impression preview line */}
-      {selected?.impression?.length ? (
+      {/* Impression preview — every selected pathology's lines */}
+      {selected.some((p) => p.impression?.length) ? (
         <div className="mt-2 rounded-lg border-l-[3px] border-rose-300 bg-rose-50/60 px-2.5 py-1.5">
-          {selected.impression.map((line, i) => (
+          {selected.flatMap((p) => p.impression).map((line, i) => (
             <p key={i} className="text-[11px] font-semibold leading-snug text-rose-800">
               ⇒ {substitute(line, state.vars, def.key)}
             </p>

@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getStudy } from "@/lib/usg/studies";
 import { normaliseState } from "@/lib/usg/composer";
 import { resolveColumns } from "@/lib/usg/server";
+import { parseScanDate } from "@/lib/usg/dates";
 
 export async function GET(req: Request) {
   const guard = await requireSession();
@@ -56,8 +57,10 @@ export async function POST(req: Request) {
       referredBy: String(body.referredBy ?? "").trim(),
       technique,
       stateJson: JSON.stringify(state),
+      scanDate: parseScanDate(body.scanDate),
       ...cols,
     },
   });
   return Response.json({ report });
 }
+

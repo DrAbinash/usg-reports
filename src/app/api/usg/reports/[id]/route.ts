@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getStudy } from "@/lib/usg/studies";
 import { normaliseState } from "@/lib/usg/composer";
 import { resolveColumns } from "@/lib/usg/server";
+import { parseScanDate } from "@/lib/usg/dates";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -32,6 +33,10 @@ export async function PUT(req: Request, ctx: Ctx) {
   if (typeof body.patientAge === "string") data.patientAge = body.patientAge.trim();
   if (body.patientSex === "M" || body.patientSex === "F" || body.patientSex === "CHILD") data.patientSex = body.patientSex;
   if (typeof body.referredBy === "string") data.referredBy = body.referredBy.trim();
+  // Scan date: back-dating is the doctor's register discipline — an explicit
+  // "" clears it (falls back to finalizedAt/createdAt when printing), a
+  // "yyyy-mm-dd" sets it; omitting the key leaves it untouched.
+  if (typeof body.scanDate === "string") data.scanDate = parseScanDate(body.scanDate);
 
   let stateJson: string | null = null;
   if (body.state && typeof body.state === "object") {

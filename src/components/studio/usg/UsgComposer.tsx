@@ -1,8 +1,10 @@
 "use client";
 /**
  * USG composer — the doctor's whole-abdomen workflow:
- *   patient strip → organ cards (quick-select pathologies that swap ONE
- *   organ's finding) → auto impression → live letterhead preview → print.
+ *   patient strip (incl. back-datable scan date + LMP calculator on pregnancy
+ *   studies) → organ cards (quick-select pathologies that swap ONE organ's
+ *   finding, several at once for combined findings) → auto impression →
+ *   live letterhead preview (PROVISIONAL while a draft) → print.
  */
 import { useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -13,20 +15,23 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, ChevronDown, FileCheck2, Loader2, Printer, Save, Search, Settings2 } from "lucide-react";
+import { ArrowLeft, CalendarDays, ChevronDown, FileCheck2, Loader2, Printer, Save, Search, Settings2 } from "lucide-react";
 import type { UsgComposerState, UsgPathologyDef } from "@/lib/usg/types";
 import { USG_SEX_CHILD } from "@/lib/usg/types";
 import { USG_STUDIES, STUDY_GROUPS, getStudy } from "@/lib/usg/studies";
 import {
-  applyPathology,
+  applyPathologies,
   makeLookup,
   pathologiesForOrgan,
   resolve,
+  selectedPathologies,
   setOrganText,
   setOrganVar,
   switchStudy,
 } from "@/lib/usg/composer";
-import { buildUsgReportHtml, type UsgPrintSettings } from "@/lib/usg/print";
+import { buildUsgReportHtml, formatUsgSerial, type UsgPrintSettings } from "@/lib/usg/print";
+import { lmpSummary, parseLmpInput } from "@/lib/usg/lmp";
+import { toScanDateInput } from "@/lib/usg/dates";
 import { UsgOrganCard } from "./UsgOrganCard";
 import { UsgPathologyDialog } from "./UsgPathologyDialog";
 
@@ -45,6 +50,10 @@ export type UsgReportRow = {
   status: string;
   reportHtml: string | null;
   createdAt: string;
+  /** Register number — stamped at first finalization, never renumbered. */
+  serialNo?: number | null;
+  /** Scan date as performed (back-datable), ISO-ish yyyy-mm-dd or null. */
+  scanDate?: string | null;
 };
 
 export type UsgComposerProps = {
@@ -55,8 +64,11 @@ export type UsgComposerProps = {
   onSaved: () => void; // refresh list
 };
 
-function today(): string {
-  return new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+function fmtPrintDate(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+    : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 export function UsgComposer({ pathologies, settings, report, onBack, onSaved }: UsgComposerProps) {
@@ -78,16 +90,19 @@ export function UsgComposer({ pathologies, settings, report, onBack, onSaved }: 
   const study = getStudy(studyKey) ?? USG_STUDIES[0];
   const [technique, setTechnique] = useState(report?.technique ?? study.technique);
   const [state, setState] = useState<UsgComposerState>(
-    () => initial ?? { studyKey: studyKey0, organs: study.organs.map((o) => ({ organ: o.key, pathology: null, custom: false, text: o.normal, vars: {} })), impressionOverride: null },
+    () => initial ?? { studyKey: studyKey0, organs: study.organs.map((o) => ({ organ: o.key, pathology: null, pathologies: [], custom: false, text: o.normal, vars: {} })), impressionOverride: null },
   );
+  const [scanDate, setScanDate] = useState(() => toScanDateInput(report?.scanDate ? new Date(report.scanDate) : null));
+  const [lmp, setLmp] = useState("");
   const [impressionManual, setImpressionManual] = useState(!!initial?.impressionOverride);
   const [showTechnique, setShowTechnique] = useState(false);
   const [busy, setBusy] = useState<"" | "save" | "finalize" | "print">("");
   /** Id learned from the first POST — later saves PUT the same row (no duplicates). */
   const savedIdRef = useRef<string | null>(report?.id ?? null);
-  /** Printable serial derived from the saved id (state so the preview re-renders). */
-  const serialOf = (id: string | null) => (id ? `USG-${id.replace(/-/g, "").slice(-6).toUpperCase()}` : undefined);
-  const [serial, setSerial] = useState<string | undefined>(serialOf(report?.id ?? null));
+  /** Register serial — from the report row (already finalized) or the finalize response. */
+  const [serial, setSerial] = useState<string | undefined>(
+    report?.serialNo != null ? formatUsgSerial(report.serialNo) : undefined,
+  );
   const [finalizedHere, setFinalizedHere] = useState(report?.status === "FINALIZED");
   const [dialogOrgan, setDialogOrgan] = useState<string | null>(null);
   const printRef = useRef<HTMLIFrameElement>(null);
@@ -95,21 +110,27 @@ export function UsgComposer({ pathologies, settings, report, onBack, onSaved }: 
   const lookup = useMemo(() => makeLookup(pathologies), [pathologies]);
   const resolved = useMemo(() => resolve(state, lookup, technique), [state, lookup, technique]);
 
+  const isPregnancyStudy = studyKey === "ob" || studyKey === "ep";
+  const isFinal = report?.status === "FINALIZED" || finalizedHere;
+
   const previewHtml = useMemo(
     () =>
       buildUsgReportHtml(
-        settings,
+        { ...settings, usgPrintPaper: settings.usgPrintPaper ?? "a4" },
         {
           name: patientName || "—",
           age: patientAge,
           sex: patientSex === USG_SEX_CHILD ? "Child" : patientSex,
           referredBy,
-          date: today(),
+          date: fmtPrintDate(scanDate),
           serial,
+          // Draft discipline: an unfinalized sheet prints watermarked so it
+          // can never be filed as the record by mistake.
+          provisional: !isFinal,
         },
         resolved,
       ),
-    [settings, patientName, patientAge, patientSex, referredBy, serial, resolved],
+    [settings, patientName, patientAge, patientSex, referredBy, scanDate, serial, resolved, isFinal],
   );
 
   const pickStudy = (k: string) => {
@@ -142,7 +163,40 @@ export function UsgComposer({ pathologies, settings, report, onBack, onSaved }: 
 
   const printedSex = patientSex === USG_SEX_CHILD ? "Child" : patientSex;
 
-  const abnormalCount = state.organs.filter((o) => o.pathology).length;
+  const abnormalCount = state.organs.filter((o) => selectedPathologies(o).length).length;
+
+  /** Chip toggle — null clears the organ to normal; a key toggles it, so an
+   *  organ can carry several pathologies at once (combined findings). */
+  const togglePathology = (organKey: string, key: string | null) => {
+    setState((s) => {
+      const cur = selectedPathologies(s.organs.find((o) => o.organ === organKey) ?? { pathology: null });
+      const next = key === null ? [] : cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key];
+      return applyPathologies(s, organKey, next, lookup);
+    });
+  };
+
+  /** LMP calculator — GA & EDD auto-fill into the pregnancy format tokens
+   *  ({gaw}/{gad}/{edd}); typing biometry numbers afterwards still wins. */
+  const applyLmp = (v: string) => {
+    setLmp(v);
+    const d = parseLmpInput(v);
+    if (!d) return;
+    const { weeks, days, edd } = lmpSummary(d);
+    const target = state.studyKey === "ob" ? "biometry" : "gravid-uterus";
+    setState((s) => {
+      let next = s;
+      next = setOrganVar(next, target, "gaw", String(weeks));
+      next = setOrganVar(next, target, "gad", String(days));
+      next = setOrganVar(next, target, "edd", edd);
+      return next;
+    });
+    toast.success(`GA ${weeks} wk ${days} d · EDD ${edd} filled from LMP`);
+  };
+
+  const lmpInfo = useMemo(() => {
+    const d = parseLmpInput(lmp);
+    return d ? lmpSummary(d) : null;
+  }, [lmp]);
 
   const persist = async (status: "" | "finalize"): Promise<string | null> => {
     if (!patientName.trim()) {
@@ -159,6 +213,7 @@ export function UsgComposer({ pathologies, settings, report, onBack, onSaved }: 
         studyKey,
         technique,
         state,
+        scanDate,
       };
       let id = savedIdRef.current;
       if (id) {
@@ -177,13 +232,14 @@ export function UsgComposer({ pathologies, settings, report, onBack, onSaved }: 
         if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Save failed");
         id = (await res.json()).report.id as string;
         savedIdRef.current = id;
-        setSerial(serialOf(id));
       }
       if (status === "finalize" && id) {
         const res = await fetch(`/api/usg/reports/${id}/finalize`, { method: "POST" });
         if (!res.ok) throw new Error("Finalize failed");
+        const body = (await res.json()) as { serialNo?: number };
+        if (typeof body.serialNo === "number") setSerial(formatUsgSerial(body.serialNo));
         setFinalizedHere(true);
-        toast.success("Report finalized — snapshot frozen for reprint");
+        toast.success(`Report finalized — register no. ${formatUsgSerial(body.serialNo ?? 0)} frozen for reprint`);
       } else {
         toast.success("Draft saved");
       }
@@ -204,7 +260,8 @@ export function UsgComposer({ pathologies, settings, report, onBack, onSaved }: 
     }
     setBusy("print");
     try {
-      // Finalized reports print their frozen snapshot; drafts print the live preview.
+      // Finalized reports print their frozen snapshot; drafts print the live
+      // preview — stamped PROVISIONAL so it can't be filed as the record.
       if (report?.status === "FINALIZED" && report.reportHtml) {
         printInIframe(report.reportHtml);
       } else if (finalizedHere) {
@@ -237,6 +294,8 @@ export function UsgComposer({ pathologies, settings, report, onBack, onSaved }: 
       setTimeout(() => win.print(), 150);
     }
   };
+
+  const paperLabel = (settings.usgPrintPaper ?? "a4") === "a5" ? "A5" : "A4";
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -272,6 +331,18 @@ export function UsgComposer({ pathologies, settings, report, onBack, onSaved }: 
             <Input value={referredBy} onChange={(e) => setReferredBy(e.target.value)} placeholder="Dr. —"
               className="h-9 border-border bg-panel text-[13px]" />
           </div>
+          <div className="grid w-[150px] gap-1">
+            <Label className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-faint">
+              <CalendarDays className="h-3 w-3" /> Scan date
+            </Label>
+            <Input
+              type="date"
+              value={scanDate}
+              onChange={(e) => setScanDate(e.target.value)}
+              disabled={isFinal}
+              title={isFinal ? "Finalized reports keep their scan date" : "Back-date if the report is typed up later"}
+              className="h-9 border-border bg-panel text-[12.5px]" />
+          </div>
           <div className="grid min-w-[190px] gap-1">
             <Label className="text-[10px] font-semibold uppercase tracking-wide text-faint">Study</Label>
             <Select value={studyKey} onValueChange={pickStudy}>
@@ -299,12 +370,12 @@ export function UsgComposer({ pathologies, settings, report, onBack, onSaved }: 
             </Select>
           </div>
           <div className="flex items-center gap-1.5">
-            <Button size="sm" variant="outline" onClick={() => persist("")} disabled={busy !== "" || finalizedHere}
+            <Button size="sm" variant="outline" onClick={() => persist("")} disabled={busy !== "" || isFinal}
               className="h-9 border-border bg-panel">
               {busy === "save" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Save
             </Button>
-            <Button size="sm" onClick={() => persist("finalize")} disabled={busy !== "" || finalizedHere}
+            <Button size="sm" onClick={() => persist("finalize")} disabled={busy !== "" || isFinal}
               className="h-9 bg-emerald-600 hover:bg-emerald-700">
               {busy === "finalize" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck2 className="h-4 w-4" />}
               Finalize
@@ -312,7 +383,7 @@ export function UsgComposer({ pathologies, settings, report, onBack, onSaved }: 
             <Button size="sm" variant="outline" onClick={print} disabled={busy !== ""}
               className="h-9 border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100">
               {busy === "print" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-              Print A4
+              Print {paperLabel}
             </Button>
           </div>
         </div>
@@ -327,17 +398,49 @@ export function UsgComposer({ pathologies, settings, report, onBack, onSaved }: 
           </button>
           <span className="font-semibold text-foreground">{resolved.title}</span>
           <span className={cn("rounded-full px-2 py-0.5 font-semibold", abnormalCount ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700")}>
-            {abnormalCount ? `${abnormalCount} finding${abnormalCount > 1 ? "s" : ""}` : "All normal"}
+            {abnormalCount ? `${abnormalCount} organ${abnormalCount > 1 ? "s" : ""} affected` : "All normal"}
           </span>
-          {report?.status === "FINALIZED" || finalizedHere ? (
+          {serial ? (
+            <span className="rounded-full bg-sky-50 px-2 py-0.5 font-bold tracking-wide text-sky-700">{serial}</span>
+          ) : isFinal ? null : (
+            <span className="text-faint">register no. assigned on finalize</span>
+          )}
+          {isFinal ? (
             <span className="rounded-full bg-amber-50 px-2 py-0.5 font-semibold text-amber-700">finalized — reprint only</span>
-          ) : null}
+          ) : (
+            <span className="rounded-full bg-amber-50 px-2 py-0.5 font-semibold text-amber-700">draft — prints PROVISIONAL</span>
+          )}
         </div>
         {showTechnique ? (
           <Textarea value={technique} onChange={(e) => setTechnique(e.target.value)} rows={2}
             className="mt-2 border-border bg-panel text-[12px]" />
         ) : null}
       </div>
+
+      {/* LMP calculator — pregnancy studies */}
+      {isPregnancyStudy ? (
+        <div className="shrink-0 border-b border-border bg-gradient-to-r from-pink-50/80 to-rose-50/60 px-4 py-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <Label className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-rose-600">
+              <CalendarDays className="h-3 w-3" /> LMP calculator
+            </Label>
+            <Input
+              type="date"
+              value={lmp}
+              onChange={(e) => applyLmp(e.target.value)}
+              className="h-8 w-[150px] border-rose-200 bg-white text-[12.5px]"
+              title="Last menstrual period — fills GA & EDD below"
+            />
+            {lmpInfo ? (
+              <span className="rounded-full bg-white px-3 py-1 text-[11.5px] font-bold text-rose-700 ring-1 ring-rose-200">
+                GA {lmpInfo.weeks} wk {lmpInfo.days} d · EDD {lmpInfo.edd}
+              </span>
+            ) : (
+              <span className="text-[11px] text-rose-400">enter LMP — GA &amp; EDD auto-fill into the biometry slots</span>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       {/* Body: organ cards + preview */}
       <div className="grid min-h-0 flex-1 gap-4 overflow-hidden p-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,460px)]">
@@ -351,7 +454,7 @@ export function UsgComposer({ pathologies, settings, report, onBack, onSaved }: 
                 def={def}
                 state={st}
                 pathologies={pathologiesForOrgan(pathologies, def.key)}
-                onSelect={(k) => setState((s) => applyPathology(s, def.key, k, lookup))}
+                onToggle={(k) => togglePathology(def.key, k)}
                 onVar={(k, v) => setState((s) => setOrganVar(s, def.key, k, v))}
                 onText={(t) => setState((s) => setOrganText(s, def.key, t))}
                 onAddCustom={(organ) => setDialogOrgan(organ)}
@@ -407,8 +510,12 @@ export function UsgComposer({ pathologies, settings, report, onBack, onSaved }: 
           <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
             <div className="flex items-center gap-2 border-b border-border bg-panel px-3 py-2">
               <Search className="h-3.5 w-3.5 text-faint" />
-              <span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Live preview — A4</span>
-              <span className="ml-auto text-[10px] text-faint">tick “Background graphics” when printing</span>
+              <span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                Live preview — {paperLabel}
+              </span>
+              <span className={cn("ml-auto rounded-full px-2 py-0.5 text-[9px] font-bold", isFinal ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>
+                {isFinal ? "FINAL" : "PROVISIONAL"}
+              </span>
             </div>
             <iframe
               title="USG report preview"

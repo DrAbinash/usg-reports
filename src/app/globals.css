@@ -200,3 +200,71 @@
     width: 100%;
   }
 }
+
+/* ── v6.1 Sonologist's Day (birthday card, screen-only) ── */
+@keyframes bday-confetti {
+  0%   { transform: translateY(-8vh) rotate(0deg); opacity: 1; }
+  85%  { opacity: 1; }
+  100% { transform: translateY(112vh) rotate(660deg); opacity: 0; }
+}
+.bday-confetti-piece {
+  position: fixed;
+  top: 0;
+  pointer-events: none;
+  animation: bday-confetti linear infinite;
+}
+/* Double-beat — a heart in systole, not a metronome. */
+@keyframes bday-heart-pulse {
+  0%, 100% { transform: scale(1); }
+  14%      { transform: scale(1.10); }
+  28%      { transform: scale(1); }
+  42%      { transform: scale(1.06); }
+  56%      { transform: scale(1); }
+}
+.bday-heart {
+  animation: bday-heart-pulse 1.6s ease-in-out infinite;
+  transform-origin: center;
+}
+/* Probe sweep gliding across the heart. The keyframes own the whole
+   transform (centering baked in) so they never fight a utility class. */
+@keyframes bday-sweep {
+  0%   { transform: translate(-50%, -50%) translateX(-72px); opacity: 0.25; }
+  50%  { opacity: 0.9; }
+  100% { transform: translate(-50%, -50%) translateX(72px); opacity: 0.25; }
+}
+.bday-sweep {
+  animation: bday-sweep 2.6s ease-in-out infinite alternate;
+}
+/* A bright pulse travelling along the fetal-heartbeat trace. */
+@keyframes bday-ecg {
+  from { stroke-dashoffset: 1; }
+  to   { stroke-dashoffset: -1; }
+}
+.bday-ecg {
+  stroke-dasharray: 0.24 0.76;
+  animation: bday-ecg 2.4s linear infinite;
+}
+/* The header cake — a gentle wiggle, not a spinning carnival. */
+@keyframes bday-cake {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(-1.5px) rotate(-7deg); }
+}
+.bday-cake {
+  animation: bday-cake 2.2s ease-in-out infinite;
+}
+@keyframes bday-fade-up {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+.bday-card-in {
+  animation: bday-fade-up 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .bday-confetti-piece,
+  .bday-heart,
+  .bday-sweep,
+  .bday-ecg,
+  .bday-cake {
+    animation: none !important;
+  }
+}

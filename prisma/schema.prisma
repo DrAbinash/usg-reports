@@ -41,6 +41,10 @@ model HospitalSettings {
   usgDoctorName     String   @default("")
   usgDoctorQual     String   @default("")
   usgDoctorRegNo    String   @default("")
+  // v6.1 "Sonologist's Day" — MM-DD; the studio greets the sonologist once
+  // a year on this local date. Defaults to 01 Sept (Dr. Sugandha's birthday);
+  // empty string turns the greeting off for good.
+  usgDoctorBirthday String   @default("09-01")
   usgMachineLine    String   @default("This Scan has been proudly done on GE Voluson Pro 4-D USG Machine")
   usgShowMachine    Boolean  @default(true)
   usgFooterLine     String   @default("Kindly co-relate with clinico-pathological findings.")

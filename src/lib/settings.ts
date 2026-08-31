@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { normalizeBirthday } from "@/lib/usg/birthday";
 
 export type HospitalSettingsRow = Awaited<ReturnType<typeof getSettings>>;
 
@@ -109,6 +110,7 @@ export async function updateSettings(patch: SettingsUpdate) {
     "appTitle", "hospitalName", "addressLine", "phone", "email", "footerMessage",
     "logoUrl", "loginTheme", "loginBgUrl",
     "usgDoctorName", "usgDoctorQual", "usgDoctorRegNo", "usgMachineLine",
+    "usgDoctorBirthday",
     "usgFooterLine", "usgDeclarationLine", "usgPrintStyle",
     "usgPrintPaper", "usgSignatureUrl",
     // v6 integrations (URLs only — keys go through SECRET_FIELDS below)
@@ -120,6 +122,10 @@ export async function updateSettings(patch: SettingsUpdate) {
   // URL-valued integration fields are normalized on save so "172.16.1.139:8888"
   // is stored as "http://172.16.1.139:8888" (the doctor never types a scheme).
   const URL_FIELDS = new Set(["careApiBase", "orthancUrl"]);
+  // v6.1 — the birthday is canonicalised at write time: "7/9", "07-09" and
+  // "07.09" all store as "09-01"-style "MM-DD"; anything unparseable stores
+  // as "" (greeting off) instead of a value that silently never matches.
+  const BIRTHDAY_FIELD = "usgDoctorBirthday";
   for (const k of allowed) {
     const v = patch[k];
     if (typeof v !== "string") continue;
@@ -127,6 +133,10 @@ export async function updateSettings(patch: SettingsUpdate) {
     // corrupt a stored value. An empty string IS a valid update (clearing).
     // Exception: the centre address keeps its interior line structure.
     const t = k === "pcpndtCentreName" ? v.replace(/^\s+|\s+$/g, "") : v.trim();
+    if (k === BIRTHDAY_FIELD) {
+      data[k] = normalizeBirthday(t);
+      continue;
+    }
     data[k] = URL_FIELDS.has(k) ? normalizeUrl(t) : t;
   }
   // USG machine banner toggle arrives as a string checkbox value.

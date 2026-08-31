@@ -77,6 +77,12 @@ radiologist workspace lives in the separate
 - **PACS pull (v6)** — key images picked from the Orthanc study and frozen
   into the report; **“Pull from machine”** fills the biometry slots from the
   machine's DICOM SR (with optional Vision OCR as fallback).
+- **Sonologist's Day (v6.1)** — once a year, on the sonologist's birthday
+  (Settings → USG Studio, MM-DD, default 01 Sept), the studio opens with a
+  small birthday card: her real numbers from the register — reports signed,
+  patients cared for, busiest month. Dismissable once per year; a cake icon
+  stays in the header for the rest of the day. Clear the field to turn it
+  off. Screen-only — never printed.
 
 `formats-usg/` — the doctor's original Word report library, preserved
 verbatim — remains the canonical wording reference for curation.

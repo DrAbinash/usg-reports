@@ -20,6 +20,7 @@ type Settings = {
   loginTheme: string; loginBgUrl: string;
   pinSet: boolean;
   usgDoctorName: string; usgDoctorQual: string; usgDoctorRegNo: string;
+  usgDoctorBirthday: string;
   usgMachineLine: string; usgShowMachine: boolean;
   usgFooterLine: string; usgDeclarationLine: string;
   usgPrintStyle: string; usgPrintCompact: boolean;
@@ -350,6 +351,9 @@ export function SettingsView() {
           </Field>
           <Field label="Registration number">
             <Input value={s.usgDoctorRegNo ?? ""} onChange={(e) => set("usgDoctorRegNo", e.target.value)} className="h-9 text-[13px]" />
+          </Field>
+          <Field label="Sonologist's birthday" hint='Month and day (MM-DD) — the studio opens with a small birthday card on this date each year, and the greeting is remembered for the day. e.g. 09-01. Clear it to turn the greeting off.'>
+            <Input value={s.usgDoctorBirthday ?? ""} onChange={(e) => set("usgDoctorBirthday", e.target.value)} placeholder="MM-DD" className="h-9 w-32 text-[13px]" inputMode="numeric" />
           </Field>
           <Field label="Machine banner" hint="Printed in italics under the study heading — the doctor's classic line.">
             <Input value={s.usgMachineLine ?? ""} onChange={(e) => set("usgMachineLine", e.target.value)} className="h-9 text-[13px]" />

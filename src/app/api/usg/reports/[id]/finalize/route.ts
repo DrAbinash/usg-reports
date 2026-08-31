@@ -5,6 +5,7 @@ import { normaliseState, makeLookup, resolve } from "@/lib/usg/composer";
 import { loadAllPathologies, loadNormalOverrides } from "@/lib/usg/server";
 import { buildUsgReportHtml, formatUsgSerial } from "@/lib/usg/print";
 import { audit } from "@/lib/usg/audit";
+import { payloadInputFor, qrDataUrlFor } from "@/lib/usg/qrServer";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -13,7 +14,7 @@ function fmtDate(d: Date | null | undefined): string {
   return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-export async function POST(_req: Request, ctx: Ctx) {
+export async function POST(req: Request, ctx: Ctx) {
   const guard = await requireSession();
   if (guard) return guard;
   const { id } = await ctx.params;
@@ -50,6 +51,15 @@ export async function POST(_req: Request, ctx: Ctx) {
     orderBy: { sortOrder: "asc" },
   });
 
+  // Verification QR — signed against the install secret, URL form when the
+  // request origin is known so scanning opens the verify page directly.
+  const origin =
+    req.headers.get("x-forwarded-proto") ?? "http", reqHost = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  const qr = await qrDataUrlFor(
+    payloadInputFor({ ...report, serialNo }),
+    reqHost ? `${origin}://${reqHost}` : null,
+  );
+
   const html = buildUsgReportHtml(
     {
       appTitle: settings.appTitle,
@@ -83,6 +93,7 @@ export async function POST(_req: Request, ctx: Ctx) {
     },
     resolved,
     images.map((i) => ({ dataUrl: i.dataUrl, caption: i.caption })),
+    qr ? { dataUrl: qr } : null,
   );
 
   const updated = await db.usgReport.update({

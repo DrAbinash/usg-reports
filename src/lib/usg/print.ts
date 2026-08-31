@@ -27,6 +27,9 @@ import type { UsgResolved } from "./types";
 
 export type UsgPrintImage = { dataUrl: string; caption?: string };
 
+/** Verification QR printed bottom-right on finalized reports (v5). */
+export type UsgPrintQr = { dataUrl: string };
+
 export type UsgPrintSettings = {
   appTitle: string;
   hospitalName: string;
@@ -188,7 +191,10 @@ const PREMIUM_CSS = `
   .pcpndt-title { font-size: 9pt; font-weight: 800; letter-spacing: 1.2px; color: #143E6E; text-transform: uppercase; margin-bottom: 4px; }
   .pcpndt p { font-size: 8.5pt; font-weight: 600; color: #16222E; text-align: justify; line-height: 1.55; }
 
-  .footer { margin-top: 22px; border-top: 2.5px solid #1B4F8A; padding-top: 5px; font-size: 8pt; font-weight: 600; color: #61788C; display: flex; justify-content: space-between; }
+  .footer { margin-top: 22px; border-top: 2.5px solid #1B4F8A; padding-top: 5px; font-size: 8pt; font-weight: 600; color: #61788C; display: flex; justify-content: space-between; align-items: center; }
+  .qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+  .qr { width: 20mm; height: 20mm; }
+  .qr-cap { font-size: 6.5pt; font-weight: 700; letter-spacing: .5px; }
 `;
 
 const CLASSIC_CSS = `
@@ -261,7 +267,10 @@ const CLASSIC_CSS = `
   .pcpndt-title { font-size: 9pt; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; margin-bottom: 4px; }
   .pcpndt p { font-size: 8.5pt; font-weight: 600; text-align: justify; line-height: 1.55; }
 
-  .footer { margin-top: 20px; border-top: 1.5px solid #000; padding-top: 5px; font-size: 8pt; font-weight: 600; display: flex; justify-content: space-between; }
+  .footer { margin-top: 20px; border-top: 1.5px solid #000; padding-top: 5px; font-size: 8pt; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+  .qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+  .qr { width: 20mm; height: 20mm; }
+  .qr-cap { font-size: 6.5pt; font-weight: 700; }
 `;
 
 const COMPACT_CSS = `
@@ -329,6 +338,8 @@ const A5_CSS = `
   .pcpndt-title { font-size: 7pt; margin-bottom: 2px; }
   .pcpndt p { font-size: 7pt; }
   .footer { margin-top: 8px; padding-top: 3px; font-size: 6.5pt; }
+  .qr { width: 14mm; height: 14mm; }
+  .qr-cap { font-size: 5.5pt; }
 `;
 
 /** Draft discipline — big diagonal watermark on every printed page plus a
@@ -374,6 +385,7 @@ export function buildUsgReportHtml(
   patient: UsgPrintPatient,
   resolved: UsgResolved,
   images: UsgPrintImage[] = [],
+  qr?: UsgPrintQr | null,
 ): string {
   const classic = settings.usgPrintStyle === "classic";
   const compact = settings.usgPrintCompact === true;
@@ -513,6 +525,7 @@ ${watermark}
 
   <div class="footer">
     <span>${esc(settings.usgFooterLine || settings.footerMessage)}</span>
+    ${qr ? `<span class="qr-wrap"><img class="qr" src="${esc(qr.dataUrl)}" alt="verification QR" /><span class="qr-cap">scan to verify</span></span>` : ""}
     <span>${esc(settings.appTitle)}</span>
   </div>
 </div>

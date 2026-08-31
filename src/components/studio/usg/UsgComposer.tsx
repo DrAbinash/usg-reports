@@ -43,6 +43,8 @@ import { DictationButton } from "./DictationButton";
 import { UsgStudyPicker } from "./UsgStudyPicker";
 import { appendTranscript } from "@/lib/usg/dictation";
 import { clearDraft, draftKey, loadDraft, saveDraft, snapshotDiffers, type DraftSnapshot } from "@/lib/usg/drafts";
+import { downloadReportPdf, shareReportPdf } from "./sharePdf";
+import { FileDown, MessageCircle } from "lucide-react";
 
 export type UsgReportRow = {
   id: string;
@@ -710,6 +712,29 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
               {busy === "print" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
               Print {paperLabel}
             </Button>
+            {isFinal ? (
+              <>
+                <Button size="sm" variant="outline" onClick={() => downloadReportPdf({ reportId: savedIdRef.current ?? report?.id ?? "", patientName, serial, date: fmtPrintDate(scanDate) })}
+                  title="Download the report as a PDF (with the verification QR)"
+                  className="h-9 border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100">
+                  <FileDown className="h-4 w-4" /> PDF
+                </Button>
+                <Button size="sm" variant="outline" disabled={busy !== ""}
+                  onClick={() => {
+                    const id = savedIdRef.current ?? report?.id;
+                    if (!id) return;
+                    void shareReportPdf({ reportId: id, patientName, serial, date: fmtPrintDate(scanDate) }).then((r) => {
+                      if (r === "shared") toast.success("Shared via the device share sheet");
+                      else if (r === "downloaded") toast.success("PDF saved — WhatsApp opened to attach it");
+                      else toast.error("Could not build the PDF");
+                    });
+                  }}
+                  title="Share on WhatsApp — PDF via the mobile share sheet, or download + wa.me on desktop"
+                  className="h-9 border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100">
+                  <MessageCircle className="h-4 w-4" /> WhatsApp
+                </Button>
+              </>
+            ) : null}
           </div>
         </div>
 

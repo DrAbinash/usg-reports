@@ -4,6 +4,7 @@ import { getStudy } from "@/lib/usg/studies";
 import { normaliseState } from "@/lib/usg/composer";
 import { resolveColumns } from "@/lib/usg/server";
 import { parseScanDate } from "@/lib/usg/dates";
+import { linkPatient } from "@/lib/usg/patients";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -11,7 +12,7 @@ export async function GET(_req: Request, ctx: Ctx) {
   const guard = await requireSession();
   if (guard) return guard;
   const { id } = await ctx.params;
-  const report = await db.usgReport.findUnique({ where: { id } });
+  const report = await db.usgReport.findUnique({ where: { id }, include: { patient: true } });
   if (!report) return Response.json({ error: "Not found" }, { status: 404 });
   return Response.json({ report });
 }
@@ -20,7 +21,7 @@ export async function PUT(req: Request, ctx: Ctx) {
   const guard = await requireSession();
   if (guard) return guard;
   const { id } = await ctx.params;
-  const existing = await db.usgReport.findUnique({ where: { id } });
+  const existing = await db.usgReport.findUnique({ where: { id }, include: { patient: true } });
   if (!existing) return Response.json({ error: "Not found" }, { status: 404 });
   if (existing.status === "FINALIZED") {
     return Response.json({ error: "Report is finalized and locked" }, { status: 409 });
@@ -33,6 +34,15 @@ export async function PUT(req: Request, ctx: Ctx) {
   if (typeof body.patientAge === "string") data.patientAge = body.patientAge.trim();
   if (body.patientSex === "M" || body.patientSex === "F" || body.patientSex === "CHILD") data.patientSex = body.patientSex;
   if (typeof body.referredBy === "string") data.referredBy = body.referredBy.trim();
+  // Registry: re-link the patient whenever name or phone changes.
+  const nextName = typeof data.patientName === "string" ? data.patientName : existing.patientName;
+  const nextPhone =
+    typeof body.patientPhone === "string"
+      ? body.patientPhone.trim()
+      : existing.patient?.phone ?? "";
+  if (typeof body.patientPhone === "string" || data.patientName) {
+    data.patientId = await linkPatient(nextName, nextPhone);
+  }
   // Scan date: back-dating is the doctor's register discipline — an explicit
   // "" clears it (falls back to finalizedAt/createdAt when printing), a
   // "yyyy-mm-dd" sets it; omitting the key leaves it untouched.

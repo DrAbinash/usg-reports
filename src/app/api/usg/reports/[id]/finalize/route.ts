@@ -4,6 +4,7 @@ import { getSettings } from "@/lib/settings";
 import { normaliseState, makeLookup, resolve } from "@/lib/usg/composer";
 import { loadAllPathologies } from "@/lib/usg/server";
 import { buildUsgReportHtml, formatUsgSerial } from "@/lib/usg/print";
+import { audit } from "@/lib/usg/audit";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -94,6 +95,13 @@ export async function POST(_req: Request, ctx: Ctx) {
       findings: resolved.sections.map((s) => `${s.label}: ${s.text}`).join("\n\n"),
       impression: resolved.impression.join("\n"),
     },
+  });
+  await audit({
+    action: "report.finalize",
+    reportId: updated.id,
+    serialNo,
+    patientName: updated.patientName,
+    detail: `register no. ${formatUsgSerial(serialNo)} frozen — reprint only`,
   });
   return Response.json({ report: updated, html, serialNo });
 }

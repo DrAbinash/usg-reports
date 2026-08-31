@@ -1,5 +1,6 @@
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { audit } from "@/lib/usg/audit";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -36,6 +37,12 @@ export async function POST(_req: Request, ctx: Ctx) {
       scanDate: new Date(), // follow-up scan happens today — back-date if needed
       status: "DRAFT", // editable; serial assigned at its own finalization
     },
+  });
+  await audit({
+    action: "report.duplicate",
+    reportId: draft.id,
+    patientName: draft.patientName,
+    detail: `follow-up of ${source.serialNo != null ? `register no. ${source.serialNo}` : "a draft"}`,
   });
   return Response.json({
     report: draft,

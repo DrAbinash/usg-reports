@@ -1,5 +1,6 @@
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { audit } from "@/lib/usg/audit";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -24,6 +25,7 @@ export async function PUT(req: Request, ctx: Ctx) {
   if (Object.keys(data).length === 0) return Response.json({ error: "Nothing to update" }, { status: 400 });
 
   const row = await db.usgPathology.update({ where: { id }, data });
+  await audit({ action: "pathology.update", detail: `custom finding edited: ${row.label}` });
   return Response.json({ ok: true, label: row.label });
 }
 
@@ -34,5 +36,6 @@ export async function DELETE(_req: Request, ctx: Ctx) {
   const existing = await db.usgPathology.findUnique({ where: { id } });
   if (!existing) return Response.json({ error: "Not found" }, { status: 404 });
   await db.usgPathology.delete({ where: { id } });
+  await audit({ action: "pathology.delete", detail: `custom finding removed: ${existing.label}` });
   return Response.json({ ok: true });
 }

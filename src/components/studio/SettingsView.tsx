@@ -1,16 +1,18 @@
 "use client";
-/** Settings — Appearance / Hospital / USG Studio / Security. Secrets masked. */
-import { useEffect, useRef, useState } from "react";
+/** Settings — Appearance / Hospital / USG Studio / Security / Data & activity. Secrets masked. */
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SectionLabel } from "./bits";
 import { LOGIN_THEMES, type LoginThemeName } from "./LockScreen";
-import { Building2, ShieldCheck, Check, Palette, Upload, Trash2, Waves, Download, ArchiveRestore } from "lucide-react";
+import { Building2, ShieldCheck, Check, Palette, Upload, Trash2, Waves, Download, ArchiveRestore, Database, History, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { auditLabel } from "@/lib/usg/auditShared";
 
 type Settings = {
   appTitle: string; hospitalName: string; addressLine: string; phone: string; email: string;
@@ -22,6 +24,7 @@ type Settings = {
   usgFooterLine: string; usgDeclarationLine: string;
   usgPrintStyle: string; usgPrintCompact: boolean;
   usgPrintPaper: string; usgSignatureUrl: string;
+  usgAutoBackup: boolean;
 };
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -42,10 +45,38 @@ export function SettingsView() {
   const restoreFileRef = useRef<HTMLInputElement>(null);
   const [restoring, setRestoring] = useState(false);
 
+  // Data & activity tab
+  const [auditEntries, setAuditEntries] = useState<{
+    id: string; action: string; serialNo: number | null; patientName: string | null;
+    detail: string; createdAt: string;
+  }[]>([]);
+  const [backupStatus, setBackupStatus] = useState<{
+    autoBackup: boolean; lastNightlyAt: string | null;
+    files: { name: string; bytes: number; modifiedAt: string }[];
+  } | null>(null);
+  const [autoSaving, setAutoSaving] = useState(false);
+
+  const loadAudit = useCallback(async () => {
+    const res = await fetch("/api/usg/audit?limit=150");
+    if (res.ok) setAuditEntries(((await res.json()).entries ?? []) as typeof auditEntries);
+  }, []);
+
+  const loadBackupStatus = useCallback(async () => {
+    const res = await fetch("/api/usg/backup?mode=status");
+    if (res.ok) setBackupStatus(await res.json());
+  }, []);
+
   useEffect(() => {
     fetch("/api/settings").then((r) => r.json()).then((d) => {
       setS(d.settings);
     });
+  }, []);
+
+  const loadAuditRef = useRef(loadAudit);
+  const loadBackupStatusRef = useRef(loadBackupStatus);
+  useEffect(() => {
+    void loadAuditRef.current();
+    void loadBackupStatusRef.current();
   }, []);
 
   if (!s) return <div className="p-6 text-[13px] text-faint">Loading settings…</div>;
@@ -79,7 +110,7 @@ export function SettingsView() {
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Restore failed");
-      toast.success(`Backup restored — ${body.settingsRestored ?? 0} settings, ${body.customPathologiesRestored ?? 0} custom findings`);
+      toast.success(`Backup restored — ${body.mode === "full" ? `${body.reportsRestored ?? 0} reports, ${body.patientsRestored ?? 0} patients, ${body.imagesRestored ?? 0} stills` : `${body.settingsRestored ?? 0} settings, ${body.customPathologiesRestored ?? 0} custom findings`}`);
       // Reload settings so the restored values show immediately.
       const fresh = await fetch("/api/settings").then((r) => r.json());
       if (fresh.settings) {
@@ -169,6 +200,7 @@ export function SettingsView() {
           <TabsTrigger value="hospital" className="text-[12px]"><Building2 className="mr-1.5 h-3.5 w-3.5" />Hospital</TabsTrigger>
           <TabsTrigger value="usg" className="text-[12px]"><Waves className="mr-1.5 h-3.5 w-3.5" />USG Studio</TabsTrigger>
           <TabsTrigger value="security" className="text-[12px]"><ShieldCheck className="mr-1.5 h-3.5 w-3.5" />Security</TabsTrigger>
+          <TabsTrigger value="data" className="text-[12px]"><Database className="mr-1.5 h-3.5 w-3.5" />Data &amp; activity</TabsTrigger>
         </TabsList>
 
         <TabsContent value="appearance" className="mt-4 space-y-5 rounded-xl border border-border bg-card p-5">
@@ -419,6 +451,155 @@ export function SettingsView() {
             Sessions last 12 hours, or 30 days when you tick “Trust this device”. No usernames, no reset email —
             the studio is yours alone.
           </p>
+        </TabsContent>
+
+        <TabsContent value="data" className="mt-4 space-y-5 rounded-xl border border-border bg-card p-5">
+          {/* Full-clinic backup */}
+          <div className="space-y-2.5 rounded-xl border border-sky-200 bg-sky-50/40 p-3.5">
+            <div className="flex items-center gap-2 text-[12px] font-bold text-sky-800">
+              <Database className="h-4 w-4" /> Full-clinic backup
+            </div>
+            <p className="text-[11px] leading-relaxed text-sky-700/90">
+              One JSON file with the whole clinic — settings, custom findings, every patient, every report
+              (drafts and frozen snapshots) and the attached stills. This is disaster recovery for the
+              single-box install: keep a copy off the machine (email it to yourself, copy to a pen drive).
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <a href="/api/usg/backup?mode=full" download>
+                <Button size="sm" variant="outline" className="h-8 border-sky-200 bg-white text-[11.5px] text-sky-700 hover:bg-sky-100">
+                  <Download className="mr-1.5 h-3.5 w-3.5" /> Download clinic backup (.json)
+                </Button>
+              </a>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 border-sky-200 bg-white text-[11.5px] text-sky-700 hover:bg-sky-100"
+                disabled={restoring}
+                onClick={() => restoreFileRef.current?.click()}
+                title="Restores whichever backup kind the file carries (auto-detected)"
+              >
+                <Upload className="mr-1.5 h-3.5 w-3.5" /> {restoring ? "Restoring…" : "Restore clinic backup"}
+              </Button>
+            </div>
+            <p className="text-[10.5px] text-sky-600">
+              Restoring is idempotent — reports and patients are matched by id, nothing outside the file is deleted,
+              and a register-number clash skips that report rather than renumbering anything.
+            </p>
+          </div>
+
+          {/* Nightly rotation */}
+          <div className="space-y-2.5 rounded-xl border border-border bg-panel p-3.5">
+            <div className="flex items-center gap-2">
+              <History className="h-4 w-4 text-muted-foreground" />
+              <p className="text-[12px] font-bold">Automatic nightly backup</p>
+              <Switch
+                checked={backupStatus?.autoBackup ?? false}
+                disabled={autoSaving}
+                onCheckedChange={async (v) => {
+                  setAutoSaving(true);
+                  try {
+                    const res = await fetch("/api/settings", {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ usgAutoBackup: v ? "true" : "false" }),
+                    });
+                    if (res.ok) {
+                      toast.success(v ? "Nightly backups enabled" : "Nightly backups off");
+                      await loadBackupStatus();
+                      const fresh = await fetch("/api/settings").then((r) => r.json());
+                      if (fresh.settings) setS(fresh.settings);
+                    } else {
+                      toast.error("Could not change the nightly backup setting");
+                    }
+                  } finally {
+                    setAutoSaving(false);
+                  }
+                }}
+                className="ml-auto data-[state=checked]:bg-emerald-600"
+              />
+            </div>
+            <p className="text-[11px] leading-relaxed text-faint">
+              While the studio is running: once a day after 02:00, a full-clinic backup is written to
+              <code className="mx-1 rounded bg-card px-1 py-0.5 text-[10.5px]">data/backups/</code>
+              on this machine and the newest 14 are kept. Download the latest file from here whenever you want one off-site.
+            </p>
+            {backupStatus ? (
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-semibold text-muted-foreground">
+                  {backupStatus.files.length === 0
+                    ? "No backups on disk yet."
+                    : `${backupStatus.files.length} backup file${backupStatus.files.length > 1 ? "s" : ""} on disk${
+                        backupStatus.lastNightlyAt
+                          ? ` — last nightly ${new Date(backupStatus.lastNightlyAt).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}`
+                          : ""
+                      }`}
+                </p>
+                {backupStatus.files.slice(0, 5).map((f) => (
+                  <p key={f.name} className="flex items-center gap-2 text-[10.5px] text-faint">
+                    <ArchiveRestore className="h-3 w-3" /> {f.name} · {(f.bytes / 1_000).toFixed(0)} KB
+                  </p>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          {/* Activity — the audit trail */}
+          <div className="space-y-2.5">
+            <div className="flex items-center gap-2">
+              <p className="text-[12px] font-bold">Activity</p>
+              <span className="text-[10.5px] text-faint">every save, finalization, deletion, backup and login — append-only</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ml-auto h-7 w-7 p-0 text-muted-foreground"
+                onClick={() => {
+                  void loadAudit();
+                  void loadBackupStatus();
+                }}
+                title="Refresh"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            {auditEntries.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-border bg-panel px-3 py-4 text-center text-[11.5px] text-faint">
+                Nothing recorded yet — the trail starts with your next save.
+              </p>
+            ) : (
+              <div className="studio-scroll max-h-80 overflow-y-auto rounded-lg border border-border">
+                {auditEntries.map((e) => (
+                  <div key={e.id} className="flex items-start gap-2.5 border-b border-border/60 px-3 py-2 last:border-0">
+                    <span
+                      className={cn(
+                        "mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[9.5px] font-bold",
+                        e.action === "report.finalize"
+                          ? "bg-emerald-50 text-emerald-700"
+                          : e.action === "report.delete" || e.action === "auth.fail"
+                            ? "bg-rose-50 text-rose-700"
+                            : e.action.startsWith("backup")
+                              ? "bg-sky-50 text-sky-700"
+                              : "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {auditLabel(e.action)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      {e.patientName || e.serialNo != null ? (
+                        <p className="truncate text-[11.5px] font-semibold">
+                          {e.patientName}
+                          {e.serialNo != null ? ` · USG-${String(e.serialNo).padStart(4, "0")}` : ""}
+                        </p>
+                      ) : null}
+                      {e.detail ? <p className="truncate text-[10.5px] text-muted-foreground">{e.detail}</p> : null}
+                    </div>
+                    <span className="shrink-0 text-[10px] text-faint">
+                      {new Date(e.createdAt).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </TabsContent>
       </Tabs>
     </div>

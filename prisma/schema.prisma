@@ -49,6 +49,8 @@ model HospitalSettings {
   usgPrintCompact   Boolean  @default(false) // compact density for long studies
   usgPrintPaper     String   @default("a4")    // a4 | a5 (half-sheet for short studies)
   usgSignatureUrl   String   @default("")      // scanned signature image printed over the name line
+  /** Nightly full-clinic backup to data/backups (v5) — off by default. */
+  usgAutoBackup     Boolean  @default(false)
 
   updatedAt       DateTime @updatedAt
 }
@@ -143,6 +145,24 @@ model UsgReportImage {
   caption   String   @default("")
   sortOrder Int      @default(100)
   createdAt DateTime @default(now())
+}
+
+// ── USG Studio — audit trail (v5) ────────────────────────────────────────
+// Append-only record of every save, finalization, follow-up, deletion,
+// image change, settings change, backup and login attempt. The register
+// gives the serials discipline; this table gives the trail medico-legal
+// review asks for. Rows are never updated or deleted by the app.
+model UsgAudit {
+  id          String   @id @default(cuid())
+  action      String   // report.save | report.finalize | auth.login | …
+  reportId    String?
+  serialNo    Int?
+  patientName String?
+  detail      String   @default("")
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([action])
 }
 
 // ── USG Studio — user-added custom pathologies ──────────────────────────

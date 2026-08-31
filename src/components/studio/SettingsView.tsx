@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SectionLabel } from "./bits";
 import { LOGIN_THEMES, type LoginThemeName } from "./LockScreen";
-import { Building2, ShieldCheck, Check, Palette, Upload, Trash2, Waves, Download, ArchiveRestore, Database, History, RefreshCw } from "lucide-react";
+import { Building2, ShieldCheck, Check, Palette, Upload, Trash2, Waves, Download, ArchiveRestore, Database, History, RefreshCw, Link2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { auditLabel } from "@/lib/usg/auditShared";
@@ -25,6 +25,11 @@ type Settings = {
   usgPrintStyle: string; usgPrintCompact: boolean;
   usgPrintPaper: string; usgSignatureUrl: string;
   usgAutoBackup: boolean;
+  // v6 integrations (secrets arrive masked — only their presence flags)
+  careApiBase: string; careApiKeySet: boolean;
+  orthancUrl: string; orthancUsername: string; orthancPasswordSet: boolean;
+  geminiApiKeySet: boolean;
+  pcpndtCentreName: string; pcpndtRegistrationNo: string; pcpndtPlace: string;
 };
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -56,6 +61,38 @@ export function SettingsView() {
   } | null>(null);
   const [autoSaving, setAutoSaving] = useState(false);
 
+  // v6 — integrations tab: secret inputs (write-only) + connection test lights
+  const [careKey, setCareKey] = useState("");
+  const [orthancPass, setOrthancPass] = useState("");
+  const [geminiKey, setGeminiKey] = useState("");
+  const [testing, setTesting] = useState<"" | "care" | "orthanc">("");
+  const [testResult, setTestResult] = useState<{ care?: { ok: boolean; version?: string; error?: string }; orthanc?: { ok: boolean; version?: string; error?: string } } | null>(null);
+
+  const testConnections = async (which: "all" | "care" | "orthanc") => {
+    setTesting(which === "all" ? "" : which);
+    const r = await fetch("/api/settings/test", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ which }),
+    })
+      .then((res) => res.json())
+      .catch(() => null);
+    setTesting("");
+    if (!r) {
+      toast.error("Test failed");
+      return;
+    }
+    setTestResult(r);
+    if (which !== "orthanc" && r.care) {
+      if (r.care.ok) toast.success(`CARE connected (v${r.care.version ?? "?"})`);
+      else toast.error(r.care.error ?? "CARE unreachable");
+    }
+    if (which !== "care" && r.orthanc) {
+      if (r.orthanc.ok) toast.success(`Orthanc connected (v${r.orthanc.version ?? "?"})`);
+      else toast.error(r.orthanc.error ?? "Orthanc unreachable");
+    }
+  };
+
   const loadAudit = useCallback(async () => {
     const res = await fetch("/api/usg/audit?limit=150");
     if (res.ok) setAuditEntries(((await res.json()).entries ?? []) as typeof auditEntries);
@@ -85,6 +122,10 @@ export function SettingsView() {
 
   const save = async () => {
     const body: Record<string, string> = { ...s } as unknown as Record<string, string>;
+    // v6 secrets: only send non-empty write-only inputs ("" means keep).
+    if (careKey.trim()) body.careApiKey = careKey.trim();
+    if (orthancPass.trim()) body.orthancPassword = orthancPass.trim();
+    if (geminiKey.trim()) body.geminiApiKey = geminiKey.trim();
     const r = await fetch("/api/settings", {
       method: "PUT",
       headers: { "content-type": "application/json" },
@@ -92,6 +133,10 @@ export function SettingsView() {
     }).then((res) => res.json());
     if (r.settings) {
       toast.success("Settings saved");
+      setS(r.settings);
+      setCareKey("");
+      setOrthancPass("");
+      setGeminiKey("");
     } else {
       toast.error("Could not save settings");
     }
@@ -199,6 +244,7 @@ export function SettingsView() {
           <TabsTrigger value="appearance" className="text-[12px]"><Palette className="mr-1.5 h-3.5 w-3.5" />Appearance</TabsTrigger>
           <TabsTrigger value="hospital" className="text-[12px]"><Building2 className="mr-1.5 h-3.5 w-3.5" />Hospital</TabsTrigger>
           <TabsTrigger value="usg" className="text-[12px]"><Waves className="mr-1.5 h-3.5 w-3.5" />USG Studio</TabsTrigger>
+          <TabsTrigger value="integrations" className="text-[12px]"><Link2 className="mr-1.5 h-3.5 w-3.5" />Integrations</TabsTrigger>
           <TabsTrigger value="security" className="text-[12px]"><ShieldCheck className="mr-1.5 h-3.5 w-3.5" />Security</TabsTrigger>
           <TabsTrigger value="data" className="text-[12px]"><Database className="mr-1.5 h-3.5 w-3.5" />Data &amp; activity</TabsTrigger>
         </TabsList>
@@ -435,6 +481,125 @@ export function SettingsView() {
           </div>
 
           <Button onClick={save} className="h-9 text-[12.5px]">Save</Button>
+        </TabsContent>
+
+        <TabsContent value="integrations" className="mt-4 space-y-6 rounded-xl border border-border bg-card p-5">
+          {/* CARE ERP bridge */}
+          <section className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-sky-600" />
+              <h3 className="text-[13px] font-bold">CARE ERP — bill-desk worklist</h3>
+              {s.careApiKeySet ? (
+                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 ring-1 ring-emerald-200">key set</span>
+              ) : null}
+            </div>
+            <Field
+              label="ERP base URL"
+              hint="Scheme + host + port, WITHOUT /api — the studio appends /api/internal/reporting-studio/… (e.g. http://172.16.1.139:8888)"
+            >
+              <Input value={s.careApiBase} onChange={(e) => set("careApiBase", e.target.value)} placeholder="http://172.16.1.139:8888"
+                className="h-9 border-border bg-panel text-[12.5px] font-mono" />
+            </Field>
+            <Field label="API key" hint="The same static key the ERP holds in REPORTING_STUDIO_API_KEY. Write-only — a saved key shows as a green badge, never its value.">
+              <Input value={careKey} onChange={(e) => setCareKey(e.target.value)} placeholder={s.careApiKeySet ? "saved — type to replace" : "openssl rand -hex 24 style key"}
+                type="password" className="h-9 border-border bg-panel text-[12.5px] font-mono" />
+            </Field>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" className="h-8 text-[12px]" onClick={() => void testConnections("care")} disabled={testing !== ""}>
+                {testing === "care" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+                Test CARE
+              </Button>
+              {testResult?.care ? (
+                <span className={cn("text-[11.5px] font-semibold", testResult.care.ok ? "text-emerald-700" : "text-red-600")}>
+                  {testResult.care.ok ? `connected${testResult.care.version ? ` · v${testResult.care.version}` : ""}` : testResult.care.error}
+                </span>
+              ) : null}
+            </div>
+          </section>
+
+          {/* Orthanc PACS */}
+          <section className="space-y-3 border-t border-border pt-4">
+            <div className="flex items-center gap-2">
+              <Link2 className="h-4 w-4 text-violet-600" />
+              <h3 className="text-[13px] font-bold">Orthanc PACS — machine images &amp; SR</h3>
+            </div>
+            <Field label="Orthanc URL" hint="The PACS the USG machine pushes to (e.g. http://172.16.1.139:8042). Leave the username blank when Orthanc has no auth.">
+              <Input value={s.orthancUrl} onChange={(e) => set("orthancUrl", e.target.value)} placeholder="http://172.16.1.139:8042"
+                className="h-9 border-border bg-panel text-[12.5px] font-mono" />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Username">
+                <Input value={s.orthancUsername} onChange={(e) => set("orthancUsername", e.target.value)} placeholder="anonymous"
+                  className="h-9 border-border bg-panel text-[12.5px]" />
+              </Field>
+              <Field label="Password" hint={s.orthancPasswordSet ? "saved — type to replace" : "blank when Orthanc is open on the LAN"}>
+                <Input value={orthancPass} onChange={(e) => setOrthancPass(e.target.value)} type="password"
+                  placeholder={s.orthancPasswordSet ? "saved — type to replace" : ""}
+                  className="h-9 border-border bg-panel text-[12.5px]" />
+              </Field>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" className="h-8 text-[12px]" onClick={() => void testConnections("orthanc")} disabled={testing !== ""}>
+                {testing === "orthanc" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+                Test Orthanc
+              </Button>
+              {testResult?.orthanc ? (
+                <span className={cn("text-[11.5px] font-semibold", testResult.orthanc.ok ? "text-emerald-700" : "text-red-600")}>
+                  {testResult.orthanc.ok ? `connected${testResult.orthanc.version ? ` · v${testResult.orthanc.version}` : ""}` : testResult.orthanc.error}
+                </span>
+              ) : null}
+            </div>
+          </section>
+
+          {/* Optional Vision OCR */}
+          <section className="space-y-3 border-t border-border pt-4">
+            <div className="flex items-center gap-2">
+              <Waves className="h-4 w-4 text-fuchsia-600" />
+              <h3 className="text-[13px] font-bold">Vision OCR — optional</h3>
+              {s.geminiApiKeySet ? (
+                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 ring-1 ring-emerald-200">key set</span>
+              ) : null}
+            </div>
+            <Field
+              label="Gemini API key"
+              hint="Used ONLY when a machine stores no DICOM SR: the burned-in biometry is read from the images (the ERP's approach). Without a key the studio stays SR-only — everything else keeps working."
+            >
+              <Input value={geminiKey} onChange={(e) => setGeminiKey(e.target.value)} type="password"
+                placeholder={s.geminiApiKeySet ? "saved — type to replace" : "optional"}
+                className="h-9 border-border bg-panel text-[12.5px] font-mono" />
+            </Field>
+          </section>
+
+          {/* PC-PNDT Form F fixed details */}
+          <section className="space-y-3 border-t border-border pt-4">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-rose-600" />
+              <h3 className="text-[13px] font-bold">PC-PNDT Form F — fixed details</h3>
+            </div>
+            <Field label="Centre name &amp; address" hint="Pre-filled on every Form F (field 1). Two lines are fine.">
+              <Textarea value={s.pcpndtCentreName} onChange={(e) => set("pcpndtCentreName", e.target.value)} rows={2}
+                className="border-border bg-panel text-[12.5px]" />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="PC-PNDT registration no." hint="Field 2 on the form.">
+                <Input value={s.pcpndtRegistrationNo} onChange={(e) => set("pcpndtRegistrationNo", e.target.value)}
+                  className="h-9 border-border bg-panel text-[12.5px]" />
+              </Field>
+              <Field label="Place" hint="Printed beside the date.">
+                <Input value={s.pcpndtPlace} onChange={(e) => set("pcpndtPlace", e.target.value)}
+                  className="h-9 border-border bg-panel text-[12.5px]" />
+              </Field>
+            </div>
+            <p className="text-[11px] leading-relaxed text-faint">
+              The conducting doctor and registration number come from the USG Studio tab (signature block) — the same values print on reports and Form F.
+            </p>
+          </section>
+
+          <div className="flex justify-end border-t border-border pt-4">
+            <Button onClick={() => void save()} className="h-9 gap-2 text-[13px]">
+              <Check className="h-4 w-4" /> Save settings
+            </Button>
+          </div>
         </TabsContent>
 
         <TabsContent value="security" className="mt-4 space-y-4 rounded-xl border border-border bg-card p-5">

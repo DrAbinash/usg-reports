@@ -39,12 +39,21 @@ import { UsgDiffPanel, type DiffSource } from "./UsgDiffPanel";
 import { UsgBiometryCalc } from "./UsgBiometryCalc";
 import { UsgCalculators } from "./UsgCalculators";
 import { UsgImagesCard, type ImageRow, type PendingImage } from "./UsgImagesCard";
+import { UsgDicomPicker } from "./UsgDicomPicker";
+import { UsgFormFDialog, type FormFDefaults, type FormFOrderLite } from "./UsgFormFDialog";
 import { DictationButton } from "./DictationButton";
 import { UsgStudyPicker } from "./UsgStudyPicker";
 import { appendTranscript } from "@/lib/usg/dictation";
 import { clearDraft, draftKey, loadDraft, saveDraft, snapshotDiffers, type DraftSnapshot } from "@/lib/usg/drafts";
 import { downloadReportPdf, shareReportPdf } from "./sharePdf";
-import { FileDown, MessageCircle } from "lucide-react";
+import { FileDown, MessageCircle, FileCheck2 as FileCheck2Icon, ScanLine, Link2 } from "lucide-react";
+
+/** v6: the bill-desk order a report came from (banner, PACS, Form F). */
+export type ReportOrderLite = FormFOrderLite & {
+  studyInstanceUid: string | null;
+  billingStatus: string | null;
+  careSyncedAt: string | null;
+};
 
 export type UsgReportRow = {
   id: string;
@@ -69,6 +78,8 @@ export type UsgReportRow = {
   patient?: { id: string; name: string; phone: string } | null;
   /** Machine stills attached to the report (v5). */
   images?: ImageRow[];
+  /** Bill-desk order this report was started from (v6). */
+  order?: ReportOrderLite | null;
 };
 
 /** Registry autocomplete entry from /api/usg/patients. */
@@ -84,6 +95,10 @@ export type UsgComposerProps = {
   diffSource?: DiffSource | null;
   /** The doctor's normal-wording overrides (v5) — builtin normals retuned. */
   normalOverrides?: NormalOverrides | null;
+  /** v6: the bill-desk order behind this report (banner, PACS pull, Form F). */
+  order?: ReportOrderLite | null;
+  /** v6: settings needed for the Form F fixed details. */
+  formFDefaults?: FormFDefaults | null;
   onBack: () => void;
   onSaved: () => void; // refresh list
 };
@@ -95,7 +110,7 @@ function fmtPrintDate(iso: string): string {
     : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-export function UsgComposer({ pathologies, settings, report, prefill, diffSource, normalOverrides, onBack, onSaved }: UsgComposerProps) {
+export function UsgComposer({ pathologies, settings, report, prefill, diffSource, normalOverrides, order, formFDefaults, onBack, onSaved }: UsgComposerProps) {
   const initial = useMemo(() => {
     if (!report) return null;
     try {
@@ -153,6 +168,66 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const busyRef = useRef(busy);
   busyRef.current = busy;
   const [pickerOpen, setPickerOpen] = useState(false);
+
+  // v6 — CARE order integration: PACS key images, SR measurement pull, Form F.
+  const [dicomOpen, setDicomOpen] = useState(false);
+  const [formFOpen, setFormFOpen] = useState(false);
+  const [pulling, setPulling] = useState(false);
+  const [pullSummary, setPullSummary] = useState<{ source: string; matchedCount: number; extras: Record<string, string> } | null>(null);
+
+  const orderUid = order?.studyInstanceUid ?? null;
+  const reportIdForPacs = savedIdRef.current ?? report?.id ?? null;
+
+  /** Pull machine measurements (DICOM SR first, Vision OCR fallback) into
+   *  the study's variable slots — the typist-less biometry path. */
+  const pullFromMachine = async () => {
+    const rid = savedIdRef.current ?? report?.id ?? null;
+    if (!rid) {
+      toast.info("Save the draft once — then pull the machine's measurements");
+      return;
+    }
+    setPulling(true);
+    try {
+      const r = await fetch("/api/usg/dicom/measurements", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reportId: rid }),
+      }).then((x) => x.json());
+      if (r?.error) {
+        toast.error(r.error);
+        return;
+      }
+      const vars = (r.vars ?? {}) as Record<string, Record<string, string>>;
+      let applied = 0;
+      setState((s) => {
+        let next = s;
+        for (const [organ, kv] of Object.entries(vars)) {
+          for (const [k, v] of Object.entries(kv)) {
+            if (v === undefined || v === "") continue;
+            next = setOrganVar(next, organ, k, String(v));
+            applied++;
+          }
+        }
+        return next;
+      });
+      setPullSummary({ source: r.source ?? "none", matchedCount: r.matchedCount ?? 0, extras: (r.extras ?? {}) as Record<string, string> });
+      if ((r.matchedCount ?? 0) > 0) {
+        toast.success(
+          r.source === "sr"
+            ? `Machine SR → ${r.matchedCount} measurement slot(s) filled`
+            : `OCR → ${r.matchedCount} measurement slot(s) filled (verify values)`,
+        );
+      } else if (r.ocrNote) {
+        toast.info(r.ocrNote);
+      } else {
+        toast.info("No measurements found in the PACS study for this study type");
+      }
+    } catch {
+      toast.error("Pull failed — Orthanc unreachable");
+    } finally {
+      setPulling(false);
+    }
+  };
 
   const lookup = useMemo(() => makeLookup(pathologies), [pathologies]);
   const resolved = useMemo(() => resolve(state, lookup, technique, normalOverrides), [state, lookup, technique, normalOverrides]);
@@ -483,6 +558,16 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     }
   };
 
+  /** v6: reload attached stills from the server (after a PACS pick). */
+  const reloadImages = async () => {
+    const rid = savedIdRef.current ?? report?.id ?? null;
+    if (!rid) return;
+    const res = await fetch(`/api/usg/reports/${rid}`);
+    if (!res.ok) return;
+    const fresh = (await res.json()).report as UsgReportRow;
+    if (Array.isArray(fresh.images)) setImages(fresh.images);
+  };
+
   const addImage = (dataUrl: string) => {
     if (isFinal) {
       toast.error("Finalized reports keep their images frozen");
@@ -611,6 +696,78 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      {/* v6 — CARE order banner: bill-desk context + PACS + Form F */}
+      {order ? (
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-sky-100 bg-sky-50/60 px-4 py-2 text-[11.5px]">
+          <Link2 className="h-3.5 w-3.5 text-sky-600" />
+          <span className="font-mono font-bold text-sky-800">{order.accessionNumber}</span>
+          {order.billNumber ? <span className="text-sky-700">· Bill {order.billNumber}</span> : null}
+          {order.testName ? <span className="truncate text-sky-700">· {order.testName}</span> : null}
+          {order.billingStatus ? (
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 text-[10px] font-bold ring-1",
+                order.billingStatus === "PAID"
+                  ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                  : order.billingStatus === "DUE"
+                    ? "bg-amber-50 text-amber-700 ring-amber-200"
+                    : "bg-sky-50 text-sky-700 ring-sky-200",
+              )}
+            >
+              {order.billingStatus.replace("_", " ")}
+            </span>
+          ) : null}
+          {orderUid ? (
+            <span className="flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-700 ring-1 ring-violet-200">
+              <ScanLine className="h-3 w-3" /> PACS
+            </span>
+          ) : null}
+          <div className="ml-auto flex items-center gap-1.5">
+            {orderUid ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void pullFromMachine()}
+                disabled={pulling || isFinal}
+                className="h-7 border-violet-200 bg-white px-2 text-[11px] font-semibold text-violet-700 hover:bg-violet-50"
+                title="Fill this study's measurement slots from the machine (DICOM SR, OCR fallback)"
+              >
+                {pulling ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <ScanLine className="mr-1 h-3 w-3" />}
+                Pull from machine
+              </Button>
+            ) : null}
+            {study.pcpndt && formFDefaults ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setFormFOpen(true)}
+                className="h-7 border-rose-200 bg-white px-2 text-[11px] font-semibold text-rose-700 hover:bg-rose-50"
+                title="PC-PNDT Form F — demographics pre-filled from the bill desk"
+              >
+                <FileCheck2Icon className="mr-1 h-3 w-3" />
+                Form F
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Machine measurement pull summary — what matched, what didn't */}
+      {pullSummary ? (
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-violet-100 bg-violet-50/50 px-4 py-1.5 text-[11px] text-violet-800">
+          <b>Pulled {pullSummary.matchedCount} slot(s)</b>
+          <span className="text-violet-600">{pullSummary.source === "sr" ? "from machine SR" : pullSummary.source === "ocr" ? "via OCR — verify" : "nothing found"}</span>
+          {Object.keys(pullSummary.extras).length ? (
+            <span className="truncate text-violet-600">
+              · unmatched: {Object.entries(pullSummary.extras).slice(0, 6).map(([k, v]) => `${k} ${v}`).join("; ")}
+            </span>
+          ) : null}
+          <button className="ml-auto text-[10px] font-bold text-violet-500 underline" onClick={() => setPullSummary(null)}>
+            dismiss
+          </button>
+        </div>
+      ) : null}
+
       {/* Patient strip */}
       <div className="shrink-0 border-b border-border bg-card/80 px-4 py-3 backdrop-blur">
         <div className="flex flex-wrap items-end gap-2.5">
@@ -904,6 +1061,8 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
             onCaption={setCaption}
             onRemove={removeImage}
             onMove={moveImage}
+            onPickDicom={orderUid ? () => setDicomOpen(true) : undefined}
+            pacsLinked={!!orderUid}
           />
         </div>
 
@@ -983,6 +1142,24 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
 
       {/* Hidden print frame */}
       <iframe ref={printRef} title="print" className="hidden" />
+
+      {/* v6 — Orthanc key-image picker + PC-PNDT Form F */}
+      <UsgDicomPicker
+        open={dicomOpen}
+        onClose={() => setDicomOpen(false)}
+        reportId={reportIdForPacs}
+        studyInstanceUid={orderUid}
+        onAdded={() => void reloadImages()}
+      />
+      {formFDefaults ? (
+        <UsgFormFDialog
+          open={formFOpen}
+          onClose={() => setFormFOpen(false)}
+          defaults={formFDefaults}
+          order={order ?? null}
+          report={report ? { id: report.id, stateJson: report.stateJson } : null}
+        />
+      ) : null}
 
       <UsgPathologyDialog
         open={dialogOrgan !== null}

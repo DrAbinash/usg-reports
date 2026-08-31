@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { ArrowDown, ArrowUp, ImageIcon, Trash2, UploadCloud } from "lucide-react";
+import { ArrowDown, ArrowUp, ImageIcon, ScanLine, Trash2, UploadCloud } from "lucide-react";
 import { IMAGE_MAX_BYTES } from "@/lib/usg/images";
 
 export type ImageRow = { id: string; dataUrl: string; caption: string; sortOrder: number };
@@ -23,6 +23,10 @@ export type UsgImagesCardProps = {
   onCaption: (kind: "server" | "pending", key: string, caption: string) => void;
   onRemove: (kind: "server" | "pending", key: string) => void;
   onMove: (kind: "server" | "pending", key: string, dir: -1 | 1) => void;
+  /** v6: open the Orthanc key-image picker (hidden unless a study is linked). */
+  onPickDicom?: () => void;
+  /** True when the linked order has a PACS Study UID. */
+  pacsLinked?: boolean;
 };
 
 function readFiles(files: File[], onAdd: (dataUrl: string) => void) {
@@ -44,7 +48,7 @@ function readFiles(files: File[], onAdd: (dataUrl: string) => void) {
   }
 }
 
-export function UsgImagesCard({ images, pending, readOnly, onAdd, onCaption, onRemove, onMove }: UsgImagesCardProps) {
+export function UsgImagesCard({ images, pending, readOnly, onAdd, onCaption, onRemove, onMove, onPickDicom, pacsLinked }: UsgImagesCardProps) {
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const count = images.length + pending.length;
@@ -61,11 +65,22 @@ export function UsgImagesCard({ images, pending, readOnly, onAdd, onCaption, onR
             {count} still{count > 1 ? "s" : ""} · prints as a 2-up grid
           </span>
         ) : null}
+        {!readOnly && onPickDicom ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto h-7 border-violet-200 bg-violet-50 px-2 text-[11px] text-violet-700 hover:bg-violet-100"
+            onClick={onPickDicom}
+            title={pacsLinked ? "Pick key images from the Orthanc study — frozen into the report at pick time" : "The machine's study has not reached Orthanc yet (sync the worklist)"}
+          >
+            <ScanLine className="mr-1 h-3 w-3" /> From PACS
+          </Button>
+        ) : null}
         {!readOnly ? (
           <Button
             variant="outline"
             size="sm"
-            className="ml-auto h-7 border-sky-200 bg-sky-50 px-2 text-[11px] text-sky-700 hover:bg-sky-100"
+            className={`${onPickDicom ? "" : "ml-auto"} h-7 border-sky-200 bg-sky-50 px-2 text-[11px] text-sky-700 hover:bg-sky-100`}
             onClick={() => fileRef.current?.click()}
           >
             <UploadCloud className="mr-1 h-3 w-3" /> Add stills

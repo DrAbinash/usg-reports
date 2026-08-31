@@ -28,6 +28,10 @@ export const BACKUP_SETTINGS_KEYS = [
   "usgPrintCompact",
   "usgPrintPaper",
   "usgSignatureUrl",
+  // v6 — PC-PNDT Form F fixed details (personalisation, not clinical)
+  "pcpndtCentreName",
+  "pcpndtRegistrationNo",
+  "pcpndtPlace",
 ] as const;
 
 export type BackupSettings = Partial<Record<(typeof BACKUP_SETTINGS_KEYS)[number], string | boolean>>;
@@ -170,6 +174,59 @@ export type UsgFullBackupFile = {
   normalOverrides?: BackupNormalOverride[];
   patients: BackupPatient[];
   reports: BackupReport[];
+  /** v6: PC-PNDT Form F records (statutory — they travel with the clinic). */
+  formFs?: BackupFormF[];
+  /** v6: bill-desk order links (worklist history; clinical workflow state). */
+  careOrders?: BackupCareOrder[];
+};
+
+export type BackupFormF = {
+  id: string;
+  accessionNumber: string;
+  billNumber: string;
+  patientName: string;
+  patientAge: string;
+  husbandFatherName: string;
+  address: string;
+  mobile: string;
+  childrenDetails: string;
+  referredBy: string;
+  lmpWeeks: string;
+  previousChildIssue: string;
+  indicationOther: string;
+  gestationalAgeWeeks: string;
+  gestationalAgeDays: string;
+  ultrasoundResult: string;
+  abnormality: string;
+  procedureDate: string;
+  consentDate: string;
+  idCardVerified: boolean;
+  reportId: string | null;
+  createdAt: string;
+};
+
+export type BackupCareOrder = {
+  id: string;
+  accessionNumber: string;
+  careWorklistId: string | null;
+  patientName: string;
+  patientAge: string;
+  patientSex: string;
+  patientPhone: string;
+  patientAddress: string;
+  billNumber: string;
+  referringDoctor: string;
+  testName: string;
+  modality: string;
+  studyDate: string | null;
+  studyInstanceUid: string | null;
+  billingStatus: string | null;
+  status: string;
+  ignored: boolean;
+  reportId: string | null;
+  formFId: string | null;
+  careSyncedAt: string | null;
+  createdAt: string;
 };
 
 /** Validate a full-clinic backup file; throws doctor-friendly errors. */
@@ -240,6 +297,61 @@ export function parseFullBackup(raw: unknown): UsgFullBackupFile {
       images,
     });
   }
+  const formFs: BackupFormF[] = Array.isArray(obj.formFs)
+    ? (obj.formFs as Record<string, unknown>[])
+        .filter((f) => f && typeof f.id === "string" && typeof f.patientName === "string")
+        .map((f) => ({
+          id: String(f.id),
+          accessionNumber: typeof f.accessionNumber === "string" ? f.accessionNumber : "",
+          billNumber: typeof f.billNumber === "string" ? f.billNumber : "",
+          patientName: String(f.patientName),
+          patientAge: typeof f.patientAge === "string" ? f.patientAge : "",
+          husbandFatherName: typeof f.husbandFatherName === "string" ? f.husbandFatherName : "",
+          address: typeof f.address === "string" ? f.address : "",
+          mobile: typeof f.mobile === "string" ? f.mobile : "",
+          childrenDetails: typeof f.childrenDetails === "string" ? f.childrenDetails : "",
+          referredBy: typeof f.referredBy === "string" ? f.referredBy : "Self",
+          lmpWeeks: typeof f.lmpWeeks === "string" ? f.lmpWeeks : "",
+          previousChildIssue: typeof f.previousChildIssue === "string" ? f.previousChildIssue : "",
+          indicationOther: typeof f.indicationOther === "string" ? f.indicationOther : "",
+          gestationalAgeWeeks: typeof f.gestationalAgeWeeks === "string" ? f.gestationalAgeWeeks : "",
+          gestationalAgeDays: typeof f.gestationalAgeDays === "string" ? f.gestationalAgeDays : "",
+          ultrasoundResult: typeof f.ultrasoundResult === "string" ? f.ultrasoundResult : "",
+          abnormality: typeof f.abnormality === "string" ? f.abnormality : "",
+          procedureDate: typeof f.procedureDate === "string" ? f.procedureDate : "",
+          consentDate: typeof f.consentDate === "string" ? f.consentDate : "",
+          idCardVerified: f.idCardVerified === true,
+          reportId: typeof f.reportId === "string" ? f.reportId : null,
+          createdAt: typeof f.createdAt === "string" ? f.createdAt : new Date().toISOString(),
+        }))
+    : [];
+  const careOrders: BackupCareOrder[] = Array.isArray(obj.careOrders)
+    ? (obj.careOrders as Record<string, unknown>[])
+        .filter((o) => o && typeof o.id === "string" && typeof o.accessionNumber === "string")
+        .map((o) => ({
+          id: String(o.id),
+          accessionNumber: String(o.accessionNumber),
+          careWorklistId: typeof o.careWorklistId === "string" ? o.careWorklistId : null,
+          patientName: typeof o.patientName === "string" ? o.patientName : "",
+          patientAge: typeof o.patientAge === "string" ? o.patientAge : "",
+          patientSex: typeof o.patientSex === "string" ? o.patientSex : "F",
+          patientPhone: typeof o.patientPhone === "string" ? o.patientPhone : "",
+          patientAddress: typeof o.patientAddress === "string" ? o.patientAddress : "",
+          billNumber: typeof o.billNumber === "string" ? o.billNumber : "",
+          referringDoctor: typeof o.referringDoctor === "string" ? o.referringDoctor : "",
+          testName: typeof o.testName === "string" ? o.testName : "",
+          modality: typeof o.modality === "string" ? o.modality : "USG",
+          studyDate: typeof o.studyDate === "string" ? o.studyDate : null,
+          studyInstanceUid: typeof o.studyInstanceUid === "string" ? o.studyInstanceUid : null,
+          billingStatus: typeof o.billingStatus === "string" ? o.billingStatus : null,
+          status: typeof o.status === "string" ? o.status : "PENDING",
+          ignored: o.ignored === true,
+          reportId: typeof o.reportId === "string" ? o.reportId : null,
+          formFId: typeof o.formFId === "string" ? o.formFId : null,
+          careSyncedAt: typeof o.careSyncedAt === "string" ? o.careSyncedAt : null,
+          createdAt: typeof o.createdAt === "string" ? o.createdAt : new Date().toISOString(),
+        }))
+    : [];
   return {
     format: "usg-clinic-backup",
     version: 1,
@@ -249,5 +361,7 @@ export function parseFullBackup(raw: unknown): UsgFullBackupFile {
     normalOverrides: base.normalOverrides,
     patients,
     reports,
+    formFs,
+    careOrders,
   };
 }

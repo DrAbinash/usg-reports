@@ -6,6 +6,7 @@ import { loadAllPathologies, loadNormalOverrides } from "@/lib/usg/server";
 import { buildUsgReportHtml, formatUsgSerial } from "@/lib/usg/print";
 import { audit } from "@/lib/usg/audit";
 import { payloadInputFor, qrDataUrlFor } from "@/lib/usg/qrServer";
+import { finalizeReport } from "@/lib/usg/careClient";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -115,7 +116,51 @@ export async function POST(req: Request, ctx: Ctx) {
     patientName: updated.patientName,
     detail: `register no. ${formatUsgSerial(serialNo)} frozen — reprint only`,
   });
-  return Response.json({ report: updated, html, serialNo });
+
+  // v6 CARE bridge: if this report came from a bill-desk order, tell the ERP
+  // (REPORT_FINAL + patient_reports + billing link) right away. Failures are
+  // non-blocking — the sync route retries every run until the ERP accepts,
+  // surfacing its own message (e.g. PCPNDT Form F 409) in the worklist banner.
+  let careSync: "none" | "sent" | "queued" = "none";
+  const order = await db.usgCareOrder.findFirst({ where: { reportId: id } });
+  if (order) {
+    await db.usgCareOrder.update({ where: { id: order.id }, data: { status: "REPORTED" } });
+    const r = await finalizeReport({
+      accessionNumber: order.accessionNumber,
+      worklistId: order.careWorklistId,
+      reportText: {
+        technique: updated.technique ?? "",
+        findings: updated.findings ?? "",
+        impression: updated.impression ?? "",
+        recommendation: "",
+      },
+      radiologistName: settings.usgDoctorName || "USG Studio",
+      radiologistRegNumber: settings.usgDoctorRegNo || undefined,
+      finalizedAt: (updated.finalizedAt ?? new Date()).toISOString(),
+    });
+    if (r.ok) {
+      careSync = "sent";
+      await db.usgCareOrder.update({ where: { id: order.id }, data: { careSyncedAt: new Date() } });
+      await audit({
+        action: "worklist.careSync",
+        reportId: id,
+        serialNo,
+        patientName: updated.patientName,
+        detail: `ERP accepted finalize for ${order.accessionNumber}`,
+      });
+    } else {
+      careSync = "queued";
+      await audit({
+        action: "worklist.careSyncQueued",
+        reportId: id,
+        serialNo,
+        patientName: updated.patientName,
+        detail: `ERP finalize queued (${r.error}) — retries on every worklist sync`,
+      });
+    }
+  }
+
+  return Response.json({ report: updated, html, serialNo, careSync });
 }
 
 function safeParse(raw: string): unknown {

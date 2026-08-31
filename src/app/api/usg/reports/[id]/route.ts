@@ -18,7 +18,29 @@ export async function GET(_req: Request, ctx: Ctx) {
     include: { patient: true, images: { orderBy: { sortOrder: "asc" } } },
   });
   if (!report) return Response.json({ error: "Not found" }, { status: 404 });
-  return Response.json({ report });
+
+  // v6: the bill-desk order this report came from (banner, PACS pull, Form F).
+  const orderRow = await db.usgCareOrder.findFirst({ where: { reportId: id } });
+  const order = orderRow
+    ? {
+        id: orderRow.id,
+        accessionNumber: orderRow.accessionNumber,
+        patientName: orderRow.patientName,
+        patientAge: orderRow.patientAge,
+        patientSex: orderRow.patientSex,
+        patientPhone: orderRow.patientPhone,
+        patientAddress: orderRow.patientAddress,
+        billNumber: orderRow.billNumber,
+        referringDoctor: orderRow.referringDoctor,
+        testName: orderRow.testName,
+        studyDate: orderRow.studyDate ? orderRow.studyDate.toISOString() : null,
+        studyInstanceUid: orderRow.studyInstanceUid,
+        billingStatus: orderRow.billingStatus,
+        careSyncedAt: orderRow.careSyncedAt ? orderRow.careSyncedAt.toISOString() : null,
+      }
+    : null;
+
+  return Response.json({ report, order });
 }
 
 export async function PUT(req: Request, ctx: Ctx) {

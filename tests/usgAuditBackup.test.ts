@@ -31,6 +31,8 @@ const SCRATCH = path.join(process.cwd(), "tests", ".tmp", "backups");
 process.env.VITEST_BACKUP_DIR = SCRATCH;
 // backupServer computes BACKUP_DIR at import time from cwd — patch via module state.
 
+process.env.USG_BACKUP_DIR = SCRATCH;
+
 beforeEach(async () => {
   await db.usgAudit.deleteMany();
   await db.usgReportImage.deleteMany();

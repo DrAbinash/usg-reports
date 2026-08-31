@@ -46,6 +46,17 @@ export async function POST(req: Request) {
   }
   if (Object.keys(patch).length) await updateSettings(patch);
 
+  // Normal-wording overrides — upsert on (studyKey, organKey).
+  let overridesRestored = 0;
+  for (const n of backup.normalOverrides ?? []) {
+    await db.usgNormalOverride.upsert({
+      where: { studyKey_organKey: { studyKey: n.studyKey, organKey: n.organKey } },
+      create: { studyKey: n.studyKey, organKey: n.organKey, text: n.text },
+      update: { text: n.text },
+    }).catch(() => undefined);
+    overridesRestored++;
+  }
+
   // Custom pathologies — upsert on the (organKey, label) unique key.
   let restored = 0;
   for (const c of backup.customPathologies) {
@@ -71,7 +82,7 @@ export async function POST(req: Request) {
 
   await audit({
     action: "backup.restore",
-    detail: `personalisation restore — ${Object.keys(patch).length} settings, ${restored} custom findings`,
+    detail: `personalisation restore — ${Object.keys(patch).length} settings, ${restored} custom findings, ${overridesRestored} wordings`,
   });
 
   return Response.json({
@@ -79,6 +90,7 @@ export async function POST(req: Request) {
     mode: "personalisation",
     settingsRestored: Object.keys(patch).length,
     customPathologiesRestored: restored,
+    normalOverridesRestored: overridesRestored,
     exportedAt: backup.exportedAt,
   });
 }

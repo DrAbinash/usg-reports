@@ -6,8 +6,23 @@ import { db } from "@/lib/db";
 import { USG_PATHOLOGIES_ALL } from "./pathologies";
 import type { UsgPathologyDef } from "./types";
 import { makeLookup, normaliseState, resolve } from "./composer";
+import { normalOverrideKey, type NormalOverrides } from "./studies";
 
 export const CUSTOM_KEY_PREFIX = "custom:";
+
+/** The doctor's normal-wording overrides as a lookup map. */
+export async function loadNormalOverrides(): Promise<NormalOverrides> {
+  try {
+    const rows = await db.usgNormalOverride.findMany();
+    const out: NormalOverrides = {};
+    for (const r of rows) {
+      if (r.text.trim()) out[normalOverrideKey(r.studyKey, r.organKey)] = r.text.trim();
+    }
+    return out;
+  } catch {
+    return {}; // table not created yet (first boot)
+  }
+}
 
 export async function loadAllPathologies(): Promise<UsgPathologyDef[]> {
   let customs: UsgPathologyDef[] = [];
@@ -60,14 +75,15 @@ export async function lookupPathology(key: string): Promise<UsgPathologyDef | un
 export async function resolveColumns(stateJson: string, technique: string) {
   const all = await loadAllPathologies();
   const lookup = makeLookup(all);
+  const overrides = await loadNormalOverrides();
   let parsed: unknown = {};
   try {
     parsed = JSON.parse(stateJson);
   } catch {
     parsed = {};
   }
-  const state = normaliseState(parsed);
-  const r = resolve(state, lookup, technique);
+  const state = normaliseState(parsed, "wa-female", overrides);
+  const r = resolve(state, lookup, technique, overrides);
   return {
     studyKey: state.studyKey,
     studyTitle: r.title,

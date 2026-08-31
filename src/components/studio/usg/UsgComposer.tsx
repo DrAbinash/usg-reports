@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { ArrowLeft, CalendarDays, ChevronDown, Command, FileCheck2, Loader2, Phone, Printer, Save, Search, Settings2 } from "lucide-react";
 import type { UsgComposerState, UsgPathologyDef } from "@/lib/usg/types";
 import { USG_SEX_CHILD } from "@/lib/usg/types";
-import { USG_STUDIES, STUDY_GROUPS, getStudy } from "@/lib/usg/studies";
+import { USG_STUDIES, STUDY_GROUPS, applyNormalOverrides, getStudy, normalOverrideKey, type NormalOverrides } from "@/lib/usg/studies";
 import {
   applyPathologies,
   makeLookup,
@@ -80,6 +80,8 @@ export type UsgComposerProps = {
   prefill?: { patientName?: string; patientPhone?: string; patientAge?: string; patientSex?: string } | null;
   /** Previous-scan snapshot for the follow-up diff panel (follow-up drafts). */
   diffSource?: DiffSource | null;
+  /** The doctor's normal-wording overrides (v5) — builtin normals retuned. */
+  normalOverrides?: NormalOverrides | null;
   onBack: () => void;
   onSaved: () => void; // refresh list
 };
@@ -91,7 +93,7 @@ function fmtPrintDate(iso: string): string {
     : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-export function UsgComposer({ pathologies, settings, report, prefill, diffSource, onBack, onSaved }: UsgComposerProps) {
+export function UsgComposer({ pathologies, settings, report, prefill, diffSource, normalOverrides, onBack, onSaved }: UsgComposerProps) {
   const initial = useMemo(() => {
     if (!report) return null;
     try {
@@ -111,7 +113,10 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const [patients, setPatients] = useState<PatientSuggestion[]>([]);
   const [referredBy, setReferredBy] = useState(report?.referredBy ?? "");
   const [studyKey, setStudyKey] = useState(studyKey0);
-  const study = getStudy(studyKey) ?? USG_STUDIES[0];
+  const study = useMemo(
+    () => applyNormalOverrides(getStudy(studyKey) ?? USG_STUDIES[0], normalOverrides),
+    [studyKey, normalOverrides],
+  );
   const [technique, setTechnique] = useState(report?.technique ?? study.technique);
   const [state, setState] = useState<UsgComposerState>(
     () => initial ?? { studyKey: studyKey0, organs: study.organs.map((o) => ({ organ: o.key, pathology: null, pathologies: [], custom: false, text: o.normal, vars: {} })), impressionOverride: null },
@@ -148,7 +153,51 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const lookup = useMemo(() => makeLookup(pathologies), [pathologies]);
-  const resolved = useMemo(() => resolve(state, lookup, technique), [state, lookup, technique]);
+  const resolved = useMemo(() => resolve(state, lookup, technique, normalOverrides), [state, lookup, technique, normalOverrides]);
+
+  /** Retune one organ's builtin normal (v5) — the composer's own wording
+   *  resets to it when the organ is still showing its normal text. */
+  const saveNormalOverride = async (organKey: string, text: string) => {
+    const res = await fetch("/api/usg/normals", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ studyKey, organKey, text }),
+    });
+    if (!res.ok) {
+      toast.error((await res.json().catch(() => ({}))).error ?? "Could not save the wording");
+      return;
+    }
+    const newText = text.trim();
+    setState((s) => ({
+      ...s,
+      organs: s.organs.map((o) =>
+        o.organ === organKey && !selectedPathologies(o).length && !o.custom
+          ? { ...o, text: newText }
+          : o,
+      ),
+    }));
+    toast.success("Normal wording saved — every future report uses it");
+  };
+
+  const resetNormalOverride = async (organKey: string) => {
+    const res = await fetch(`/api/usg/normals?studyKey=${encodeURIComponent(studyKey)}&organKey=${encodeURIComponent(organKey)}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) {
+      toast.error("Could not reset the wording");
+      return;
+    }
+    const builtin = getStudy(studyKey)?.organs.find((o) => o.key === organKey)?.normal ?? "";
+    setState((s) => ({
+      ...s,
+      organs: s.organs.map((o) =>
+        o.organ === organKey && !selectedPathologies(o).length && !o.custom
+          ? { ...o, text: builtin }
+          : o,
+      ),
+    }));
+    toast.success("Back to the builtin wording");
+  };
 
   // Registry autocomplete — known patients appear under the name box; picking
   // one fills the phone (and links this report into her history on save).
@@ -291,7 +340,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     if (!target) return;
     setStudyKey(k);
     setTechnique(target.technique);
-    setState((s) => switchStudy(s, k));
+    setState((s) => switchStudy(s, k, normalOverrides));
     // Study drives patient type: pregnancy studies are female, the child
     // scaffold switches the strip to the Child profile.
     if (k === "wa-child") setPatientSex(USG_SEX_CHILD);
@@ -324,7 +373,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     setState((s) => {
       const cur = selectedPathologies(s.organs.find((o) => o.organ === organKey) ?? { pathology: null });
       const next = key === null ? [] : cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key];
-      return applyPathologies(s, organKey, next, lookup);
+      return applyPathologies(s, organKey, next, lookup, normalOverrides);
     });
   };
 
@@ -811,6 +860,9 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
                 def={def}
                 state={st}
                 pathologies={pathologiesForOrgan(pathologies, def.key)}
+                normalOverride={normalOverrides?.[normalOverrideKey(studyKey, def.key)] ?? null}
+                onSaveNormal={(text) => saveNormalOverride(def.key, text)}
+                onResetNormal={() => resetNormalOverride(def.key)}
                 onToggle={(k) => togglePathology(def.key, k)}
                 onVar={(k, v) => setState((s) => setOrganVar(s, def.key, k, v))}
                 onText={(t) => setState((s) => setOrganText(s, def.key, t))}

@@ -41,18 +41,27 @@ export type BackupCustomPathology = {
   sortOrder: number;
 };
 
+export type BackupNormalOverride = {
+  studyKey: string;
+  organKey: string;
+  text: string;
+};
+
 export type UsgBackupFile = {
   format: "usg-studio-backup";
   version: 1;
   exportedAt: string;
   settings: BackupSettings;
   customPathologies: BackupCustomPathology[];
+  /** The doctor's normal-wording overrides (optional — older files lack it). */
+  normalOverrides?: BackupNormalOverride[];
 };
 
 /** Build the backup payload from live values. */
 export function buildBackup(
   settings: Record<string, unknown>,
   customs: BackupCustomPathology[],
+  normalOverrides: BackupNormalOverride[] = [],
 ): UsgBackupFile {
   const picked: BackupSettings = {};
   for (const k of BACKUP_SETTINGS_KEYS) {
@@ -65,6 +74,7 @@ export function buildBackup(
     exportedAt: new Date().toISOString(),
     settings: picked,
     customPathologies: customs.map((c) => ({ ...c })),
+    normalOverrides: normalOverrides.map((n) => ({ ...n })),
   };
 }
 
@@ -103,7 +113,12 @@ export function parseBackup(raw: unknown): UsgBackupFile {
       sortOrder: typeof e.sortOrder === "number" ? e.sortOrder : 100,
     });
   }
-  return { format: "usg-studio-backup", version: 1, exportedAt: typeof obj.exportedAt === "string" ? obj.exportedAt : new Date().toISOString(), settings, customPathologies };
+  const normalOverrides: BackupNormalOverride[] = Array.isArray(obj.normalOverrides)
+    ? (obj.normalOverrides as Record<string, unknown>[])
+        .filter((n) => n && typeof n.studyKey === "string" && typeof n.organKey === "string" && typeof n.text === "string" && n.text.trim())
+        .map((n) => ({ studyKey: String(n.studyKey), organKey: String(n.organKey), text: String(n.text).trim() }))
+    : [];
+  return { format: "usg-studio-backup", version: 1, exportedAt: typeof obj.exportedAt === "string" ? obj.exportedAt : new Date().toISOString(), settings, customPathologies, normalOverrides };
 }
 
 // ── Full-clinic backup (v5 phase 6) ────────────────────────────────────────
@@ -152,6 +167,7 @@ export type UsgFullBackupFile = {
   exportedAt: string;
   settings: BackupSettings;
   customPathologies: BackupCustomPathology[];
+  normalOverrides?: BackupNormalOverride[];
   patients: BackupPatient[];
   reports: BackupReport[];
 };
@@ -230,6 +246,7 @@ export function parseFullBackup(raw: unknown): UsgFullBackupFile {
     exportedAt: base.exportedAt,
     settings: base.settings,
     customPathologies: base.customPathologies,
+    normalOverrides: base.normalOverrides,
     patients,
     reports,
   };

@@ -2,7 +2,7 @@ import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
 import { normaliseState, makeLookup, resolve } from "@/lib/usg/composer";
-import { loadAllPathologies } from "@/lib/usg/server";
+import { loadAllPathologies, loadNormalOverrides } from "@/lib/usg/server";
 import { buildUsgReportHtml, formatUsgSerial } from "@/lib/usg/print";
 import { audit } from "@/lib/usg/audit";
 
@@ -40,8 +40,9 @@ export async function POST(_req: Request, ctx: Ctx) {
   const settings = await getSettings();
   const all = await loadAllPathologies();
   const lookup = makeLookup(all);
-  const state = normaliseState(safeParse(report.stateJson), report.studyKey);
-  const resolved = resolve(state, lookup, report.technique);
+  const overrides = await loadNormalOverrides();
+  const state = normaliseState(safeParse(report.stateJson), report.studyKey, overrides);
+  const resolved = resolve(state, lookup, report.technique, overrides);
 
   // Machine stills embed into the frozen snapshot at finalization.
   const images = await db.usgReportImage.findMany({

@@ -676,3 +676,15 @@ export const USG_PATHOLOGIES: UsgPathologyDef[] = [
 export function getPathology(key: string): UsgPathologyDef | undefined {
   return USG_PATHOLOGIES.find((p) => p.key === key);
 }
+
+// Part 2 catalog (thyroid, breast, scrotum, echo, doppler, chest, cranium,
+// orbit, swelling, TVS/TRUS extras) — merged so every consumer sees one set.
+import { USG_PATHOLOGIES_EXTRA } from "./pathologies-extra";
+
+/** The complete builtin catalog: abdomen/obstetric + extended studies. */
+export const USG_PATHOLOGIES_ALL: UsgPathologyDef[] = [...USG_PATHOLOGIES, ...USG_PATHOLOGIES_EXTRA];
+
+/** Quick lookup by key across both parts. */
+export function getPathologyAny(key: string): UsgPathologyDef | undefined {
+  return USG_PATHOLOGIES_ALL.find((p) => p.key === key);
+}

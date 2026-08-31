@@ -9,14 +9,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, ChevronDown, FileCheck2, Loader2, Printer, Save, Search, Settings2 } from "lucide-react";
 import type { UsgComposerState, UsgPathologyDef } from "@/lib/usg/types";
 import { USG_SEX_CHILD } from "@/lib/usg/types";
-import { USG_STUDIES, getStudy } from "@/lib/usg/studies";
+import { USG_STUDIES, STUDY_GROUPS, getStudy } from "@/lib/usg/studies";
 import {
   applyPathology,
   makeLookup,
@@ -85,6 +85,9 @@ export function UsgComposer({ pathologies, settings, report, onBack, onSaved }: 
   const [busy, setBusy] = useState<"" | "save" | "finalize" | "print">("");
   /** Id learned from the first POST — later saves PUT the same row (no duplicates). */
   const savedIdRef = useRef<string | null>(report?.id ?? null);
+  /** Printable serial derived from the saved id (state so the preview re-renders). */
+  const serialOf = (id: string | null) => (id ? `USG-${id.replace(/-/g, "").slice(-6).toUpperCase()}` : undefined);
+  const [serial, setSerial] = useState<string | undefined>(serialOf(report?.id ?? null));
   const [finalizedHere, setFinalizedHere] = useState(report?.status === "FINALIZED");
   const [dialogOrgan, setDialogOrgan] = useState<string | null>(null);
   const printRef = useRef<HTMLIFrameElement>(null);
@@ -96,10 +99,17 @@ export function UsgComposer({ pathologies, settings, report, onBack, onSaved }: 
     () =>
       buildUsgReportHtml(
         settings,
-        { name: patientName || "—", age: patientAge, sex: patientSex === USG_SEX_CHILD ? "Child" : patientSex, referredBy, date: today() },
+        {
+          name: patientName || "—",
+          age: patientAge,
+          sex: patientSex === USG_SEX_CHILD ? "Child" : patientSex,
+          referredBy,
+          date: today(),
+          serial,
+        },
         resolved,
       ),
-    [settings, patientName, patientAge, patientSex, referredBy, resolved],
+    [settings, patientName, patientAge, patientSex, referredBy, serial, resolved],
   );
 
   const pickStudy = (k: string) => {
@@ -167,6 +177,7 @@ export function UsgComposer({ pathologies, settings, report, onBack, onSaved }: 
         if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Save failed");
         id = (await res.json()).report.id as string;
         savedIdRef.current = id;
+        setSerial(serialOf(id));
       }
       if (status === "finalize" && id) {
         const res = await fetch(`/api/usg/reports/${id}/finalize`, { method: "POST" });
@@ -267,9 +278,22 @@ export function UsgComposer({ pathologies, settings, report, onBack, onSaved }: 
               <SelectTrigger className="h-9 border-border bg-panel text-[13px] font-semibold">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
-                {USG_STUDIES.map((s) => (
-                  <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
+              <SelectContent className="max-h-96 overflow-y-auto">
+                {STUDY_GROUPS.map((g) => {
+                  const studies = USG_STUDIES.filter((s) => s.group === g.key);
+                  if (!studies.length) return null;
+                  return (
+                    <SelectGroup key={g.key}>
+                      <SelectLabel className="text-[10px] font-bold uppercase tracking-wider text-faint">{g.label}</SelectLabel>
+                      {studies.map((s) => (
+                        <SelectItem key={s.key} value={s.key} className="text-[12.5px]">{s.label}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                  );
+                })}
+                {/* Ungrouped fallback (should not happen — every study has a group). */}
+                {USG_STUDIES.filter((s) => !s.group || !STUDY_GROUPS.some((g) => g.key === s.group)).map((s) => (
+                  <SelectItem key={s.key} value={s.key} className="text-[12.5px]">{s.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

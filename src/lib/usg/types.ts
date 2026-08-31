@@ -45,6 +45,13 @@ export type UsgOrganDef = {
    * "Bilateral adenexa normal in morphology.").
    */
   normalImpression?: string;
+  /**
+   * Print layout: "rows" (default) = label + prose row in the findings
+   * table; "table" = each line of the text becomes a bordered measurement
+   * row (label : value + normal range) — used by echocardiography M-mode
+   * dimensions and any fixed measurement panel.
+   */
+  kind?: "rows" | "table";
 };
 
 /** A study type = ordered organ list + technique + impression defaults. */
@@ -53,6 +60,8 @@ export type UsgStudyDef = {
   label: string; // "Whole Abdomen (Female)"
   title: string; // printed heading "USG WHOLE ABDOMEN"
   sex?: "F" | "M"; // default patient sex when picked
+  /** Dropdown grouping (STUDY_GROUPS key) — keeps 22 studies scannable. */
+  group?: string;
   technique: string;
   organs: UsgOrganDef[];
   /** Impression lines when every organ is normal. */
@@ -103,7 +112,7 @@ export type UsgComposerState = {
 export type UsgResolved = {
   study: UsgStudyDef;
   title: string; // composed study title with pathology fragments
-  sections: { organ: string; label: string; text: string }[];
+  sections: { organ: string; label: string; text: string; kind?: "rows" | "table" }[];
   impression: string[];
   suggestions: string[];
   technique: string;

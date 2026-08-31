@@ -26,6 +26,7 @@ export async function POST(_req: Request, ctx: Ctx) {
       patientAge: source.patientAge,
       patientSex: source.patientSex,
       referredBy: source.referredBy,
+      patientId: source.patientId, // registry link carries into the follow-up
       studyKey: source.studyKey,
       technique: source.technique,
       stateJson: source.stateJson,

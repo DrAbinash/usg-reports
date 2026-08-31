@@ -4,6 +4,7 @@ import { getStudy } from "@/lib/usg/studies";
 import { normaliseState } from "@/lib/usg/composer";
 import { resolveColumns } from "@/lib/usg/server";
 import { parseScanDate } from "@/lib/usg/dates";
+import { linkPatient } from "@/lib/usg/patients";
 
 export async function GET(req: Request) {
   const guard = await requireSession();
@@ -49,12 +50,17 @@ export async function POST(req: Request) {
   const technique = String(body.technique ?? study.technique);
   const cols = await resolveColumns(JSON.stringify(state), technique);
 
+  // Registry: link (or create) the patient row so history connects.
+  const patientPhone = String(body.patientPhone ?? "").trim();
+  const patientId = await linkPatient(patientName, patientPhone);
+
   const report = await db.usgReport.create({
     data: {
       patientName,
       patientAge: String(body.patientAge ?? "").trim(),
       patientSex: body.patientSex === "M" || body.patientSex === "CHILD" ? body.patientSex : "F",
       referredBy: String(body.referredBy ?? "").trim(),
+      patientId,
       technique,
       stateJson: JSON.stringify(state),
       scanDate: parseScanDate(body.scanDate),

@@ -6,7 +6,7 @@
  *   finding, several at once for combined findings) → auto impression →
  *   live letterhead preview (PROVISIONAL while a draft) → print.
  */
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, CalendarDays, ChevronDown, FileCheck2, Loader2, Printer, Save, Search, Settings2 } from "lucide-react";
+import { ArrowLeft, CalendarDays, ChevronDown, FileCheck2, Loader2, Phone, Printer, Save, Search, Settings2 } from "lucide-react";
 import type { UsgComposerState, UsgPathologyDef } from "@/lib/usg/types";
 import { USG_SEX_CHILD } from "@/lib/usg/types";
 import { USG_STUDIES, STUDY_GROUPS, getStudy } from "@/lib/usg/studies";
@@ -54,12 +54,19 @@ export type UsgReportRow = {
   serialNo?: number | null;
   /** Scan date as performed (back-datable), ISO-ish yyyy-mm-dd or null. */
   scanDate?: string | null;
+  /** Registry patient (v5) — phone travels with the report row. */
+  patient?: { id: string; name: string; phone: string } | null;
 };
+
+/** Registry autocomplete entry from /api/usg/patients. */
+type PatientSuggestion = { id: string; name: string; phone: string; scanCount: number };
 
 export type UsgComposerProps = {
   pathologies: UsgPathologyDef[];
   settings: UsgPrintSettings;
   report: UsgReportRow | null; // existing draft to continue, or null = new
+  /** "New scan for patient" prefill from the registry (report stays null). */
+  prefill?: { patientName?: string; patientPhone?: string; patientAge?: string; patientSex?: string } | null;
   onBack: () => void;
   onSaved: () => void; // refresh list
 };
@@ -71,7 +78,7 @@ function fmtPrintDate(iso: string): string {
     : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-export function UsgComposer({ pathologies, settings, report, onBack, onSaved }: UsgComposerProps) {
+export function UsgComposer({ pathologies, settings, report, prefill, onBack, onSaved }: UsgComposerProps) {
   const initial = useMemo(() => {
     if (!report) return null;
     try {
@@ -82,9 +89,13 @@ export function UsgComposer({ pathologies, settings, report, onBack, onSaved }: 
   }, [report]);
 
   const studyKey0 = report?.studyKey ?? "wa-female";
-  const [patientName, setPatientName] = useState(report?.patientName ?? "");
-  const [patientAge, setPatientAge] = useState(report?.patientAge ?? "");
-  const [patientSex, setPatientSex] = useState(report?.patientSex ?? "F");
+  const [patientName, setPatientName] = useState(report?.patientName ?? prefill?.patientName ?? "");
+  const [patientPhone, setPatientPhone] = useState(report?.patient?.phone ?? prefill?.patientPhone ?? "");
+  const [patientAge, setPatientAge] = useState(report?.patientAge ?? prefill?.patientAge ?? "");
+  const [patientSex, setPatientSex] = useState(
+    (report?.patientSex ?? prefill?.patientSex ?? "F") as "F" | "M" | typeof USG_SEX_CHILD,
+  );
+  const [patients, setPatients] = useState<PatientSuggestion[]>([]);
   const [referredBy, setReferredBy] = useState(report?.referredBy ?? "");
   const [studyKey, setStudyKey] = useState(studyKey0);
   const study = getStudy(studyKey) ?? USG_STUDIES[0];
@@ -109,6 +120,28 @@ export function UsgComposer({ pathologies, settings, report, onBack, onSaved }: 
 
   const lookup = useMemo(() => makeLookup(pathologies), [pathologies]);
   const resolved = useMemo(() => resolve(state, lookup, technique), [state, lookup, technique]);
+
+  // Registry autocomplete — known patients appear under the name box; picking
+  // one fills the phone (and links this report into her history on save).
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/usg/patients")
+      .then((r) => (r.ok ? r.json() : { patients: [] }))
+      .then((d) => {
+        if (!cancelled) setPatients(((d.patients ?? []) as PatientSuggestion[]).slice(0, 300));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const normName = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+  const onNameChange = (v: string) => {
+    setPatientName(v);
+    const hit = patients.find((p) => normName(p.name) === normName(v));
+    if (hit && hit.phone) setPatientPhone((prev) => prev.trim() || hit.phone);
+  };
 
   const isPregnancyStudy = studyKey === "ob" || studyKey === "ep";
   const isFinal = report?.status === "FINALIZED" || finalizedHere;
@@ -207,6 +240,7 @@ export function UsgComposer({ pathologies, settings, report, onBack, onSaved }: 
     try {
       const payload = {
         patientName: patientName.trim(),
+        patientPhone: patientPhone.trim(),
         patientAge: patientAge.trim(),
         patientSex,
         referredBy: referredBy.trim(),
@@ -307,8 +341,23 @@ export function UsgComposer({ pathologies, settings, report, onBack, onSaved }: 
           </Button>
           <div className="grid flex-1 min-w-[180px] gap-1">
             <Label className="text-[10px] font-semibold uppercase tracking-wide text-faint">Patient</Label>
-            <Input value={patientName} onChange={(e) => setPatientName(e.target.value)} placeholder="Name"
+            <Input value={patientName} onChange={(e) => onNameChange(e.target.value)} placeholder="Name"
+              list="usg-patient-names"
               className="h-9 border-border bg-panel text-[13px] font-semibold" />
+            <datalist id="usg-patient-names">
+              {patients.map((p) => (
+                <option key={p.id} value={p.name}>{p.phone ? `${p.phone}${p.scanCount ? ` · ${p.scanCount} scan${p.scanCount > 1 ? "s" : ""}` : ""}` : p.scanCount ? `${p.scanCount} scan${p.scanCount > 1 ? "s" : ""}` : ""}</option>
+              ))}
+            </datalist>
+          </div>
+          <div className="grid w-[150px] gap-1">
+            <Label className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-faint">
+              <Phone className="h-3 w-3" /> Phone
+            </Label>
+            <Input value={patientPhone} onChange={(e) => setPatientPhone(e.target.value)} placeholder="Optional"
+              inputMode="tel" disabled={isFinal}
+              title={isFinal ? "Finalized reports keep their patient details" : "Links repeat scans into one patient history"}
+              className="h-9 border-border bg-panel text-[12.5px]" />
           </div>
           <div className="grid w-[90px] gap-1">
             <Label className="text-[10px] font-semibold uppercase tracking-wide text-faint">Age</Label>

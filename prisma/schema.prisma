@@ -61,6 +61,30 @@ model Session {
   createdAt DateTime @default(now())
 }
 
+// ── USG Studio — patient registry ────────────────────────────────────────
+// v5: every report is linked to a patient row keyed by normalised
+// (name + phone) so repeat scans, follow-up drafts and the patient history
+// view all connect. Matching policy is deliberately conservative — a
+// blank-phone report never merges into a phone'd patient (same-name
+// strangers stay separate); see src/lib/usg/patients.ts.
+model UsgPatient {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String   @default("")
+  /** lowercase, whitespace-collapsed match key of `name`. */
+  normName  String
+  /** digits-only match key of `phone` ("" when unknown). */
+  normPhone String   @default("")
+  notes     String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  reports   UsgReport[]
+
+  @@unique([normName, normPhone])
+  @@index([normName])
+}
+
 // ── USG Studio — standalone sonography reports (Dr Sugandha) ────────────
 // Walk-in ultrasound patients with their own drafts, finalize-freeze and
 // reprint; not tied to any external worklist.
@@ -70,6 +94,9 @@ model UsgReport {
   patientAge    String    @default("")
   patientSex    String    @default("F") // F | M
   referredBy    String    @default("")
+  /** Registry link (v5) — legacy rows keep NULL and still list by name. */
+  patientId     String?
+  patient       UsgPatient? @relation(fields: [patientId], references: [id])
   studyKey      String    @default("wa-female") // wa-male | wa-female | ua | la-male | la-female
   technique     String    @default("")
 

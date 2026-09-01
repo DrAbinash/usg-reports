@@ -6,6 +6,10 @@
  * stills grid, impression, suggestions, signature image + credentials,
  * declaration / PC-PNDT block and the verification QR. A4 or A5, paginated.
  * Drafts carry the diagonal PROVISIONAL watermark, same as the HTML print.
+ *
+ * v6.2: honours the print fine-tuning dials (font size, line-height, section
+ * spacing preset, Technique-band toggle) so the shared PDF matches what the
+ * browser prints.
  */
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
 import type { UsgResolved } from "./types";
@@ -110,6 +114,18 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
   const a5 = settings.usgPrintPaper === "a5";
   const compact = settings.usgPrintCompact === true;
 
+  // v6.2 dials — same meaning as the HTML print, mapped into PDF points:
+  //   font dial (HTML pt) → PDF body size (A4 ≈ 0.9×, A5 ≈ 0.81×, compact −1);
+  //   line-height dial → wrapped-line leading (1.5 keeps the classic base+2.5);
+  //   spacing preset scales the inter-section gaps (tight 0.6 / relaxed 1.5).
+  const clampNum = (v: unknown, min: number, max: number, dflt: number): number => {
+    const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
+    return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : dflt;
+  };
+  const fontDial = clampNum(settings.usgPrintFontSize, 8.5, 13, 10.5);
+  const lhDial = clampNum(settings.usgPrintLineHeight, 1.15, 1.9, 1.5);
+  const sp = settings.usgPrintSpacing === "tight" ? 0.6 : settings.usgPrintSpacing === "relaxed" ? 1.5 : 1;
+
   const doc = await PDFDocument.create();
   doc.setTitle(`${S(patient.name)} — ${S(resolved.title)}`);
   if (settings.hospitalName) doc.setAuthor(S(settings.hospitalName));
@@ -124,7 +140,11 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
   const pageH = a5 ? A5.h : A4.h;
   const margin = a5 ? 26 : 40;
   const contentW = pageW - margin * 2;
-  const base = compact ? (a5 ? 7.5 : 8.5) : a5 ? 8.5 : 9.5;
+  let base = a5 ? fontDial * 0.81 : fontDial * 0.9;
+  if (compact) base -= 1;
+  const lead = Math.max(base + 1, base + 2.5 + (lhDial - 1.5) * 5);
+  const leadBold = Math.max(base + 1.5, base + 3 + (lhDial - 1.5) * 5);
+  const gap = (v: number) => v * sp;
 
   const first = doc.addPage([pageW, pageH]);
   const ctx: Ctx = {
@@ -215,14 +235,14 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
   };
 
   let n = 1;
-  if (resolved.technique?.trim()) {
+  if (settings.usgPrintShowTechnique !== false && resolved.technique?.trim()) {
     section("Technique", n++);
     for (const line of wrap(S(resolved.technique), fonts.reg, base, contentW)) {
       ensure(ctx, base + 3);
       ctx.page.drawText(line, { x: margin, y: ctx.y, size: base, font: fonts.reg, color: INK });
-      ctx.y -= base + 2.5;
+      ctx.y -= lead;
     }
-    ctx.y -= 4;
+    ctx.y -= gap(4);
   }
 
   // ── Findings ──────────────────────────────────────────────────────────
@@ -230,7 +250,7 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
   const labelW = a5 ? 60 : 78;
   for (const s of resolved.sections) {
     const lines = wrap(S(s.text), fonts.reg, base, contentW - labelW - 8);
-    const blockH = Math.max(lines.length * (base + 2.5), a5 ? 14 : 17);
+    const blockH = Math.max(lines.length * lead, a5 ? 14 : 17);
     if (ctx.y - blockH < ctx.margin + 30) {
       newPage(ctx);
     }
@@ -238,12 +258,12 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
     let ly = ctx.y;
     for (const line of lines) {
       ctx.page.drawText(line, { x: margin + labelW, y: ly, size: base, font: fonts.reg, color: INK });
-      ly -= base + 2.5;
+      ly -= lead;
     }
-    ctx.y -= Math.max(blockH, a5 ? 14 : 17) + (a5 ? 2 : 3);
+    ctx.y -= Math.max(blockH, a5 ? 14 : 17) + gap(a5 ? 2 : 3);
     ctx.page.drawLine({ start: { x: margin, y: ctx.y + (a5 ? 2 : 3) }, end: { x: pageW - margin, y: ctx.y + (a5 ? 2 : 3) }, thickness: 0.4, color: LINE });
   }
-  ctx.y -= 6;
+  ctx.y -= gap(6);
 
   // ── Images ────────────────────────────────────────────────────────────
   if (images.length) {
@@ -290,10 +310,10 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
     for (const l of wrap(numbered, fonts.bold, base, contentW - 6)) {
       ensure(ctx, base + 3);
       ctx.page.drawText(l, { x: margin + 4, y: ctx.y, size: base, font: fonts.bold, color: INK });
-      ctx.y -= base + 3;
+      ctx.y -= leadBold;
     }
   }
-  ctx.y -= 4;
+  ctx.y -= gap(4);
 
   if (resolved.suggestions.length) {
     for (const s of resolved.suggestions) {
@@ -308,7 +328,7 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
 
   // ── Signature ─────────────────────────────────────────────────────────
   ensure(ctx, a5 ? 55 : 75);
-  ctx.y -= a5 ? 18 : 26;
+  ctx.y -= a5 ? 12 : 16;
   const doctor = S(settings.usgDoctorName?.trim() || "Sonologist");
   const sigW = a5 ? 130 : 170;
   const sigX = pageW - margin - sigW;

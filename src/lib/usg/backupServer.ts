@@ -166,6 +166,7 @@ export async function applyFullRestore(raw: unknown): Promise<FullRestoreResult>
   const patch: Record<string, string> = {};
   for (const [k, v] of Object.entries(asPersonalisation.settings)) {
     if (typeof v === "string") patch[k] = v;
+    else if (typeof v === "number") patch[k] = String(v);
     else if (typeof v === "boolean") patch[k] = v ? "true" : "false";
   }
   if (Object.keys(patch).length) {

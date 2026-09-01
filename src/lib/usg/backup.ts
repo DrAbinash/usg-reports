@@ -28,13 +28,19 @@ export const BACKUP_SETTINGS_KEYS = [
   "usgPrintCompact",
   "usgPrintPaper",
   "usgSignatureUrl",
+  // v6.2 print fine-tuning dials (numbers are font size / line height)
+  "usgPrintFontSize",
+  "usgPrintLineHeight",
+  "usgPrintSpacing",
+  "usgPrintShowTechnique",
+  "usgPrintShowThanks",
   // v6 — PC-PNDT Form F fixed details (personalisation, not clinical)
   "pcpndtCentreName",
   "pcpndtRegistrationNo",
   "pcpndtPlace",
 ] as const;
 
-export type BackupSettings = Partial<Record<(typeof BACKUP_SETTINGS_KEYS)[number], string | boolean>>;
+export type BackupSettings = Partial<Record<(typeof BACKUP_SETTINGS_KEYS)[number], string | boolean | number>>;
 
 export type BackupCustomPathology = {
   organKey: string;
@@ -70,7 +76,7 @@ export function buildBackup(
   const picked: BackupSettings = {};
   for (const k of BACKUP_SETTINGS_KEYS) {
     const v = settings[k];
-    if (typeof v === "string" || typeof v === "boolean") picked[k] = v;
+    if (typeof v === "string" || typeof v === "boolean" || typeof v === "number") picked[k] = v;
   }
   return {
     format: "usg-studio-backup",
@@ -95,7 +101,7 @@ export function parseBackup(raw: unknown): UsgBackupFile {
   const settings: BackupSettings = {};
   for (const k of BACKUP_SETTINGS_KEYS) {
     const v = settingsRaw[k];
-    if (typeof v === "string" || typeof v === "boolean") settings[k] = v;
+    if (typeof v === "string" || typeof v === "boolean" || typeof v === "number") settings[k] = v;
   }
 
   if (!Array.isArray(obj.customPathologies)) {

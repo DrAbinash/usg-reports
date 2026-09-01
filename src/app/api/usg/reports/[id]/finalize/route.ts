@@ -81,6 +81,11 @@ export async function POST(req: Request, ctx: Ctx) {
       usgPrintCompact: settings.usgPrintCompact,
       usgPrintPaper: settings.usgPrintPaper,
       usgSignatureUrl: settings.usgSignatureUrl,
+      usgPrintFontSize: settings.usgPrintFontSize,
+      usgPrintLineHeight: settings.usgPrintLineHeight,
+      usgPrintSpacing: settings.usgPrintSpacing,
+      usgPrintShowTechnique: settings.usgPrintShowTechnique,
+      usgPrintShowThanks: settings.usgPrintShowThanks,
     },
     {
       name: report.patientName,

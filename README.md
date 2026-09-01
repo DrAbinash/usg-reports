@@ -23,6 +23,12 @@ radiologist workspace lives in the separate
 - **Premium print** — A4 or A5 (half-sheet), premium gradient letterhead
   or classic B/W, scanned signature over the name line, PROVISIONAL
   watermark on drafts
+- **Print layout fine-tuning (v6.2)** — Settings → USG Studio: body font
+  size, gaps between lines, section spacing (tight/normal/relaxed),
+  Technique-row and referral-tagline toggles, letter-pad logo + signature
+  image upload. The signature, declaration and footer move to a second
+  page only as one block — a lone signature never spills — and the shipped
+  defaults keep a full antenatal report (PC-PNDT included) on one A4 page
 - **Backup & restore** — one JSON file carries the whole personalisation
   (letterhead, sonologist block, print preferences, custom findings)
 - **PIN lock** — no usernames, no reset email; the studio is yours alone
@@ -78,6 +84,14 @@ radiologist workspace lives in the separate
   never patient names, never "first match". Orders without images yet
   stay listed as *Awaiting images*; every skip is counted with a safe
   reason (no patient data) in the sync response and audit log.
+  **Demographics (v6.2):** when the ERP bridge sends a blank age or
+  referring doctor (the PACS columns are empty on machines without
+  demographics loaded), a blank never erases a stored value, and starting
+  a report falls back to the patient's most recent local report — a
+  repeat patient's age and referral doctor carry forward instead of
+  printing "—". The full bill-desk fallback (patients table + billed
+  studies) is a small ERP-side patch:
+  `docs/erp-bridge-billdesk-demographics.md`.
 - **Form F (v6)** — PC-PNDT statutory form with the clinic's fixed details
   pre-filled, demographics auto-populated from the bill desk, GA + result
   lifted from the composer, and the ERP's four-predicate completeness rule
@@ -143,6 +157,17 @@ never stored here — they belong to the mri-reports deployment.
 Always tick **“Background graphics”** in the print dialog — that switch
 carries the gradient masthead and section bands onto paper. A4 for full
 reports, A5 (Settings → USG Studio → Paper size) for short studies.
+
+**Fitting one page (v6.2).** The shipped defaults (10 pt · 1.4 line
+height · tight spacing) keep a typical study — even an antenatal scan
+with the PC-PNDT declaration — on a single sheet, signature included.
+If a long study (echo, twins, many stills) still spills, Settings →
+USG Studio → *Print layout — fine-tuning* has the dials: font size,
+gaps between lines, section spacing, and the Technique-row toggle.
+The trailing block (signature + declaration + footer) always moves to
+page two **together**, so a sheet never ends with a lone signature.
+Uploading the clinic logo / scanned signature from a file (Settings →
+Hospital / USG Studio) stores it inside the studio — no hosting needed.
 
 ---
 

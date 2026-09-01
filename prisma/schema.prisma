@@ -53,6 +53,19 @@ model HospitalSettings {
   usgPrintCompact   Boolean  @default(false) // compact density for long studies
   usgPrintPaper     String   @default("a4")    // a4 | a5 (half-sheet for short studies)
   usgSignatureUrl   String   @default("")      // scanned signature image printed over the name line
+
+  // ── v6.2 print fine-tuning (Settings → USG Studio → Print layout) ──────
+  // The doctor dials the letterhead to the clinic's paper and printer:
+  // body font size (pt), line-height (gaps between lines), section spacing,
+  // and whether the Technique band / referral tagline print at all. Shipped
+  // defaults (10pt · 1.4 · tight) keep the longest common study — an
+  // antenatal scan with the PC-PNDT declaration — on ONE A4 page, signature
+  // included; the doctor can dial up in Settings any time.
+  usgPrintFontSize     Float   @default(10)    // body pt, clamped 8.5–13
+  usgPrintLineHeight   Float   @default(1.4)  // line gaps, clamped 1.15–1.9
+  usgPrintSpacing      String  @default("tight") // tight | normal | relaxed (section gaps)
+  usgPrintShowTechnique Boolean @default(true) // Technique band on printed reports
+  usgPrintShowThanks   Boolean @default(true)  // "Thanks For Your Referral." tagline
   /** Nightly full-clinic backup to data/backups (v5) — off by default. */
   usgAutoBackup     Boolean  @default(false)
   /** HMAC secret for the printed-report verification QR (v5, minted once). */

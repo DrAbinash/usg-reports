@@ -42,6 +42,11 @@ const EMPTY_SETTINGS: UsgPrintSettings = {
   usgPrintCompact: false,
   usgPrintPaper: "a4",
   usgSignatureUrl: "",
+  usgPrintFontSize: 10,
+  usgPrintLineHeight: 1.4,
+  usgPrintSpacing: "tight",
+  usgPrintShowTechnique: true,
+  usgPrintShowThanks: true,
 };
 
 type PatientRow = {
@@ -133,6 +138,11 @@ export function UsgStudioView() {
         usgPrintCompact: s.usgPrintCompact === true || s.usgPrintCompact === "true",
         usgPrintPaper: s.usgPrintPaper ?? "a4",
         usgSignatureUrl: s.usgSignatureUrl ?? "",
+        usgPrintFontSize: Number(s.usgPrintFontSize) > 0 ? Number(s.usgPrintFontSize) : 10,
+        usgPrintLineHeight: Number(s.usgPrintLineHeight) > 0 ? Number(s.usgPrintLineHeight) : 1.4,
+        usgPrintSpacing: s.usgPrintSpacing ?? "tight",
+        usgPrintShowTechnique: s.usgPrintShowTechnique !== false && s.usgPrintShowTechnique !== "false",
+        usgPrintShowThanks: s.usgPrintShowThanks !== false && s.usgPrintShowThanks !== "false",
       });
     }
     if (rRes.ok) setReports(((await rRes.json()).reports ?? []) as UsgReportRow[]);

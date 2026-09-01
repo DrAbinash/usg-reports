@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { getStudy } from "@/lib/usg/studies";
 import { normaliseState } from "@/lib/usg/composer";
 import { resolveColumns } from "@/lib/usg/server";
-import { linkPatient } from "@/lib/usg/patients";
+import { linkPatient, latestKnownDemographics } from "@/lib/usg/patients";
 import { audit } from "@/lib/usg/audit";
 import { guessStudyKey, isObStudyKey, orderSex, testSuggestsChild } from "@/lib/usg/orderStudy";
 
@@ -40,12 +40,18 @@ export async function POST(_req: Request, ctx: Ctx) {
   const cols = await resolveColumns(JSON.stringify(state), study.technique);
 
   const patientId = await linkPatient(order.patientName, order.patientPhone);
+  // Blank at the bill desk (PACS columns empty)? Fall back to what the
+  // patient's last local report carried — age/referrer survive as history.
+  const fallback =
+    order.patientAge || order.referringDoctor
+      ? { age: order.patientAge, referredBy: order.referringDoctor }
+      : await latestKnownDemographics(patientId, order.patientName);
   const report = await db.usgReport.create({
     data: {
       patientName: order.patientName,
-      patientAge: order.patientAge,
+      patientAge: order.patientAge || fallback.age,
       patientSex: orderSex(order.patientSex, child) === "M" ? "M" : orderSex(order.patientSex, child) === "CHILD" ? "CHILD" : "F",
-      referredBy: order.referringDoctor,
+      referredBy: order.referringDoctor || fallback.referredBy,
       patientId,
       technique: study.technique,
       stateJson: JSON.stringify(state),
@@ -53,6 +59,18 @@ export async function POST(_req: Request, ctx: Ctx) {
       ...cols,
     },
   });
+
+  // Keep the ORDER's demographics in step with what the report now carries —
+  // the worklist row and any future re-open show the same age/referrer.
+  if (fallback.age || fallback.referredBy) {
+    await db.usgCareOrder.update({
+      where: { id: order.id },
+      data: {
+        patientAge: order.patientAge || fallback.age,
+        referringDoctor: order.referringDoctor || fallback.referredBy,
+      },
+    });
+  }
 
   await db.usgCareOrder.update({
     where: { id: order.id },

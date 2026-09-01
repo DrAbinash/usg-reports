@@ -120,3 +120,37 @@ export async function listPatients(q = ""): Promise<
       };
     });
 }
+
+/**
+ * Bill-desk demographics the ERP bridge cannot always supply (v6.2).
+ *
+ * The bridge reads age/sex/referring-doctor from the PACS-pushed worklist
+ * columns, which are blank whenever the USG machine was not loaded with
+ * demographics. When an order arrives blank, fall back to the patient's most
+ * recent local report — registry link first, exact normalised name second —
+ * so a repeat patient's age and referral doctor carry forward instead of
+ * printing "—".
+ */
+export async function latestKnownDemographics(
+  patientId: string | null,
+  name: string,
+): Promise<{ age: string; referredBy: string }> {
+  const withEither = [
+    { patientAge: { not: "" } },
+    { referredBy: { not: "" } },
+  ];
+  const prior = patientId
+    ? await db.usgReport.findFirst({
+        where: { patientId, OR: withEither },
+        orderBy: [{ finalizedAt: "desc" }, { updatedAt: "desc" }, { createdAt: "desc" }],
+        select: { patientAge: true, referredBy: true },
+      })
+    : await db.usgReport.findFirst({
+        // No registry link (legacy rows): the patient relation's normName is
+        // the studio's own conservative match key (name + phone equality).
+        where: { patient: { normName: normalizeName(name) }, OR: withEither },
+        orderBy: [{ finalizedAt: "desc" }, { updatedAt: "desc" }, { createdAt: "desc" }],
+        select: { patientAge: true, referredBy: true },
+      });
+  return { age: prior?.patientAge ?? "", referredBy: prior?.referredBy ?? "" };
+}

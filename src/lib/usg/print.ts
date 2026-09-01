@@ -11,6 +11,14 @@
  *
  * Density: compact toggle for long studies (echocardiography, whole abdomen).
  *
+ * v6.2 print fine-tuning (Settings → USG Studio → Print layout):
+ *   • body font size + line-height dials (gaps between lines);
+ *   • section-gap preset — tight / normal / relaxed;
+ *   • Technique band and "Thanks For Your Referral." tagline toggles;
+ *   • the trailing block (signature + PC-PNDT + declaration + footer) moves
+ *     to a new page as ONE unit with tighter default gaps — a report that
+ *     is close to fitting no longer strands a lone signature on page two.
+ *
  * Register & legal discipline:
  *   • a USG serial number cell (USG-0001 from the sequential register);
  *   • drafts print with a diagonal PROVISIONAL watermark and a red tag — a
@@ -53,6 +61,16 @@ export type UsgPrintSettings = {
   usgPrintPaper?: string;
   /** Scanned signature image (URL/data-URL) printed above the name line. */
   usgSignatureUrl?: string;
+  /** v6.2 print fine-tuning — body font size in pt (clamped 8.5–13). */
+  usgPrintFontSize?: number;
+  /** v6.2 — line-height multiplier, the "gaps between lines" dial (1.15–1.9). */
+  usgPrintLineHeight?: number;
+  /** v6.2 — section spacing preset: "tight" | "normal" (default) | "relaxed". */
+  usgPrintSpacing?: string;
+  /** v6.2 — print the Technique band (default true). */
+  usgPrintShowTechnique?: boolean;
+  /** v6.2 — print the "Thanks For Your Referral." tagline (default true). */
+  usgPrintShowThanks?: boolean;
 };
 
 export type UsgPrintPatient = {
@@ -179,19 +197,19 @@ const PREMIUM_CSS = `
   .suggestions { margin-top: 7px; font-weight: 700; color: #143E6E; }
   .suggestions p { margin: 3px 0; }
 
-  .sig-block { margin-top: 30px; display: flex; justify-content: flex-end; page-break-inside: avoid; }
+  .sig-block { margin-top: 16px; display: flex; justify-content: flex-end; page-break-inside: avoid; }
   .sig { text-align: center; min-width: 62mm; }
-  .sig .line { border-bottom: 2px solid #143E6E; height: 24px; margin-bottom: 5px; }
+  .sig .line { border-bottom: 2px solid #143E6E; height: 18px; margin-bottom: 5px; }
   .sig .name { font-weight: 800; color: #143E6E; font-size: 11.5pt; }
   .sig .sub { font-size: 9pt; font-weight: 600; color: #40586D; }
 
-  .declaration { margin-top: 16px; font-size: 8pt; font-weight: 600; color: #61788C; border: 1px solid #AFCDE8; border-radius: 7px; padding: 6px 10px; text-align: justify; }
+  .declaration { margin-top: 10px; font-size: 8pt; font-weight: 600; color: #61788C; border: 1px solid #AFCDE8; border-radius: 7px; padding: 6px 10px; text-align: justify; }
 
-  .pcpndt { margin-top: 18px; border: 1.5px solid #1B4F8A; border-radius: 8px; padding: 8px 12px; background: #F4F8FC; page-break-inside: avoid; }
+  .pcpndt { margin-top: 10px; border: 1.5px solid #1B4F8A; border-radius: 8px; padding: 8px 12px; background: #F4F8FC; page-break-inside: avoid; }
   .pcpndt-title { font-size: 9pt; font-weight: 800; letter-spacing: 1.2px; color: #143E6E; text-transform: uppercase; margin-bottom: 4px; }
   .pcpndt p { font-size: 8.5pt; font-weight: 600; color: #16222E; text-align: justify; line-height: 1.55; }
 
-  .footer { margin-top: 22px; border-top: 2.5px solid #1B4F8A; padding-top: 5px; font-size: 8pt; font-weight: 600; color: #61788C; display: flex; justify-content: space-between; align-items: center; }
+  .footer { margin-top: 10px; border-top: 2.5px solid #1B4F8A; padding-top: 5px; font-size: 8pt; font-weight: 600; color: #61788C; display: flex; justify-content: space-between; align-items: center; }
   .qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 1px; }
   .qr { width: 20mm; height: 20mm; }
   .qr-cap { font-size: 6.5pt; font-weight: 700; letter-spacing: .5px; }
@@ -255,19 +273,19 @@ const CLASSIC_CSS = `
   .suggestions { margin-top: 7px; font-weight: 700; }
   .suggestions p { margin: 3px 0; }
 
-  .sig-block { margin-top: 28px; display: flex; justify-content: flex-end; page-break-inside: avoid; }
+  .sig-block { margin-top: 16px; display: flex; justify-content: flex-end; page-break-inside: avoid; }
   .sig { text-align: center; min-width: 62mm; }
-  .sig .line { border-bottom: 1.5px solid #000; height: 22px; margin-bottom: 5px; }
+  .sig .line { border-bottom: 1.5px solid #000; height: 18px; margin-bottom: 5px; }
   .sig .name { font-weight: 700; font-size: 11pt; }
   .sig .sub { font-size: 9pt; font-weight: 600; }
 
-  .declaration { margin-top: 14px; font-size: 8pt; font-weight: 600; border: 1px solid #000; padding: 6px 10px; text-align: justify; }
+  .declaration { margin-top: 10px; font-size: 8pt; font-weight: 600; border: 1px solid #000; padding: 6px 10px; text-align: justify; }
 
-  .pcpndt { margin-top: 16px; border: 1.5px solid #000; padding: 8px 12px; page-break-inside: avoid; }
+  .pcpndt { margin-top: 10px; border: 1.5px solid #000; padding: 8px 12px; page-break-inside: avoid; }
   .pcpndt-title { font-size: 9pt; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; margin-bottom: 4px; }
   .pcpndt p { font-size: 8.5pt; font-weight: 600; text-align: justify; line-height: 1.55; }
 
-  .footer { margin-top: 20px; border-top: 1.5px solid #000; padding-top: 5px; font-size: 8pt; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+  .footer { margin-top: 10px; border-top: 1.5px solid #000; padding-top: 5px; font-size: 8pt; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
   .qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 1px; }
   .qr { width: 20mm; height: 20mm; }
   .qr-cap { font-size: 6.5pt; font-weight: 700; }
@@ -380,6 +398,82 @@ const SIGNATURE_CSS = `
   .sig-img { height: 18mm; max-width: 64mm; object-fit: contain; display: block; margin: 0 auto; }
 `;
 
+/**
+ * v6.2 — the trailing block (signature + PC-PNDT + declaration + footer)
+ * moves to a new page as ONE unit: a report that does not quite fit never
+ * strands a lone signature on sheet two. Applied for both letterhead styles.
+ */
+const TAIL_CSS = `
+  .tail { page-break-inside: avoid; }
+`;
+
+/** Clamp a numeric setting to a safe range (bad/absent values fall back). */
+function clampNum(v: unknown, min: number, max: number, dflt: number): number {
+  const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : dflt;
+}
+
+/** Resolve the v6.2 spacing preset to a known value ("normal" default). */
+function spacingPreset(v: unknown): "tight" | "normal" | "relaxed" {
+  return v === "tight" || v === "relaxed" ? v : "normal";
+}
+
+/**
+ * v6.2 — print fine-tuning CSS. Generated LAST (after style/paper/compact)
+ * so the doctor's dials always win:
+ *   • body font size + line-height (the gaps between lines);
+ *   • section-gap preset (tight keeps short studies to one page, relaxed
+ *     airs out long ones);
+ *   • element sizes expressed in em so the font dial scales the whole
+ *     letterhead proportionally (A4 only — the A5 sheet keeps its own tuned
+ *     proportions, but still honours line-height).
+ */
+function tuningCss(settings: UsgPrintSettings, a5: boolean): string {
+  const fs = clampNum(settings.usgPrintFontSize, 8.5, 13, 10.5);
+  const lh = clampNum(settings.usgPrintLineHeight, 1.15, 1.9, 1.5);
+  const sp = spacingPreset(settings.usgPrintSpacing);
+
+  let css = a5
+    ? `body { line-height: ${lh}; }\n`
+    : `body { font-size: ${fs}pt; line-height: ${lh}; }
+  table.patient { font-size: 0.9em; }
+  h2.band { font-size: 0.95em; }
+  table.meas th, table.meas td { font-size: 0.9em; }
+  table.organs th { font-size: 0.81em; }
+  .sig .name { font-size: 1.1em; }
+  .suggestions { font-size: 0.95em; }
+`;
+
+  if (sp === "tight") {
+    css += `
+  .study { margin-top: 8px; }
+  .thanks { margin-top: 3px; }
+  h2.band { margin-top: 8px; margin-bottom: 5px; }
+  p.technique { margin: 2px 0; }
+  table.organs th, table.organs td { padding-top: 3px; padding-bottom: 3px; }
+  .impression-box li { margin: 2px 0; }
+  .sig-block { margin-top: 10px; }
+  .declaration { margin-top: 7px; }
+  .pcpndt { margin-top: 7px; }
+  .footer { margin-top: 7px; }
+`;
+  } else if (sp === "relaxed") {
+    css += `
+  .study { margin-top: 16px; }
+  .thanks { margin-top: 10px; }
+  h2.band { margin-top: 20px; margin-bottom: 11px; }
+  p.technique { margin: 6px 0; }
+  table.organs th, table.organs td { padding-top: 7px; padding-bottom: 7px; }
+  .impression-box li { margin: 7px 0; }
+  .sig-block { margin-top: 34px; }
+  .declaration { margin-top: 20px; }
+  .pcpndt { margin-top: 22px; }
+  .footer { margin-top: 26px; }
+`;
+  }
+  return css;
+}
+
 export function buildUsgReportHtml(
   settings: UsgPrintSettings,
   patient: UsgPrintPatient,
@@ -391,11 +485,17 @@ export function buildUsgReportHtml(
   const compact = settings.usgPrintCompact === true;
   const a5 = settings.usgPrintPaper === "a5";
   const provisional = patient.provisional === true;
+  // v6.2 dials: the Technique band and referral tagline are switchable, and
+  // the section numbering follows whatever actually prints.
+  const showTechnique = settings.usgPrintShowTechnique !== false && !!resolved.technique?.trim();
+  const showThanks = settings.usgPrintShowThanks !== false;
   const css =
     (classic ? CLASSIC_CSS : PREMIUM_CSS) +
     SIGNATURE_CSS +
+    TAIL_CSS +
     (a5 ? A5_CSS : "") +
     (compact ? COMPACT_CSS : "") +
+    tuningCss(settings, a5) +
     (provisional ? (classic ? PROVISIONAL_CSS_CLASSIC : PROVISIONAL_CSS) : "");
 
   const logo = settings.logoUrl
@@ -431,7 +531,7 @@ export function buildUsgReportHtml(
         .join("")}</div>`
     : "";
   const imagesBand = images.length
-    ? `<h2 class="band"><span class="n">${resolved.technique?.trim() ? 3 : 2}</span>USG Images</h2>`
+    ? `<h2 class="band"><span class="n">${showTechnique ? 3 : 2}</span>USG Images</h2>`
     : "";
 
   const impressionHtml = resolved.impression.length
@@ -491,7 +591,7 @@ ${watermark}
     </tr>
   </table>
 
-  <p class="thanks">Thanks For Your Referral.</p>
+  ${showThanks ? `<p class="thanks">Thanks For Your Referral.</p>` : ""}
 
   <div class="study">
     <div class="name">${esc(resolved.title)}</div>
@@ -499,19 +599,20 @@ ${watermark}
   </div>
   ${machineLine}
 
-  ${resolved.technique?.trim() ? `<h2 class="band"><span class="n">1</span>Technique</h2>
+  ${showTechnique ? `<h2 class="band"><span class="n">1</span>Technique</h2>
   <p class="technique">${esc(resolved.technique).replace(/\n/g, "<br/>")}</p>` : ""}
 
-  <h2 class="band"><span class="n">${resolved.technique?.trim() ? 2 : 1}</span>Findings</h2>
+  <h2 class="band"><span class="n">${showTechnique ? 2 : 1}</span>Findings</h2>
   ${sectionsHtml}
 
   ${imagesBand}
   ${imagesHtml}
 
-  <h2 class="band"><span class="n">${(resolved.technique?.trim() ? 3 : 2) + (images.length ? 1 : 0)}</span>Impression</h2>
+  <h2 class="band"><span class="n">${(showTechnique ? 3 : 2) + (images.length ? 1 : 0)}</span>Impression</h2>
   ${impressionHtml}
   ${suggestionsHtml}
 
+  <div class="tail">
   <div class="sig-block"><div class="sig">
     ${sigVisual}
     <div class="name">${esc(doctor)}</div>
@@ -527,6 +628,7 @@ ${watermark}
     <span>${esc(settings.usgFooterLine || settings.footerMessage)}</span>
     ${qr ? `<span class="qr-wrap"><img class="qr" src="${esc(qr.dataUrl)}" alt="verification QR" /><span class="qr-cap">scan to verify</span></span>` : ""}
     <span>${esc(settings.appTitle)}</span>
+  </div>
   </div>
 </div>
 </body></html>`;

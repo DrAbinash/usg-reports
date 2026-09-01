@@ -25,6 +25,8 @@ type Settings = {
   usgFooterLine: string; usgDeclarationLine: string;
   usgPrintStyle: string; usgPrintCompact: boolean;
   usgPrintPaper: string; usgSignatureUrl: string;
+  usgPrintFontSize: number; usgPrintLineHeight: number;
+  usgPrintSpacing: string; usgPrintShowTechnique: boolean; usgPrintShowThanks: boolean;
   usgAutoBackup: boolean;
   // v6 integrations (secrets arrive masked — only their presence flags)
   careApiBase: string; careApiKeySet: boolean;
@@ -41,6 +43,36 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
       {hint ? <p className="text-[11px] leading-relaxed text-faint">{hint}</p> : null}
     </div>
   );
+}
+
+/**
+ * Read an image file into a downscaled PNG data-URL — the letter-pad logo
+ * and scanned signature upload path (no hosting, works offline on the LAN).
+ * Longest edge is capped so a phone photo never bloats the settings row.
+ */
+function imageFileToDataUrl(file: File, maxDim: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("canvas");
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL("image/png"));
+      } catch (e) {
+        URL.revokeObjectURL(url);
+        reject(e);
+      }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not read image")); };
+    img.src = url;
+  });
 }
 
 export function SettingsView() {
@@ -61,6 +93,12 @@ export function SettingsView() {
     files: { name: string; bytes: number; modifiedAt: string }[];
   } | null>(null);
   const [autoSaving, setAutoSaving] = useState(false);
+
+  // v6.2 letter-pad logo + scanned signature upload (file → PNG data-URL).
+  // Refs live with the other hooks — BEFORE the loading early-return.
+  const logoFileRef = useRef<HTMLInputElement>(null);
+  const sigFileRef = useRef<HTMLInputElement>(null);
+  const [imageBusy, setImageBusy] = useState<"" | "logo" | "sig">("");
 
   // v6 — integrations tab: secret inputs (write-only) + connection test lights
   const [careKey, setCareKey] = useState("");
@@ -235,6 +273,32 @@ export function SettingsView() {
     toast.success("Background removed — gradient theme shows instead");
   };
 
+  // ── v6.2 letter-pad logo + scanned signature uploads (file → PNG data-URL).
+  // Saves immediately through the same whitelist as the Save button so a
+  // freshly uploaded logo shows on the very next print.
+  const uploadPrintImage = async (which: "logo" | "sig", file: File) => {
+    setImageBusy(which);
+    try {
+      const dataUrl = await imageFileToDataUrl(file, which === "logo" ? 512 : 900);
+      const key = which === "logo" ? "logoUrl" : "usgSignatureUrl";
+      setS((prev) => (prev ? { ...prev, [key]: dataUrl } : prev));
+      const body: Record<string, string> = { ...(s as unknown as Record<string, string>), [key]: dataUrl };
+      const r = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }).then((res) => res.json());
+      if (r.settings) toast.success(which === "logo" ? "Letter-pad logo saved — it prints on the next report" : "Signature saved — it prints over the name line");
+      else toast.error("Could not save image");
+    } catch {
+      toast.error("Could not process that image (PNG / JPG / WebP)");
+    } finally {
+      setImageBusy("");
+      if (which === "logo" && logoFileRef.current) logoFileRef.current.value = "";
+      if (which === "sig" && sigFileRef.current) sigFileRef.current.value = "";
+    }
+  };
+
   return (
     <div className="mx-auto max-w-2xl p-4 md:p-6">
       <SectionLabel>Settings</SectionLabel>
@@ -332,8 +396,24 @@ export function SettingsView() {
             <Field label="Phone"><Input value={s.phone} onChange={(e) => set("phone", e.target.value)} className="h-9 text-[13px]" /></Field>
             <Field label="Email"><Input value={s.email} onChange={(e) => set("email", e.target.value)} className="h-9 text-[13px]" /></Field>
           </div>
-          <Field label="Logo URL" hint="Shown top-left on the printed report letterhead.">
-            <Input value={s.logoUrl} onChange={(e) => set("logoUrl", e.target.value)} placeholder="https://…" className="h-9 text-[13px]" />
+          <Field label="Letter-pad logo" hint="Printed top-left on every report letterhead. Upload the clinic's logo file (PNG / JPG / WebP) — it is stored inside the studio, no hosting needed — or paste a URL.">
+            <div className="flex items-center gap-2">
+              <Input value={s.logoUrl} onChange={(e) => set("logoUrl", e.target.value)} placeholder="https://… or upload →" className="h-9 text-[13px]" />
+              <input
+                ref={logoFileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadPrintImage("logo", f); }}
+              />
+              <Button size="sm" variant="outline" className="h-9 shrink-0 border-border text-[11.5px]" disabled={imageBusy === "logo"} onClick={() => logoFileRef.current?.click()}>
+                {imageBusy === "logo" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />}
+                Upload
+              </Button>
+              {s.logoUrl.startsWith("data:image") ? (
+                <img src={s.logoUrl} alt="logo preview" className="h-9 w-9 shrink-0 rounded-md border border-border bg-white object-contain p-0.5" />
+              ) : null}
+            </div>
           </Field>
           <Field label="Footer message"><Input value={s.footerMessage} onChange={(e) => set("footerMessage", e.target.value)} className="h-9 text-[13px]" /></Field>
           <Button onClick={save} className="h-9 text-[12.5px]">Save</Button>
@@ -424,8 +504,109 @@ export function SettingsView() {
               </button>
             </div>
           </Field>
-          <Field label="Scanned signature (optional)" hint="Image URL (or data-URL) of the doctor's scanned signature — printed over the name line instead of the empty rule. Scan the signature on white paper, crop tightly.">
-            <Input value={s.usgSignatureUrl ?? ""} onChange={(e) => set("usgSignatureUrl", e.target.value)} placeholder="https://… or data:image/png;base64,…" className="h-9 text-[13px]" />
+
+          {/* v6.2 — Print layout fine-tuning: dials that size the letterhead to the clinic's paper */}
+          <div className="space-y-3.5 rounded-xl border border-rose-200 bg-rose-50/40 p-3.5">
+            <div className="flex items-center gap-2 text-[12px] font-bold text-rose-800">
+              <Waves className="h-4 w-4" /> Print layout — fine-tuning
+            </div>
+            <p className="text-[11px] leading-relaxed text-rose-700/90">
+              Dial the printed report to the clinic's paper and printer. The signature, declaration and
+              footer always move to a second page as one block — a lone signature never spills — and
+              <b> tight</b> spacing plus a smaller font keeps a typical study on a single sheet.
+              Changes apply from the next Print / PDF.
+            </p>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field label={`Font size — ${(s.usgPrintFontSize ?? 10).toFixed(1)} pt`}>
+                <input
+                  type="range"
+                  min={8.5}
+                  max={13}
+                  step={0.5}
+                  value={s.usgPrintFontSize ?? 10}
+                  onChange={(e) => setS({ ...s, usgPrintFontSize: Number(e.target.value) } as Settings)}
+                  className="h-2 w-full cursor-pointer accent-rose-600"
+                />
+                <div className="flex justify-between text-[10px] text-faint"><span>8.5 small</span><span>13 large</span></div>
+              </Field>
+              <Field label={`Gaps between lines — ${(s.usgPrintLineHeight ?? 1.4).toFixed(2)}×`}>
+                <input
+                  type="range"
+                  min={1.15}
+                  max={1.9}
+                  step={0.05}
+                  value={s.usgPrintLineHeight ?? 1.4}
+                  onChange={(e) => setS({ ...s, usgPrintLineHeight: Number(e.target.value) } as Settings)}
+                  className="h-2 w-full cursor-pointer accent-rose-600"
+                />
+                <div className="flex justify-between text-[10px] text-faint"><span>1.15 tight</span><span>1.9 airy</span></div>
+              </Field>
+            </div>
+
+            <Field label="Section spacing" hint="Vertical gaps between the heading bands and finding rows.">
+              <div className="flex gap-2">
+                {([
+                  ["tight", "Tight", "best for one page"],
+                  ["normal", "Normal", "balanced default"],
+                  ["relaxed", "Relaxed", "airy, long reports"],
+                ] as const).map(([value, label, sub]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setS({ ...s, usgPrintSpacing: value } as Settings)}
+                    className={cn(
+                      "flex-1 rounded-lg border px-3 py-2 text-left text-[12px] font-semibold transition-colors",
+                      (s.usgPrintSpacing ?? "tight") === value
+                        ? "border-rose-300 bg-rose-50 text-rose-800 ring-1 ring-rose-200"
+                        : "border-border bg-panel text-muted-foreground hover:border-rose-200",
+                    )}
+                  >
+                    {label}
+                    <span className="block text-[10px] font-normal text-faint">{sub}</span>
+                  </button>
+                ))}
+              </div>
+            </Field>
+
+            <label className="flex cursor-pointer items-center gap-2 text-[12px] font-medium text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={s.usgPrintShowTechnique !== false}
+                onChange={(e) => setS({ ...s, usgPrintShowTechnique: e.target.checked } as Settings)}
+                className="h-4 w-4 accent-rose-600"
+              />
+              Print the Technique row on reports (off = Findings starts directly)
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-[12px] font-medium text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={s.usgPrintShowThanks !== false}
+                onChange={(e) => setS({ ...s, usgPrintShowThanks: e.target.checked } as Settings)}
+                className="h-4 w-4 accent-rose-600"
+              />
+              Print the "Thanks For Your Referral." tagline under the patient strip
+            </label>
+          </div>
+
+          <Field label="Scanned signature (optional)" hint="Printed over the name line instead of the empty rule. Upload the scanned signature (white paper, cropped tight) or paste an image URL / data-URL.">
+            <div className="flex items-center gap-2">
+              <Input value={s.usgSignatureUrl ?? ""} onChange={(e) => set("usgSignatureUrl", e.target.value)} placeholder="https://… or upload →" className="h-9 text-[13px]" />
+              <input
+                ref={sigFileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadPrintImage("sig", f); }}
+              />
+              <Button size="sm" variant="outline" className="h-9 shrink-0 border-border text-[11.5px]" disabled={imageBusy === "sig"} onClick={() => sigFileRef.current?.click()}>
+                {imageBusy === "sig" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />}
+                Upload
+              </Button>
+              {(s.usgSignatureUrl ?? "").startsWith("data:image") ? (
+                <img src={s.usgSignatureUrl} alt="signature preview" className="h-9 w-16 shrink-0 rounded-md border border-border bg-white object-contain p-0.5" />
+              ) : null}
+            </div>
           </Field>
           <label className="flex cursor-pointer items-center gap-2 text-[12px] font-medium text-muted-foreground">
             <input

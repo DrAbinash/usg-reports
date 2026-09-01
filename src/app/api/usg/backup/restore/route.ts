@@ -36,12 +36,13 @@ export async function POST(req: Request) {
     return Response.json({ error: e instanceof Error ? e.message : "Invalid backup file" }, { status: 400 });
   }
 
-  // Settings — string/boolean fields through the whitelist; booleans are
-  // stringified because updateSettings' patch contract is string-valued
+  // Settings — string/number/boolean fields through the whitelist; booleans
+  // are stringified because updateSettings' patch contract is string-valued
   // (checkboxes arrive as strings from the form).
   const patch: Record<string, string> = {};
   for (const [k, v] of Object.entries(backup.settings)) {
     if (typeof v === "string") patch[k] = v;
+    else if (typeof v === "number") patch[k] = String(v);
     else if (typeof v === "boolean") patch[k] = v ? "true" : "false";
   }
   if (Object.keys(patch).length) await updateSettings(patch);

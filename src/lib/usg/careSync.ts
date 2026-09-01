@@ -254,11 +254,15 @@ export async function importCareRows(rows: CareWorklistItem[]): Promise<SyncStat
               patientName: n.name || target.patientName,
               patientAge: age || target.patientAge,
               patientSex: sex || target.patientSex,
-              patientPhone: w.patientPhone ?? target.patientPhone,
-              patientAddress: w.patientAddress ?? target.patientAddress,
-              billNumber: w.billNumber ?? target.billNumber,
-              referringDoctor: w.referringDoctor ?? target.referringDoctor,
-              testName: w.testName ?? target.testName,
+              // v6.2 blanking guard: the ERP sends "" (empty STRING, not
+              // null) for demographics it does not know — `??` would let a
+              // blank overwrite a value an earlier sync (or the bill desk
+              // extension) had stored. `||` keeps what we have.
+              patientPhone: w.patientPhone || target.patientPhone,
+              patientAddress: w.patientAddress || target.patientAddress,
+              billNumber: w.billNumber || target.billNumber,
+              referringDoctor: w.referringDoctor || target.referringDoctor,
+              testName: w.testName || target.testName,
               billingStatus: w.billingStatus ?? target.billingStatus,
               billingUpdatedAt: w.billingStatus ? new Date() : undefined,
               careWorklistId: n.wlId ?? target.careWorklistId,

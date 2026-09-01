@@ -112,13 +112,13 @@ export async function updateSettings(patch: SettingsUpdate) {
     "usgDoctorName", "usgDoctorQual", "usgDoctorRegNo", "usgMachineLine",
     "usgDoctorBirthday",
     "usgFooterLine", "usgDeclarationLine", "usgPrintStyle",
-    "usgPrintPaper", "usgSignatureUrl",
+    "usgPrintPaper", "usgSignatureUrl", "usgPrintSpacing",
     // v6 integrations (URLs only — keys go through SECRET_FIELDS below)
     "careApiBase", "orthancUrl", "orthancUsername",
     // v6 PC-PNDT Form F fixed details
     "pcpndtCentreName", "pcpndtRegistrationNo", "pcpndtPlace",
   ];
-  const data: Record<string, string | boolean> = {};
+  const data: Record<string, string | number | boolean> = {};
   // URL-valued integration fields are normalized on save so "172.16.1.139:8888"
   // is stored as "http://172.16.1.139:8888" (the doctor never types a scheme).
   const URL_FIELDS = new Set(["careApiBase", "orthancUrl"]);
@@ -159,6 +159,32 @@ export async function updateSettings(patch: SettingsUpdate) {
   } else if (typeof patch.usgPrintCompact === "boolean") {
     data.usgPrintCompact = patch.usgPrintCompact;
   }
+  // v6.2 print fine-tuning — the numeric dials arrive as strings from the
+  // sliders and are clamped so a stray value can never wreck the letterhead.
+  // Garbage falls back to the shipped defaults (10pt · 1.4).
+  if (patch.usgPrintFontSize != null) {
+    const n = Number(patch.usgPrintFontSize);
+    data.usgPrintFontSize = Number.isFinite(n) ? Math.min(13, Math.max(8.5, n)) : 10;
+  }
+  if (patch.usgPrintLineHeight != null) {
+    const n = Number(patch.usgPrintLineHeight);
+    data.usgPrintLineHeight = Number.isFinite(n) ? Math.min(1.9, Math.max(1.15, n)) : 1.4;
+  }
+  // Section spacing preset: anything unexpected falls back to "normal".
+  if (typeof patch.usgPrintSpacing === "string") {
+    data.usgPrintSpacing = ["tight", "normal", "relaxed"].includes(patch.usgPrintSpacing.trim())
+      ? patch.usgPrintSpacing.trim()
+      : "normal";
+  }
+  // Technique band + referral tagline toggles (string-checkbox contract).
+  for (const k of ["usgPrintShowTechnique", "usgPrintShowThanks"] as const) {
+    const v = patch[k];
+    if (typeof v === "string") {
+      data[k] = !/^(0|false|off|no)$/i.test(v.trim());
+    } else if (typeof v === "boolean") {
+      data[k] = v;
+    }
+  }
   // Nightly full-clinic backup toggle (v5).
   if (typeof patch.usgAutoBackup === "string") {
     data.usgAutoBackup = !/^(0|false|off|no)$/i.test(patch.usgAutoBackup.trim());
@@ -174,8 +200,8 @@ export async function updateSettings(patch: SettingsUpdate) {
     if (typeof v !== "string") continue;
     const trimmed = v.trim();
     if (trimmed === "") continue;
-    if (trimmed === "__clear__") { (data as Record<string, string | boolean>)[k] = ""; continue; }
-    (data as Record<string, string | boolean>)[k] = trimmed;
+    if (trimmed === "__clear__") { data[k] = ""; continue; }
+    data[k] = trimmed;
   }
   await getSettings(); // ensure row exists
   await db.hospitalSettings.update({ where: { id: "singleton" }, data });

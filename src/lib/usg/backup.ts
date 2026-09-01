@@ -207,7 +207,8 @@ export type BackupFormF = {
 
 export type BackupCareOrder = {
   id: string;
-  accessionNumber: string;
+  /** null = the ERP supplied no accession (v6.1 identity model). */
+  accessionNumber: string | null;
   careWorklistId: string | null;
   patientName: string;
   patientAge: string;
@@ -327,10 +328,11 @@ export function parseFullBackup(raw: unknown): UsgFullBackupFile {
     : [];
   const careOrders: BackupCareOrder[] = Array.isArray(obj.careOrders)
     ? (obj.careOrders as Record<string, unknown>[])
-        .filter((o) => o && typeof o.id === "string" && typeof o.accessionNumber === "string")
+        .filter((o) => o && typeof o.id === "string" && (typeof o.accessionNumber === "string" || o.accessionNumber == null))
         .map((o) => ({
           id: String(o.id),
-          accessionNumber: String(o.accessionNumber),
+          // "" normalises to null — blank accessions are not a value (v6.1)
+          accessionNumber: typeof o.accessionNumber === "string" && o.accessionNumber.trim() ? o.accessionNumber : null,
           careWorklistId: typeof o.careWorklistId === "string" ? o.careWorklistId : null,
           patientName: typeof o.patientName === "string" ? o.patientName : "",
           patientAge: typeof o.patientAge === "string" ? o.patientAge : "",

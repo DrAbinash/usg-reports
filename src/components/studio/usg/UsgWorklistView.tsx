@@ -31,6 +31,22 @@ type Order = FormFOrderLite & {
   careSyncedAt: string | null;
 };
 
+type SyncStats = {
+  careRowsReceived?: number;
+  ultrasoundRowsReceived?: number;
+  imported?: number;
+  updatedExisting?: number;
+  skippedNoName?: number;
+  skippedMissingIdentity?: number;
+  errors?: number;
+  matchedByStudyUid?: number;
+  matchedByAccession?: number;
+  ambiguousMatches?: number;
+  awaitingImages?: number;
+  unmatchedOrthanc?: number;
+  skippedReasons?: string[];
+};
+
 type WorklistResponse = {
   orders: Order[];
   syncedAt: string | null;
@@ -90,10 +106,22 @@ function OrderRow({
           <SexChip sex={order.patientSex} />
           <span className="truncate text-[13px] font-semibold">{order.patientName}</span>
           <span className="shrink-0 text-[11px] text-faint">{order.patientAge || ""}</span>
-          <span className="hidden shrink-0 font-mono text-[10px] text-faint sm:inline">{order.accessionNumber}</span>
+          {/* Accession when the ERP supplied one; otherwise the bill-desk
+              worklist row id — every order shows SOME stable identifier. */}
+          {order.accessionNumber ? (
+            <span className="hidden shrink-0 font-mono text-[10px] text-faint sm:inline">{order.accessionNumber}</span>
+          ) : order.careWorklistId ? (
+            <span className="hidden shrink-0 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-slate-500 ring-1 ring-slate-200 sm:inline" title="Bill-desk order (no accession number — ERP identifies it by worklist id)">
+              WL {order.careWorklistId}
+            </span>
+          ) : null}
           {order.studyInstanceUid ? (
             <span className="hidden items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-700 ring-1 ring-violet-200 md:flex">
               <ScanLine className="h-3 w-3" /> PACS
+            </span>
+          ) : order.status !== "REPORTED" ? (
+            <span className="hidden items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200 md:flex" title="No Orthanc study linked yet — the order stays listed and links automatically once the images arrive">
+              <Hourglass className="h-3 w-3" /> Awaiting images
             </span>
           ) : null}
         </div>
@@ -164,13 +192,30 @@ export function UsgWorklistView() {
   const sync = async () => {
     setSyncing(true);
     const r = await fetch("/api/usg/worklist/sync", { method: "POST" })
-      .then((x) => x.json())
+      .then((x) => x.json() as Promise<(WorklistResponse & { ok?: boolean; newOrders?: number; stats?: SyncStats }) | null>)
       .catch(() => null);
     setSyncing(false);
     if (r?.ok) {
       if (r.lastError) toast.warning(r.lastError);
       else if (r.careConfigured || r.orthancConfigured) {
-        toast.success(`Synced · CARE ${r.careOk ? "✓" : "✗"} · Orthanc ${r.orthancOk ? "✓" : "✗"}${r.newOrders ? ` · ${r.newOrders} new` : ""}`);
+        const st = r.stats;
+        const skipped = (st?.skippedNoName ?? 0) + (st?.skippedMissingIdentity ?? 0) + (st?.errors ?? 0);
+        const bits = [
+          `CARE ${r.careOk ? "✓" : "✗"}`,
+          `Orthanc ${r.orthancOk ? "✓" : "✗"}`,
+          r.newOrders ? `${r.newOrders} new` : "",
+          st?.matchedByStudyUid ? `${st.matchedByStudyUid} by UID` : "",
+          st?.matchedByAccession ? `${st.matchedByAccession} by accession` : "",
+          st?.awaitingImages ? `${st.awaitingImages} awaiting images` : "",
+          skipped ? `${skipped} skipped` : "",
+        ].filter(Boolean);
+        const t = toast.success(`Synced · ${bits.join(" · ")}`);
+        if (skipped && st?.skippedReasons?.length) {
+          // Safe diagnostics — ids + reasons only, never patient data.
+          const reasons = (st.skippedReasons ?? []).slice(0, 3).join("\n");
+          setTimeout(() => toast.info(reasons, { duration: 8000 }), 600);
+        }
+        void t;
       } else {
         toast.info("Not configured — set CARE / Orthanc in Settings → Integrations");
       }
@@ -208,7 +253,8 @@ export function UsgWorklistView() {
     return orders.filter(
       (o) =>
         o.patientName.toLowerCase().includes(needle) ||
-        o.accessionNumber.toLowerCase().includes(needle) ||
+        (o.accessionNumber ?? "").toLowerCase().includes(needle) ||
+        (o.careWorklistId ?? "").toLowerCase().includes(needle) ||
         (o.testName ?? "").toLowerCase().includes(needle) ||
         (o.referringDoctor ?? "").toLowerCase().includes(needle),
     );

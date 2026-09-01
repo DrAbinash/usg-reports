@@ -700,7 +700,11 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
       {order ? (
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-sky-100 bg-sky-50/60 px-4 py-2 text-[11.5px]">
           <Link2 className="h-3.5 w-3.5 text-sky-600" />
-          <span className="font-mono font-bold text-sky-800">{order.accessionNumber}</span>
+          {/* Accession when the ERP supplied one; otherwise the bill-desk
+              worklist id — the banner always shows a stable identifier. */}
+          <span className="font-mono font-bold text-sky-800">
+            {order.accessionNumber ?? (order.careWorklistId ? `WL ${order.careWorklistId}` : "Bill-desk order")}
+          </span>
           {order.billNumber ? <span className="text-sky-700">· Bill {order.billNumber}</span> : null}
           {order.testName ? <span className="truncate text-sky-700">· {order.testName}</span> : null}
           {order.billingStatus ? (

@@ -64,6 +64,9 @@ COPY --from=builder /app/prisma ./prisma
 
 # v4 USG-only migration helper — run by the entrypoint before `db push`.
 COPY scripts/usg-v4-cleanup.mjs ./scripts/usg-v4-cleanup.mjs
+# v6.1 worklist-identity helper — run by the entrypoint AFTER `db push`
+# (blank accessionNumber "" → NULL + duplicate-identity diagnostics).
+COPY scripts/usg-v7-null-accession.mjs ./scripts/usg-v7-null-accession.mjs
 
 # Entrypoint: prepare DB, then start the standalone server
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh

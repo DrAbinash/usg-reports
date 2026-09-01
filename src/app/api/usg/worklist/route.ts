@@ -4,7 +4,9 @@ import { getSettings } from "@/lib/settings";
 
 export type WorklistOrderDto = {
   id: string;
-  accessionNumber: string;
+  /** null = the ERP never supplied one — the row identifies by
+   *  careWorklistId (CARE order identity) and studyInstanceUid (imaging). */
+  accessionNumber: string | null;
   careWorklistId: string | null;
   patientName: string;
   patientAge: string;
@@ -36,7 +38,7 @@ export async function GET() {
 
   const items: WorklistOrderDto[] = orders.map((o) => ({
     id: o.id,
-    accessionNumber: o.accessionNumber,
+    accessionNumber: o.accessionNumber ?? null,
     careWorklistId: o.careWorklistId,
     patientName: o.patientName,
     patientAge: o.patientAge,

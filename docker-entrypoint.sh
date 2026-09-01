@@ -49,5 +49,13 @@ until $PRISMA db push --skip-generate; do
   sleep 5
 done
 
+# v6.1 — AFTER the push (column already nullable): canonicalise blank
+# accession numbers to NULL and report duplicate-identity diagnostics.
+# Never fatal — a helper must not take the clinic down.
+if [ -f /app/scripts/usg-v7-null-accession.mjs ]; then
+  echo "[studio] Worklist identity check (v6.1)…"
+  node /app/scripts/usg-v7-null-accession.mjs || echo "[studio] v7 check did not run — continuing" >&2
+fi
+
 echo "[studio] Starting server on :3000"
 exec "$@"

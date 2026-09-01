@@ -288,11 +288,14 @@ export async function applyFullRestore(raw: unknown): Promise<FullRestoreResult>
   }
   for (const o of backup.careOrders ?? []) {
     try {
+      // v6.1: care orders restore by their stable row id — blank-accession
+      // orders (accessionNumber null) have no unique key to upsert on, and
+      // the row id is the identity the rest of the backup refers to.
       await db.usgCareOrder.upsert({
-        where: { accessionNumber: o.accessionNumber },
+        where: { id: o.id },
         create: {
           id: o.id,
-          accessionNumber: o.accessionNumber,
+          accessionNumber: o.accessionNumber ?? null,
           careWorklistId: o.careWorklistId,
           patientName: o.patientName,
           patientAge: o.patientAge,

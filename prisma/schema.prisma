@@ -229,7 +229,17 @@ model UsgPathology {
 // deleted by sync — a finalized order stays as the day's record.
 model UsgCareOrder {
   id              String    @id @default(cuid())
-  accessionNumber String    @unique
+
+  // ── Identity (v6.1 fix) ────────────────────────────────────────────────
+  // ERP reality: many USG rows carry NO accession number, but always a
+  // worklistId (and usually the StudyInstanceUID). accessionNumber is now
+  // NULLABLE (SQLite UNIQUE treats NULLs as distinct — unlimited blank
+  // orders), never synthesized, and stays the unique legacy bridge where
+  // the ERP does populate it. CARE order identity = careWorklistId
+  // (deterministic oldest-first resolution — plain index, NOT unique, so
+  // legacy duplicates can never fail a NAS boot); imaging identity =
+  // studyInstanceUid (exact-match only, see careSync.ts).
+  accessionNumber String?   @unique
   careWorklistId  String?
 
   // Bill-desk demographics (as the ERP reports them; the v6 bridge
@@ -264,6 +274,10 @@ model UsgCareOrder {
 
   @@index([status])
   @@index([studyDate])
+  // v6.1 — deterministic identity lookups (plain, NOT unique: legacy
+  // duplicates must never fail a NAS boot; resolution is oldest-first).
+  @@index([careWorklistId])
+  @@index([studyInstanceUid])
 }
 
 // ── USG Studio — PC-PNDT Form F records (v6) ────────────────────────────

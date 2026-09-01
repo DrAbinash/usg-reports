@@ -146,7 +146,7 @@ export async function POST(req: Request, ctx: Ctx) {
         reportId: id,
         serialNo,
         patientName: updated.patientName,
-        detail: `ERP accepted finalize for ${order.accessionNumber}`,
+        detail: `ERP accepted finalize for ${order.accessionNumber ?? `WL ${order.careWorklistId ?? "?"}`}`,
       });
     } else {
       careSync = "queued";

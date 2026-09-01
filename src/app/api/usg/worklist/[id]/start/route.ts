@@ -62,7 +62,7 @@ export async function POST(_req: Request, ctx: Ctx) {
     action: "report.create",
     reportId: report.id,
     patientName: report.patientName,
-    detail: `started from bill-desk order ${order.accessionNumber} — ${study.label}`,
+    detail: `started from bill-desk order ${order.accessionNumber ?? `WL ${order.careWorklistId ?? order.id}`} — ${study.label}`,
   });
 
   return Response.json({ report, ob: isObStudyKey(studyKey) });

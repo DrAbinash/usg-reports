@@ -93,7 +93,9 @@ export function fetchWorklist() {
 }
 
 export type FinalizePayload = {
-  accessionNumber: string;
+  /** The ERP resolves the order by worklistId FIRST, accession second —
+   *  blank-accession orders finalize via worklistId alone. Never synthesized. */
+  accessionNumber?: string | null;
   worklistId?: string | null;
   reportText: { technique: string; findings: string; impression: string; recommendation?: string };
   radiologistName?: string;

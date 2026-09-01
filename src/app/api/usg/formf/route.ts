@@ -12,10 +12,12 @@ export async function GET(req: Request) {
   if (guard) return guard;
   const url = new URL(req.url);
   const accession = url.searchParams.get("accession") ?? "";
+  const id = url.searchParams.get("id") ?? "";
   const q = (url.searchParams.get("q") ?? "").trim().toLowerCase();
 
   const where: Record<string, unknown> = {};
-  if (accession) where.accessionNumber = accession;
+  if (id) where.id = id;
+  else if (accession) where.accessionNumber = accession;
 
   const rows = await db.usgFormF.findMany({ where, orderBy: { createdAt: "desc" }, take: 500 });
   const items = q
@@ -27,6 +29,9 @@ export async function GET(req: Request) {
 type FormFPayload = {
   id?: string;
   accessionNumber?: string;
+  /** UsgCareOrder id — the reliable order link when the accession is
+   *  blank (v6.1: orders identify by worklistId, not accession). */
+  careOrderId?: string | null;
   billNumber?: string;
   reportId?: string | null;
   patientName?: string;
@@ -90,11 +95,21 @@ export async function POST(req: Request) {
   }
 
   // Link the order (if any) so the worklist shows its Form F badge.
-  if (form.accessionNumber) {
-    const order = await db.usgCareOrder.findUnique({ where: { accessionNumber: form.accessionNumber } });
-    if (order && order.formFId !== form.id) {
-      await db.usgCareOrder.update({ where: { id: order.id }, data: { formFId: form.id } });
-    }
+  // v6.1: prefer the direct order id (blank-accession orders have no
+  // accession to look up); the accession lookup remains for legacy rows.
+  const careOrderId = str(body.careOrderId, 40);
+  let order: { id: string; formFId: string | null } | null = null;
+  if (careOrderId) {
+    order = await db.usgCareOrder.findUnique({ where: { id: careOrderId }, select: { id: true, formFId: true } });
+  }
+  if (!order && form.accessionNumber) {
+    order = await db.usgCareOrder.findUnique({
+      where: { accessionNumber: form.accessionNumber },
+      select: { id: true, formFId: true },
+    });
+  }
+  if (order && order.formFId !== form.id) {
+    await db.usgCareOrder.update({ where: { id: order.id }, data: { formFId: form.id } });
   }
 
   await audit({

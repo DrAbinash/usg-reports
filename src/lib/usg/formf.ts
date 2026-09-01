@@ -121,7 +121,9 @@ export function defaultFormF(s: Pick<
 export function prefillFormFFromOrder(
   form: UsgFormFData,
   order: {
-    accessionNumber: string;
+    /** Blank/absent accessions leave the sheet's accession field empty —
+     *  never synthesized (the ERP identifies the order by worklistId). */
+    accessionNumber: string | null;
     patientName: string;
     patientAge: string;
     patientPhone: string;
@@ -136,7 +138,7 @@ export function prefillFormFFromOrder(
   const isDoctor = /^dr\.?\s/i.test(referred) || referred.length > 0;
   return {
     ...form,
-    accessionNumber: order.accessionNumber,
+    accessionNumber: order.accessionNumber ?? "",
     billNumber: order.billNumber,
     patientName: order.patientName,
     age: order.patientAge,

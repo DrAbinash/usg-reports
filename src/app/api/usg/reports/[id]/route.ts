@@ -24,7 +24,8 @@ export async function GET(_req: Request, ctx: Ctx) {
   const order = orderRow
     ? {
         id: orderRow.id,
-        accessionNumber: orderRow.accessionNumber,
+        accessionNumber: orderRow.accessionNumber ?? null,
+        careWorklistId: orderRow.careWorklistId ?? null,
         patientName: orderRow.patientName,
         patientAge: orderRow.patientAge,
         patientSex: orderRow.patientSex,

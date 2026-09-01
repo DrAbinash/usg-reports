@@ -52,12 +52,16 @@ function useBirthdayStats(open: boolean): Stat[] | null {
       .then((r) => r.json())
       .then((d) => {
         if (!alive || !d?.analytics) return;
-        const a = d.analytics;
+        const a = d.analytics as {
+          totalFinalized?: number;
+          patients?: number;
+          perMonth?: { label: string; count: number }[];
+        };
         const out: Stat[] = [
           { value: String(a.totalFinalized ?? 0), label: "reports signed" },
           { value: String(a.patients ?? 0), label: "patients in the registry" },
         ];
-        const busiest = (a.perMonth ?? []).reduce<typeof a.perMonth[number] | null>(
+        const busiest = (a.perMonth ?? []).reduce<{ label: string; count: number } | null>(
           (best, m) => (m.count > 0 && (!best || m.count > best.count) ? m : best), null,
         );
         if (busiest) out.push({ value: busiest.label, label: `busiest month — ${busiest.count} scans` });

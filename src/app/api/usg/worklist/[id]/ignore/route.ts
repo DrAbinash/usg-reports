@@ -25,7 +25,7 @@ export async function POST(req: Request, ctx: Ctx) {
   await audit({
     action: "worklist.ignore",
     patientName: order.patientName,
-    detail: `${order.accessionNumber} ${ignore ? "hidden from the worklist" : "restored"}`,
+    detail: `${order.accessionNumber ?? `WL ${order.careWorklistId ?? order.id}`} ${ignore ? "hidden from the worklist" : "restored"}`,
   });
   return Response.json({ order: updated });
 }

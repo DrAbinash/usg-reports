@@ -26,7 +26,14 @@ import {
 import type { UsgComposerState } from "@/lib/usg/types";
 
 export type FormFOrderLite = {
-  accessionNumber: string;
+  /** UsgCareOrder row id — the reliable link for blank-accession orders. */
+  id?: string;
+  /** null = the ERP supplied no accession — the order is identified by
+   *  careWorklistId instead; Form F keeps accession blank on the sheet. */
+  accessionNumber: string | null;
+  careWorklistId: string | null;
+  /** Set when a Form F was already saved for this order (worklist badge). */
+  formFId?: string | null;
   patientName: string;
   patientAge: string;
   patientPhone: string;
@@ -101,44 +108,53 @@ export function UsgFormFDialog({
       let existingId: string | null = null;
 
       const acc = order?.accessionNumber ?? "";
+      const priorFormFId = order?.formFId ?? null;
+      let r: { forms?: ExistingForm[] } | null = null;
       if (acc) {
-        const r = await fetch(`/api/usg/formf?accession=${encodeURIComponent(acc)}`)
+        // Accession lookup — the legacy path for populated accessions.
+        r = await fetch(`/api/usg/formf?accession=${encodeURIComponent(acc)}`)
           .then((x) => x.json())
           .catch(() => null);
-        const found: ExistingForm | undefined = r?.forms?.[0];
-        if (found) {
-          existingId = found.id;
-          next = {
-            ...base,
-            accessionNumber: found.accessionNumber,
-            billNumber: found.billNumber,
-            patientName: found.patientName,
-            age: found.patientAge,
-            husbandFatherName: found.husbandFatherName,
-            address: found.address,
-            mobile: found.mobile,
-            referredBy: found.referredBy.startsWith("Doctor") ? "Doctor" : "Self",
-            referredByName: found.referredBy.replace(/^Doctor:\s*/, ""),
-            lmpWeeks: found.lmpWeeks,
-            previousChildIssue: found.previousChildIssue,
-            indicationDetail: found.indicationOther,
-            gestationalAgeWeeks: found.gestationalAgeWeeks,
-            gestationalAgeDays: found.gestationalAgeDays,
-            ultrasoundResult: found.ultrasoundResult.startsWith("Abnormal") ? "abnormal" : "normal",
-            abnormality: found.abnormality,
-            procedureDate: found.procedureDate,
-            consentDate: found.consentDate,
-          };
-          const kids = found.childrenDetails ?? "";
-          const boy = kids.match(/Boy:\s*(\d+)/i)?.[1] ?? "";
-          const girl = kids.match(/Girl:\s*(\d+)/i)?.[1] ?? "";
-          next.boyCount = boy;
-          next.girlCount = girl;
-        }
+      } else if (priorFormFId) {
+        // Blank accession (v6.1): the saved Form F is linked to the ORDER,
+        // so load it by record id — never by patient name.
+        r = await fetch(`/api/usg/formf?id=${encodeURIComponent(priorFormFId)}`)
+          .then((x) => x.json())
+          .catch(() => null);
+      }
+      const found: ExistingForm | undefined = r?.forms?.[0];
+      if (found) {
+        existingId = found.id;
+        next = {
+          ...base,
+          accessionNumber: found.accessionNumber,
+          billNumber: found.billNumber,
+          patientName: found.patientName,
+          age: found.patientAge,
+          husbandFatherName: found.husbandFatherName,
+          address: found.address,
+          mobile: found.mobile,
+          referredBy: found.referredBy.startsWith("Doctor") ? "Doctor" : "Self",
+          referredByName: found.referredBy.replace(/^Doctor:\s*/, ""),
+          lmpWeeks: found.lmpWeeks,
+          previousChildIssue: found.previousChildIssue,
+          indicationDetail: found.indicationOther,
+          gestationalAgeWeeks: found.gestationalAgeWeeks,
+          gestationalAgeDays: found.gestationalAgeDays,
+          ultrasoundResult: found.ultrasoundResult.startsWith("Abnormal") ? "abnormal" : "normal",
+          abnormality: found.abnormality,
+          procedureDate: found.procedureDate,
+          consentDate: found.consentDate,
+        };
+        const kids = found.childrenDetails ?? "";
+        const boy = kids.match(/Boy:\s*(\d+)/i)?.[1] ?? "";
+        const girl = kids.match(/Girl:\s*(\d+)/i)?.[1] ?? "";
+        next.boyCount = boy;
+        next.girlCount = girl;
       }
       if (!existingId && order) {
         next = prefillFormFFromOrder(next, {
-          accessionNumber: order.accessionNumber,
+          accessionNumber: order.accessionNumber ?? "",
           patientName: order.patientName,
           patientAge: order.patientAge,
           patientPhone: order.patientPhone,
@@ -166,7 +182,7 @@ export function UsgFormFDialog({
     return () => {
       alive = false;
     };
-  }, [open, order?.accessionNumber, report?.id]);
+  }, [open, order?.accessionNumber, order?.formFId, report?.id]);
 
   const completeness = useMemo(
     () =>
@@ -183,6 +199,9 @@ export function UsgFormFDialog({
   const payload = () => ({
     id: savedId ?? undefined,
     accessionNumber: form.accessionNumber,
+    // Order link for the worklist Form F badge — the route links by id
+    // when the accession is blank (v6.1 identity fix).
+    careOrderId: order?.id ?? null,
     billNumber: form.billNumber,
     reportId: report?.id ?? null,
     patientName: form.patientName,

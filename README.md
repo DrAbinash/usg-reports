@@ -70,6 +70,14 @@ radiologist workspace lives in the separate
   doctor, billing status); one click starts a pre-filled report, and
   finalize reports back to the ERP (REPORT_FINAL + billing link),
   retrying automatically until it is accepted.
+  **Identity (v6.1):** ERP rows with a blank accession number — the
+  normal bill-desk case — import by **careWorklistId** (order identity)
+  and **StudyInstanceUID** (imaging identity); accession matching stays
+  as the legacy bridge where the ERP populates it. Orthanc links by
+  exact StudyInstanceUID first, exact single-hit accession second —
+  never patient names, never "first match". Orders without images yet
+  stay listed as *Awaiting images*; every skip is counted with a safe
+  reason (no patient data) in the sync response and audit log.
 - **Form F (v6)** — PC-PNDT statutory form with the clinic's fixed details
   pre-filled, demographics auto-populated from the bill desk, GA + result
   lifted from the composer, and the ERP's four-predicate completeness rule

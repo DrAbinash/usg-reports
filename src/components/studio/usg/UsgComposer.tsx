@@ -43,6 +43,8 @@ import { UsgDicomPicker } from "./UsgDicomPicker";
 import { UsgFormFDialog, type FormFDefaults, type FormFOrderLite } from "./UsgFormFDialog";
 import { DictationButton } from "./DictationButton";
 import { UsgStudyPicker } from "./UsgStudyPicker";
+import { UsgCriticalBanner } from "./UsgCriticalBanner";
+import { UsgQualityChecklist } from "./UsgQualityChecklist";
 import { appendTranscript } from "@/lib/usg/dictation";
 import { clearDraft, draftKey, loadDraft, saveDraft, snapshotDiffers, type DraftSnapshot } from "@/lib/usg/drafts";
 import { downloadReportPdf, shareReportPdf } from "./sharePdf";
@@ -150,6 +152,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     report?.serialNo != null ? formatUsgSerial(report.serialNo) : undefined,
   );
   const [finalizedHere, setFinalizedHere] = useState(report?.status === "FINALIZED");
+  const [qualityOpen, setQualityOpen] = useState(false);
   const [dialogOrgan, setDialogOrgan] = useState<string | null>(null);
   const printRef = useRef<HTMLIFrameElement>(null);
 
@@ -772,6 +775,17 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         </div>
       ) : null}
 
+      {/* Critical findings banner — shows when a critical pathology is selected */}
+      <div className="shrink-0 px-4 pt-2">
+        <UsgCriticalBanner
+          selectedPathologies={state.organs.flatMap((o) =>
+            (o.pathologies ?? (o.pathology ? [o.pathology] : [])).map((k) => ({
+              key: k, label: k, organ: o.organ,
+            })),
+          )}
+        />
+      </div>
+
       {/* Patient strip */}
       <div className="shrink-0 border-b border-border bg-card/80 px-4 py-3 backdrop-blur">
         <div className="flex flex-wrap items-end gap-2.5">
@@ -863,7 +877,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
               {busy === "save" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Save
             </Button>
-            <Button size="sm" onClick={() => persist("finalize")} disabled={busy !== "" || isFinal}
+            <Button size="sm" onClick={() => setQualityOpen(true)} disabled={busy !== "" || isFinal}
               className="h-9 bg-emerald-600 hover:bg-emerald-700">
               {busy === "finalize" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck2 className="h-4 w-4" />}
               Finalize
@@ -1179,6 +1193,15 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         currentKey={studyKey}
         onPick={pickStudy}
         onClose={() => setPickerOpen(false)}
+      />
+
+      {/* Pre-finalize quality checklist */}
+      <UsgQualityChecklist
+        open={qualityOpen}
+        onOpenChange={setQualityOpen}
+        state={state}
+        resolved={resolved}
+        onForceFinalize={() => void persist("finalize")}
       />
     </div>
   );

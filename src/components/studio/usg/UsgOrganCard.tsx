@@ -14,12 +14,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { Check, Pencil, Plus, RotateCcw, Stethoscope, Type } from "lucide-react";
+import { Check, Pencil, Plus, RotateCcw, Stethoscope, Type, ChevronDown } from "lucide-react";
 import type { UsgOrganDef, UsgOrganState, UsgPathologyDef, UsgVarDef } from "@/lib/usg/types";
 import { extractTokens, ORGAN_SIDE, selectedPathologies, substitute } from "@/lib/usg/composer";
+import { isSelectToken, getTokenOptions } from "@/lib/usg/tokenTypes";
 import { appendTranscript } from "@/lib/usg/dictation";
 import { DictationButton } from "./DictationButton";
+import { UsgSuggestionsPanel } from "./UsgSuggestionsPanel";
 
 export type OrganCardProps = {
   def: UsgOrganDef;
@@ -263,6 +268,32 @@ export function UsgOrganCard({ def, state, pathologies, normalOverride, onSaveNo
         <div className="mb-2.5 flex flex-wrap gap-1.5">
           {inputTokens.map((t) => {
             const { label, unit } = varLabel(varDefs, t);
+            const isSelect = isSelectToken(t);
+            const options = getTokenOptions(t);
+
+            if (isSelect && options) {
+              // Render a dropdown for select tokens (e.g. calyx location)
+              return (
+                <label key={t} className="flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50/40 px-2 py-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+                  <Select value={state.vars[t] ?? ""} onValueChange={(v) => onVar(t, v)}>
+                    <SelectTrigger className="h-6 w-32 border-0 bg-transparent px-1 text-[12px] font-bold text-foreground focus:ring-1 focus:ring-sky-300">
+                      <SelectValue placeholder="Select…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {options.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value} className="text-[12px]">
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {unit ? <span className="text-[10px] text-faint">{unit}</span> : null}
+                </label>
+              );
+            }
+
+            // Default: free-text input (existing behaviour)
             return (
               <label key={t} className="flex items-center gap-1 rounded-lg border border-border bg-panel px-2 py-1">
                 <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
@@ -279,6 +310,11 @@ export function UsgOrganCard({ def, state, pathologies, normalOverride, onSaveNo
           })}
         </div>
       ) : null}
+
+      {/* Organ-specific suggestions (deterministic, no AI) */}
+      {anySelected && (
+        <UsgSuggestionsPanel selectedPathologyKeys={selectedKeys} />
+      )}
 
       {/* Finding text */}
       {editing ? (

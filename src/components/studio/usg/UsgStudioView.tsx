@@ -22,6 +22,7 @@ import { UsgComposer, type UsgReportRow, type ReportOrderLite } from "./UsgCompo
 import type { FormFDefaults } from "./UsgFormFDialog";
 import type { DiffSource } from "./UsgDiffPanel";
 import { shareReportPdf } from "./sharePdf";
+import { UsgPacsReturnButton } from "./UsgPacsReturnButton";
 
 const EMPTY_SETTINGS: UsgPrintSettings = {
   appTitle: "CARE Reporting Studio",
@@ -690,6 +691,11 @@ function ReportCard({
       >
         <Repeat className="h-3.5 w-3.5" />
       </Button>
+      {r.status === "FINALIZED" && (
+        <div onClick={(e) => e.stopPropagation()} className="opacity-0 transition-opacity group-hover:opacity-100">
+          <UsgPacsReturnButton reportId={r.id} />
+        </div>
+      )}
       <Button
         variant="ghost"
         size="sm"

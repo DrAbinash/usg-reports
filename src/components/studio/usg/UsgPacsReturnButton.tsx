@@ -10,7 +10,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { UploadCloud, CheckCircle2, Loader2, ArrowUpToCloud } from "lucide-react";
+import { UploadCloud, CheckCircle2, Loader2, CloudUpload } from "lucide-react";
 
 export type UsgPacsReturnButtonProps = {
   reportId: string;
@@ -79,7 +79,7 @@ export function UsgPacsReturnButton({
       {loading ? (
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
       ) : (
-        <ArrowUpToCloud className="h-3.5 w-3.5" />
+        <CloudUpload className="h-3.5 w-3.5" />
       )}
       {loading ? "Uploading…" : "Return to PACS"}
     </Button>

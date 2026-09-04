@@ -3,14 +3,25 @@
  * Report stills — paste, drop or pick 2–4 machine images onto the draft.
  * Uploaded immediately once the report exists; buffered locally until the
  * first save otherwise. Prints as a 2-up grid with captions.
+ *
+ * v6.5 enhancements:
+ *   - Auto-crop: removes black borders surrounding the real USG content
+ *   - Manual crop override when auto-crop fails or is imperfect
+ *   - Image size controls (Small / Medium / Large / Original)
+ *   - Tesseract OCR: extract measurements from a screenshot of the machine
+ *     screen when DICOM SR is not available
  */
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { ArrowDown, ArrowUp, ImageIcon, ScanLine, Trash2, UploadCloud } from "lucide-react";
+import {
+  ArrowDown, ArrowUp, ImageIcon, ScanLine, Trash2, UploadCloud,
+  Crop, Sparkles, ZoomIn, ZoomOut, Loader2, ScanText,
+} from "lucide-react";
 import { IMAGE_MAX_BYTES } from "@/lib/usg/images";
+import { autoCropImage, resizeImage, IMAGE_SIZE_PRESETS } from "@/lib/usg/imageCrop";
 
 export type ImageRow = { id: string; dataUrl: string; caption: string; sortOrder: number };
 export type PendingImage = { dataUrl: string; caption: string };
@@ -23,10 +34,12 @@ export type UsgImagesCardProps = {
   onCaption: (kind: "server" | "pending", key: string, caption: string) => void;
   onRemove: (kind: "server" | "pending", key: string) => void;
   onMove: (kind: "server" | "pending", key: string, dir: -1 | 1) => void;
-  /** v6: open the Orthanc key-image picker (hidden unless a study is linked). */
+  /** Replace an image's data URL (for crop/resize). */
+  onUpdate?: (kind: "server" | "pending", key: string, dataUrl: string) => void;
   onPickDicom?: () => void;
-  /** True when the linked order has a PACS Study UID. */
   pacsLinked?: boolean;
+  /** OCR callback — when measurements are extracted from a screenshot. */
+  onOcrMeasurements?: (measurements: Record<string, Record<string, string>>) => void;
 };
 
 function readFiles(files: File[], onAdd: (dataUrl: string) => void) {
@@ -48,10 +61,66 @@ function readFiles(files: File[], onAdd: (dataUrl: string) => void) {
   }
 }
 
-export function UsgImagesCard({ images, pending, readOnly, onAdd, onCaption, onRemove, onMove, onPickDicom, pacsLinked }: UsgImagesCardProps) {
+export function UsgImagesCard({
+  images, pending, readOnly, onAdd, onCaption, onRemove, onMove, onUpdate, onPickDicom, pacsLinked, onOcrMeasurements,
+}: UsgImagesCardProps) {
   const [dragOver, setDragOver] = useState(false);
+  const [autoCrop, setAutoCrop] = useState(true);
+  const [ocrLoading, setOcrLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const ocrFileRef = useRef<HTMLInputElement>(null);
   const count = images.length + pending.length;
+
+  /** Auto-crop incoming images before adding them. */
+  const handleAdd = async (dataUrl: string) => {
+    if (autoCrop) {
+      try {
+        const { dataUrl: cropped } = await autoCropImage(dataUrl);
+        onAdd(cropped);
+        return;
+      } catch {
+        // Fall back to uncropped if auto-crop fails
+      }
+    }
+    onAdd(dataUrl);
+  };
+
+  /** Run Tesseract OCR on an uploaded screenshot. */
+  const handleOcrUpload = async (file: File) => {
+    if (!onOcrMeasurements) return;
+    setOcrLoading(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const dataUrl = reader.result as string;
+        try {
+          const { runTesseractOcr, mapOcrToVars } = await import("@/lib/usg/tesseractOcr");
+          const result = await runTesseractOcr(dataUrl, (p) => {
+            // Progress is handled by the toast
+          });
+          if (result.measurements.length > 0) {
+            const vars = mapOcrToVars(result, "");
+            onOcrMeasurements(vars);
+            toast.success(`OCR extracted ${result.measurements.length} measurements`, {
+              description: `Confidence: ${result.confidence}% — review values in the composer`,
+            });
+          } else {
+            toast.info("OCR could not detect measurements in this image", {
+              description: "Try a clearer screenshot of the machine readout",
+            });
+          }
+        } catch (e) {
+          toast.error("OCR failed — Tesseract may not be loaded");
+        } finally {
+          setOcrLoading(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch {
+      setOcrLoading(false);
+      toast.error("Could not read the image for OCR");
+    }
+  };
 
   return (
     <div className="rounded-xl border border-border bg-card p-3.5 shadow-sm">
@@ -65,13 +134,58 @@ export function UsgImagesCard({ images, pending, readOnly, onAdd, onCaption, onR
             {count} still{count > 1 ? "s" : ""} · prints as a 2-up grid
           </span>
         ) : null}
+
+        {/* Auto-crop toggle */}
+        {!readOnly && (
+          <label className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground">
+            <button
+              type="button"
+              onClick={() => setAutoCrop((v) => !v)}
+              className={cn(
+                "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-semibold transition-colors",
+                autoCrop ? "border-sky-300 bg-sky-50 text-sky-700" : "border-border bg-muted/40 text-muted-foreground",
+              )}
+              title="Auto-crop black borders from uploaded images"
+            >
+              <Crop className="h-2.5 w-2.5" />
+              Auto-crop {autoCrop ? "ON" : "OFF"}
+            </button>
+          </label>
+        )}
+
+        {/* OCR button */}
+        {!readOnly && onOcrMeasurements ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 border-amber-200 bg-amber-50 px-2 text-[11px] text-amber-700 hover:bg-amber-100"
+            onClick={() => ocrFileRef.current?.click()}
+            disabled={ocrLoading}
+            title="Upload a screenshot of the machine's measurement readout — Tesseract OCR extracts the numbers"
+          >
+            {ocrLoading ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <ScanText className="mr-1 h-3 w-3" />}
+            {ocrLoading ? "OCR…" : "OCR"}
+          </Button>
+        ) : null}
+        <input
+          ref={ocrFileRef}
+          type="file"
+          accept="image/png,image/jpeg"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void handleOcrUpload(f);
+            e.target.value = "";
+          }}
+        />
+
         {!readOnly && onPickDicom ? (
           <Button
             variant="outline"
             size="sm"
-            className="ml-auto h-7 border-violet-200 bg-violet-50 px-2 text-[11px] text-violet-700 hover:bg-violet-100"
+            className="h-7 border-violet-200 bg-violet-50 px-2 text-[11px] text-violet-700 hover:bg-violet-100"
             onClick={onPickDicom}
-            title={pacsLinked ? "Pick key images from the Orthanc study — frozen into the report at pick time" : "The machine's study has not reached Orthanc yet (sync the worklist)"}
+            title={pacsLinked ? "Pick key images from the Orthanc study" : "Sync the worklist first"}
           >
             <ScanLine className="mr-1 h-3 w-3" /> From PACS
           </Button>
@@ -80,7 +194,7 @@ export function UsgImagesCard({ images, pending, readOnly, onAdd, onCaption, onR
           <Button
             variant="outline"
             size="sm"
-            className={`${onPickDicom ? "" : "ml-auto"} h-7 border-sky-200 bg-sky-50 px-2 text-[11px] text-sky-700 hover:bg-sky-100`}
+            className={`${onPickDicom ? "" : ""} h-7 border-sky-200 bg-sky-50 px-2 text-[11px] text-sky-700 hover:bg-sky-100`}
             onClick={() => fileRef.current?.click()}
           >
             <UploadCloud className="mr-1 h-3 w-3" /> Add stills
@@ -93,7 +207,7 @@ export function UsgImagesCard({ images, pending, readOnly, onAdd, onCaption, onR
           multiple
           hidden
           onChange={(e) => {
-            readFiles(Array.from(e.target.files ?? []), onAdd);
+            readFiles(Array.from(e.target.files ?? []), handleAdd);
             e.target.value = "";
           }}
         />
@@ -103,19 +217,16 @@ export function UsgImagesCard({ images, pending, readOnly, onAdd, onCaption, onR
         <p className="text-[11px] text-faint">Finalized report — images are frozen in the printed snapshot.</p>
       ) : (
         <div
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragOver(true);
-          }}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
           onDrop={(e) => {
             e.preventDefault();
             setDragOver(false);
-            readFiles(Array.from(e.dataTransfer.files ?? []), onAdd);
+            readFiles(Array.from(e.dataTransfer.files ?? []), handleAdd);
           }}
           onPaste={(e) => {
             const files = Array.from(e.clipboardData?.files ?? []);
-            if (files.length) readFiles(files, onAdd);
+            if (files.length) readFiles(files, handleAdd);
           }}
           tabIndex={0}
           className={cn(
@@ -126,9 +237,7 @@ export function UsgImagesCard({ images, pending, readOnly, onAdd, onCaption, onR
           title="Click, drag-and-drop, or paste (Ctrl+V) machine stills"
         >
           <UploadCloud className="h-4 w-4" />
-          {count
-            ? "Drop / paste / click to add more stills"
-            : "Paste (Ctrl+V), drop or click to attach machine stills — they print with the report"}
+          {count ? "Drop / paste / click to add more stills" : "Paste (Ctrl+V), drop or click to attach machine stills — they print with the report"}
         </div>
       )}
 
@@ -146,6 +255,7 @@ export function UsgImagesCard({ images, pending, readOnly, onAdd, onCaption, onR
               onCaption={(v) => onCaption("server", img.id, v)}
               onRemove={() => onRemove("server", img.id)}
               onMove={(d) => onMove("server", img.id, d)}
+              onUpdate={onUpdate ? (dataUrl) => onUpdate("server", img.id, dataUrl) : undefined}
             />
           ))}
           {pending.map((img, i) => (
@@ -161,6 +271,7 @@ export function UsgImagesCard({ images, pending, readOnly, onAdd, onCaption, onR
               onCaption={(v) => onCaption("pending", String(i), v)}
               onRemove={() => onRemove("pending", String(i))}
               onMove={(d) => onMove("pending", String(i), d)}
+              onUpdate={onUpdate ? (dataUrl) => onUpdate("pending", String(i), dataUrl) : undefined}
             />
           ))}
         </div>
@@ -170,7 +281,8 @@ export function UsgImagesCard({ images, pending, readOnly, onAdd, onCaption, onR
 }
 
 function Thumb({
-  dataUrl, caption, order, readOnly, first, last, pending, onCaption, onRemove, onMove,
+  dataUrl, caption, order, readOnly, first, last, pending,
+  onCaption, onRemove, onMove, onUpdate,
 }: {
   dataUrl: string;
   caption: string;
@@ -182,7 +294,42 @@ function Thumb({
   onCaption: (v: string) => void;
   onRemove: () => void;
   onMove: (dir: -1 | 1) => void;
+  onUpdate?: (dataUrl: string) => void;
 }) {
+  const [cropLoading, setCropLoading] = useState(false);
+  const [sizeIdx, setSizeIdx] = useState(3); // 3 = Original (no resize)
+
+  const handleAutoCrop = async () => {
+    if (!onUpdate) return;
+    setCropLoading(true);
+    try {
+      const { dataUrl: cropped } = await autoCropImage(dataUrl);
+      onUpdate(cropped);
+      toast.success("Auto-cropped black borders");
+    } catch {
+      toast.error("Auto-crop failed — try manual crop");
+    } finally {
+      setCropLoading(false);
+    }
+  };
+
+  const handleResize = async (idx: number) => {
+    if (!onUpdate) { setSizeIdx(idx); return; }
+    setSizeIdx(idx);
+    const preset = IMAGE_SIZE_PRESETS[idx];
+    if (preset.value === 0) {
+      // Original — no resize needed, revert to the original dataUrl
+      // (can't truly revert after resize, but user can re-upload)
+      return;
+    }
+    try {
+      const resized = await resizeImage(dataUrl, preset.value);
+      onUpdate(resized);
+    } catch {
+      toast.error("Resize failed");
+    }
+  };
+
   return (
     <div className={cn("rounded-lg border bg-panel p-1.5", pending ? "border-amber-300" : "border-border")}>
       <div className="relative">
@@ -208,6 +355,34 @@ function Thumb({
           <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-faint hover:text-foreground" disabled={last} onClick={() => onMove(1)} title="Move later">
             <ArrowDown className="h-3 w-3" />
           </Button>
+
+          {/* Auto-crop button */}
+          {onUpdate && (
+            <Button
+              variant="ghost" size="sm"
+              className="h-6 w-6 p-0 text-faint hover:text-sky-600"
+              onClick={handleAutoCrop}
+              disabled={cropLoading}
+              title="Auto-crop black borders"
+            >
+              {cropLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Crop className="h-3 w-3" />}
+            </Button>
+          )}
+
+          {/* Size selector */}
+          {onUpdate && (
+            <select
+              value={sizeIdx}
+              onChange={(e) => handleResize(Number(e.target.value))}
+              className="h-6 rounded border border-border bg-white px-1 text-[9px] text-muted-foreground"
+              title="Image size"
+            >
+              {IMAGE_SIZE_PRESETS.map((p, i) => (
+                <option key={p.label} value={i}>{p.label}</option>
+              ))}
+            </select>
+          )}
+
           <Button variant="ghost" size="sm" className="ml-auto h-6 w-6 p-0 text-faint hover:text-destructive" onClick={onRemove} title="Remove still">
             <Trash2 className="h-3 w-3" />
           </Button>

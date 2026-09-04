@@ -45,6 +45,9 @@ import { DictationButton } from "./DictationButton";
 import { UsgStudyPicker } from "./UsgStudyPicker";
 import { UsgCriticalBanner } from "./UsgCriticalBanner";
 import { UsgQualityChecklist } from "./UsgQualityChecklist";
+import { UsgMeasurementReviewDialog } from "./UsgMeasurementReviewDialog";
+import { UsgPregnancyTimeline } from "./UsgPregnancyTimeline";
+import { buildPregnancyTimeline } from "@/lib/usg/pregnancyTimeline";
 import { appendTranscript } from "@/lib/usg/dictation";
 import { clearDraft, draftKey, loadDraft, saveDraft, snapshotDiffers, type DraftSnapshot } from "@/lib/usg/drafts";
 import { downloadReportPdf, shareReportPdf } from "./sharePdf";
@@ -153,6 +156,10 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   );
   const [finalizedHere, setFinalizedHere] = useState(report?.status === "FINALIZED");
   const [qualityOpen, setQualityOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewSrResult, setReviewSrResult] = useState<{ vars: Record<string, Record<string, string>>; extras: Record<string, string>; matchedCount: number } | null>(null);
+  const [reviewSrMeasurements, setReviewSrMeasurements] = useState<Array<{ conceptName: string; value: string; unit: string; path?: string }>>([]);
+  const [patientReports, setPatientReports] = useState<Array<{ id: number; scanDate: string | null; stateJson: string | null; studyKey: string | null; status: string }>>([]);
   const [dialogOrgan, setDialogOrgan] = useState<string | null>(null);
   const printRef = useRef<HTMLIFrameElement>(null);
 
@@ -200,6 +207,24 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         toast.error(r.error);
         return;
       }
+      // If SR measurements were found, show the review dialog before applying
+      if (r.source === "sr" && (r.matchedCount ?? 0) > 0) {
+        const srResult = {
+          vars: (r.vars ?? {}) as Record<string, Record<string, string>>,
+          extras: (r.extras ?? {}) as Record<string, string>,
+          matchedCount: r.matchedCount ?? 0,
+        };
+        // Build mock SrMeasurement array from the vars for confidence scoring
+        const srMeasurements = Object.entries(srResult.vars).flatMap(([organ, kv]) =>
+          Object.entries(kv).map(([k, v]) => ({ conceptName: `${organ}.${k}`, value: v, unit: "" })),
+        );
+        setReviewSrResult(srResult);
+        setReviewSrMeasurements(srMeasurements);
+        setReviewOpen(true);
+        setPullSummary({ source: r.source ?? "none", matchedCount: r.matchedCount ?? 0, extras: srResult.extras });
+        return;
+      }
+      // Non-SR (OCR or none): apply directly as before
       const vars = (r.vars ?? {}) as Record<string, Record<string, string>>;
       let applied = 0;
       setState((s) => {
@@ -281,6 +306,8 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
 
   // Registry autocomplete — known patients appear under the name box; picking
   // one fills the phone (and links this report into her history on save).
+  // For obstetric studies, also loads the patient's prior obstetric reports
+  // to build the pregnancy timeline.
   useEffect(() => {
     let cancelled = false;
     fetch("/api/usg/patients")
@@ -293,6 +320,25 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
       cancelled = true;
     };
   }, []);
+
+  // Load patient's prior reports for the pregnancy timeline (obstetric only)
+  useEffect(() => {
+    if (!patientName.trim() || !state.studyKey.startsWith("ob-")) {
+      setPatientReports([]);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/usg/reports?patientName=${encodeURIComponent(patientName.trim())}&limit=20`)
+      .then((r) => (r.ok ? r.json() : { reports: [] }))
+      .then((d) => {
+        if (!cancelled) {
+          const reports = (d.reports ?? d ?? []) as Array<{ id: number; scanDate: string | null; stateJson: string | null; studyKey: string | null; status: string }>;
+          setPatientReports(reports);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [patientName, state.studyKey]);
 
   const normName = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
   const onNameChange = (v: string) => {
@@ -1081,6 +1127,23 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
             onMove={moveImage}
             onPickDicom={orderUid ? () => setDicomOpen(true) : undefined}
             pacsLinked={!!orderUid}
+            onOcrMeasurements={(vars) => {
+              let applied = 0;
+              setState((s) => {
+                let next = s;
+                for (const [organ, kv] of Object.entries(vars)) {
+                  for (const [k, v] of Object.entries(kv)) {
+                    if (!v) continue;
+                    next = setOrganVar(next, organ, k, v);
+                    applied++;
+                  }
+                }
+                return next;
+              });
+              if (applied > 0) {
+                toast.success(`OCR filled ${applied} measurement slot(s) — verify values`);
+              }
+            }}
           />
         </div>
 
@@ -1203,6 +1266,40 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         resolved={resolved}
         onForceFinalize={() => void persist("finalize")}
       />
+
+      {/* Measurement review dialog (Pull from machine) */}
+      {reviewSrResult && (
+        <UsgMeasurementReviewDialog
+          open={reviewOpen}
+          onOpenChange={setReviewOpen}
+          srResult={reviewSrResult}
+          srMeasurements={reviewSrMeasurements}
+          onAccept={(vars) => {
+            let applied = 0;
+            setState((s) => {
+              let next = s;
+              for (const [organ, kv] of Object.entries(vars)) {
+                for (const [k, v] of Object.entries(kv)) {
+                  if (!v) continue;
+                  next = setOrganVar(next, organ, k, v);
+                  applied++;
+                }
+              }
+              return next;
+            });
+            if (applied > 0) {
+              toast.success(`${applied} measurement(s) filled from machine SR`);
+            }
+          }}
+        />
+      )}
+
+      {/* Pregnancy timeline for obstetric patients */}
+      {state.studyKey.startsWith("ob-") && patientReports.length > 0 && (
+        <div className="px-4 py-2">
+          <UsgPregnancyTimeline timeline={buildPregnancyTimeline(patientReports)} />
+        </div>
+      )}
     </div>
   );
 }

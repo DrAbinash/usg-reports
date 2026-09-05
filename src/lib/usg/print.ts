@@ -71,6 +71,14 @@ export type UsgPrintSettings = {
   usgPrintShowTechnique?: boolean;
   /** v6.2 — print the "Thanks For Your Referral." tagline (default true). */
   usgPrintShowThanks?: boolean;
+  /** v6.7 — image sidebar position: "right" (default) | "left". */
+  usgSidebarPosition?: string;
+  /** v6.7 — logo position: "left" (default) | "right" | "center". */
+  usgLogoPosition?: string;
+  /** v6.7 — address position: "right" (default) | "left" | "center". */
+  usgAddressPosition?: string;
+  /** v6.7 — font family: "sans-serif" (default) | "serif" | "system". */
+  usgPrintFontFamily?: string;
 };
 
 export type UsgPrintPatient = {
@@ -481,6 +489,11 @@ export function buildUsgReportHtml(
   images: UsgPrintImage[] = [],
   qr?: UsgPrintQr | null,
 ): string {
+  // v6.7 — route to the two-column sidebar layout when selected
+  if (settings.usgPrintStyle === "premium_sidebar") {
+    return buildSidebarReportHtml(settings, patient, resolved, images, qr);
+  }
+
   const classic = settings.usgPrintStyle === "classic";
   const compact = settings.usgPrintCompact === true;
   const a5 = settings.usgPrintPaper === "a5";
@@ -629,6 +642,411 @@ ${watermark}
     ${qr ? `<span class="qr-wrap"><img class="qr" src="${esc(qr.dataUrl)}" alt="verification QR" /><span class="qr-cap">scan to verify</span></span>` : ""}
     <span>${esc(settings.appTitle)}</span>
   </div>
+  </div>
+</div>
+</body></html>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// v6.7 — PREMIUM SIDEBAR FORMAT
+// Two-column layout: image sidebar + text column, matching the reference
+// clinic report format. Configurable from Settings.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const SIDEBAR_CSS = `
+@page { margin: 0; size: A4; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { margin: 0; padding: 0; background: #fff; }
+body {
+  font-family: var(--font-fam, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif);
+  font-size: 10pt;
+  line-height: 1.45;
+  color: #1a1a2e;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.page { width: 210mm; min-height: 297mm; position: relative; overflow: hidden; }
+
+/* ── Top bar (logo + address) ────────────────────────────────────────────── */
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 8mm 10mm 4mm 10mm;
+}
+.top-bar .logo-block { display: flex; align-items: center; gap: 8px; }
+.top-bar .logo-block img { height: 14mm; width: auto; }
+.top-bar .logo-block .logo-fallback {
+  height: 14mm; width: 14mm; border-radius: 50%;
+  background: linear-gradient(135deg, #0ea5e9, #6366f1);
+  color: #fff; font-size: 8pt; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.top-bar .logo-block .hospital-name { font-size: 15pt; font-weight: 800; color: #1e3a5f; line-height: 1.1; }
+.top-bar .logo-block .tagline { font-size: 8pt; color: #64748b; font-style: italic; }
+.top-bar .contact-block { text-align: right; font-size: 8.5pt; color: #475569; line-height: 1.4; }
+.top-bar .contact-block .line { display: flex; align-items: center; gap: 4px; justify-content: flex-end; }
+.top-bar.center .logo-block { order: 2; }
+.top-bar.center .contact-block { order: 1; }
+.top-bar.center { justify-content: center; gap: 20px; }
+.top-bar.right .logo-block { order: 2; }
+.top-bar.right .contact-block { order: 1; text-align: left; }
+.top-bar.right .contact-block .line { justify-content: flex-start; }
+
+/* ── Patient strip ────────────────────────────────────────────────────────── */
+.patient-strip {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  padding: 0 10mm;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+.patient-strip .field { padding: 4px 8px; }
+.patient-strip .label { font-size: 7.5pt; text-transform: uppercase; color: #94a3b8; font-weight: 600; }
+.patient-strip .value { font-size: 10pt; font-weight: 600; color: #1e293b; }
+
+/* ── Two-column body ──────────────────────────────────────────────────────── */
+.body-grid {
+  display: grid;
+  grid-template-columns: var(--sidebar-w, 60mm) 1fr;
+  gap: 0;
+  min-height: 200mm;
+}
+.body-grid.sidebar-left { grid-template-columns: 1fr var(--sidebar-w, 60mm); }
+.body-grid.sidebar-left .sidebar { order: 2; }
+.body-grid.sidebar-left .main-col { order: 1; }
+
+/* ── Image sidebar ────────────────────────────────────────────────────────── */
+.sidebar {
+  background: #0f172a;
+  padding: 6mm 4mm;
+  display: flex;
+  flex-direction: column;
+  gap: 4mm;
+}
+.sidebar .sidebar-header {
+  color: #94a3b8;
+  font-size: 8pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding-bottom: 2mm;
+  border-bottom: 1px solid #334155;
+}
+.sidebar .sidebar-subheader {
+  color: #64748b;
+  font-size: 7pt;
+  font-weight: 600;
+  margin-bottom: 2mm;
+}
+.sidebar .img-item {
+  position: relative;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.sidebar .img-item img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 4px;
+}
+.sidebar .img-item .badge {
+  position: absolute;
+  top: 3px; left: 3px;
+  background: #3b82f6;
+  color: #fff;
+  font-size: 7pt;
+  font-weight: 700;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+}
+.sidebar .img-item .caption {
+  font-size: 7pt;
+  color: #94a3b8;
+  padding: 2px 4px;
+  text-align: center;
+}
+
+/* ── Main column (findings + impression) ──────────────────────────────────── */
+.main-col { padding: 6mm 8mm 4mm 8mm; }
+.main-col .section { margin-bottom: 4mm; }
+.main-col .section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #1e3a5f;
+  padding-bottom: 1mm;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 2mm;
+}
+.main-col .section-body {
+  font-size: var(--body-fs, 10pt);
+  line-height: var(--body-lh, 1.45);
+  color: #1a1a2e;
+}
+.main-col .section-body p { margin-bottom: 1.5mm; }
+.main-col .section-body .table-row {
+  display: grid;
+  grid-template-columns: 120px 80px 1fr;
+  gap: 4px;
+  font-size: 9pt;
+  padding: 1px 0;
+  border-bottom: 1px dotted #e2e8f0;
+}
+.main-col .section-body .table-row .label { font-weight: 600; color: #475569; }
+.main-col .section-body .table-row .value { font-weight: 700; }
+.main-col .section-body .table-row .range { font-size: 8pt; color: #94a3b8; }
+
+/* ── Impression box ──────────────────────────────────────────────────────── */
+.impression-box {
+  background: #f1f5f9;
+  border-left: 3px solid #3b82f6;
+  border-radius: 0 6px 6px 0;
+  padding: 3mm 4mm;
+  margin: 2mm 0;
+}
+.impression-box .header {
+  font-size: 9pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #1e3a5f;
+  margin-bottom: 1.5mm;
+}
+.impression-box .body { font-size: 10pt; line-height: 1.5; }
+.impression-box .body p { margin-bottom: 1mm; }
+
+/* ── Signature block ──────────────────────────────────────────────────────── */
+.signature-block {
+  display: flex;
+  justify-content: space-between;
+  padding: 8mm 10mm 4mm 10mm;
+  gap: 20mm;
+}
+.signature-block .sig-item { flex: 1; }
+.signature-block .sig-line {
+  border-top: 1px solid #1e293b;
+  margin-top: 10mm;
+  padding-top: 1mm;
+}
+.signature-block .sig-name { font-size: 9pt; font-weight: 700; }
+.signature-block .sig-qual { font-size: 8pt; color: #64748b; }
+.signature-block .sig-reg { font-size: 7.5pt; color: #94a3b8; }
+.signature-block .sig-img {
+  max-height: 12mm; width: auto;
+  margin-bottom: -2mm;
+}
+
+/* ── Footer band ──────────────────────────────────────────────────────────── */
+.footer-band {
+  background: #0f172a;
+  color: #94a3b8;
+  text-align: center;
+  font-size: 8pt;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  padding: 3mm 10mm;
+  text-transform: uppercase;
+}
+.footer-band .qr { float: right; }
+.footer-band .serial { float: left; color: #64748b; font-family: monospace; }
+
+/* ── Provisional watermark ──────────────────────────────────────────────── */
+.watermark {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%) rotate(-30deg);
+  font-size: 60pt;
+  color: rgba(239, 68, 68, 0.08);
+  font-weight: 900;
+  pointer-events: none;
+  z-index: 1000;
+}
+.provisional-tag {
+  position: absolute;
+  top: 6mm; right: 6mm;
+  background: #ef4444;
+  color: #fff;
+  font-size: 8pt;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  z-index: 1001;
+}
+`;
+
+/** Font family CSS variable based on settings. */
+function sidebarFontFamily(settings: UsgPrintSettings): string {
+  const fam = settings.usgPrintFontFamily ?? "sans-serif";
+  switch (fam) {
+    case "serif":
+      return "'Times New Roman', 'Georgia', serif";
+    case "system":
+      return "system-ui, -apple-system, sans-serif";
+    default:
+      return "'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+  }
+}
+
+/** Build the two-column sidebar layout HTML. */
+function buildSidebarReportHtml(
+  settings: UsgPrintSettings,
+  patient: UsgPrintPatient,
+  resolved: UsgResolved,
+  images: UsgPrintImage[],
+  qr?: UsgPrintQr | null,
+): string {
+  const provisional = patient.provisional === true;
+  const sidebarLeft = (settings.usgSidebarPosition ?? "right") === "left";
+  const logoPos = settings.usgLogoPosition ?? "left";
+  const addrPos = settings.usgAddressPosition ?? "right";
+  const fontFam = sidebarFontFamily(settings);
+  const showTechnique = settings.usgPrintShowTechnique !== false && !!resolved.technique?.trim();
+  const showThanks = settings.usgPrintShowThanks !== false;
+
+  const logo = settings.logoUrl
+    ? `<img src="${esc(settings.logoUrl)}" alt="logo" />`
+    : `<div class="logo-fallback">USG</div>`;
+
+  const contactLines = [
+    settings.addressLine?.trim(),
+    settings.phone?.trim() ? `📞 ${settings.phone}` : null,
+    settings.email?.trim() ? `✉ ${settings.email}` : null,
+  ].filter(Boolean).map((l) => `<div class="line">${esc(l!)}</div>`).join("");
+
+  // Image sidebar items
+  const sidebarImages = images.length > 0
+    ? images.map((img, i) => `
+      <div class="img-item">
+        ${img.dataUrl ? `<img src="${esc(img.dataUrl)}" alt="USG" />` : ""}
+        <div class="badge">${i + 1}</div>
+        ${img.caption ? `<div class="caption">${esc(img.caption)}</div>` : ""}
+      </div>`).join("")
+    : "";
+
+  // Findings sections
+  const sectionsHtml = resolved.sections.map((s) => `
+    <div class="section">
+      <div class="section-header">${esc(s.label)}</div>
+      <div class="section-body">${esc(s.text).replace(/\n/g, "<br>")}</div>
+    </div>`).join("");
+
+  // Technique section
+  const techniqueHtml = showTechnique
+    ? `<div class="section">
+        <div class="section-header">Technique</div>
+        <div class="section-body">${esc(resolved.technique)}</div>
+      </div>`
+    : "";
+
+  // Impression
+  const impressionHtml = resolved.impression.length > 0
+    ? `<div class="impression-box">
+        <div class="header">Impression</div>
+        <div class="body">${resolved.impression.map((l) => `<p>${esc(l)}</p>`).join("")}</div>
+      </div>`
+    : "";
+
+  // Suggestions
+  const suggestionsHtml = resolved.suggestions?.length
+    ? `<div class="section"><div class="section-body" style="font-size:8.5pt;color:#64748b;">
+        ${resolved.suggestions.map((s) => `• ${esc(s)}`).join("<br>")}</div></div>`
+    : "";
+
+  // Signature
+  const sigVisual = settings.usgSignatureUrl?.trim()
+    ? `<img class="sig-img" src="${esc(settings.usgSignatureUrl.trim())}" alt="signature" />`
+    : "";
+
+  // Footer
+  const serialNo = patient.serial ?? "";
+  const qrHtml = qr?.dataUrl ? `<div class="qr"><img src="${esc(qr.dataUrl)}" alt="QR" style="height:12mm;width:auto;" /></div>` : "";
+  const footerMsg = settings.usgFooterLine?.trim() ? esc(settings.usgFooterLine) : "Kindly correlate with clinico-pathological findings.";
+
+  const watermark = provisional ? `<div class="watermark">PROVISIONAL</div>` : "";
+  const provisionalTag = provisional ? `<div class="provisional-tag">Provisional — not final</div>` : "";
+
+  // Top bar class based on logo/address positions
+  const topBarClass = logoPos === "center" ? "center" : logoPos === "right" ? "right" : "";
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>${esc(resolved.title || "USG Report")}</title>
+<style>
+${SIDEBAR_CSS}
+:root {
+  --font-fam: ${fontFam};
+  --body-fs: ${settings.usgPrintFontSize ?? 10}pt;
+  --body-lh: ${settings.usgPrintLineHeight ?? 1.45};
+  --sidebar-w: ${images.length > 2 ? "65mm" : "55mm"};
+}
+</style>
+</head><body>
+<div class="page">
+  ${watermark}
+  ${provisionalTag}
+
+  <!-- Top bar: logo + contact -->
+  <div class="top-bar ${topBarClass}">
+    <div class="logo-block">
+      ${logo}
+      <div>
+        <div class="hospital-name">${esc(settings.hospitalName || "CARE Diagnostics")}</div>
+        ${settings.appTitle && settings.appTitle !== "CARE USG Studio" ? `<div class="tagline">${esc(settings.appTitle)}</div>` : ""}
+      </div>
+    </div>
+    <div class="contact-block">${contactLines}</div>
+  </div>
+
+  <!-- Patient strip -->
+  <div class="patient-strip">
+    <div class="field"><div class="label">Patient Name</div><div class="value">${esc(patient.name || "—")}</div></div>
+    <div class="field"><div class="label">Study Date</div><div class="value">${esc(patient.date || "—")}</div></div>
+    <div class="field"><div class="label">Age / Gender</div><div class="value">${esc(patient.age || "—")} / ${esc(patient.sex || "—")}</div></div>
+    <div class="field"><div class="label">Ref. Doctor</div><div class="value">${esc(patient.referredBy || "—")}</div></div>
+    ${patient.serial ? `<div class="field"><div class="label">Patient ID</div><div class="value">${esc(patient.serial)}</div></div>` : ""}
+    <div class="field"><div class="label">Study</div><div class="value">${esc(resolved.title || resolved.study.label)}</div></div>
+  </div>
+
+  <!-- Two-column body -->
+  <div class="body-grid ${sidebarLeft ? "sidebar-left" : ""}">
+    <!-- Image sidebar -->
+    ${images.length > 0 ? `
+    <div class="sidebar">
+      <div class="sidebar-header">Key Images</div>
+      <div class="sidebar-subheader">${esc(resolved.title || "USG")}</div>
+      ${sidebarImages}
+    </div>` : ""}
+
+    <!-- Main column: findings + impression + signature -->
+    <div class="main-col">
+      ${techniqueHtml}
+      ${sectionsHtml}
+      ${impressionHtml}
+      ${suggestionsHtml}
+      ${settings.usgDeclarationLine?.trim() ? `<div class="section"><div class="section-body" style="font-size:8pt;color:#64748b;border:1px solid #e2e8f0;padding:2mm;border-radius:4px;">${esc(settings.usgDeclarationLine)}</div></div>` : ""}
+
+      <!-- Signature -->
+      <div class="signature-block">
+        <div class="sig-item">
+          ${sigVisual}
+          <div class="sig-line"></div>
+          <div class="sig-name">${esc(settings.usgDoctorName || "—")}</div>
+          <div class="sig-qual">${esc(settings.usgDoctorQual || "")}</div>
+          ${settings.usgDoctorRegNo ? `<div class="sig-reg">Reg. No: ${esc(settings.usgDoctorRegNo)}</div>` : ""}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer band -->
+  <div class="footer-band">
+    ${serialNo ? `<div class="serial">${serialNo}</div>` : ""}
+    ${showThanks ? esc(footerMsg) : ""}
+    ${qrHtml}
   </div>
 </div>
 </body></html>`;

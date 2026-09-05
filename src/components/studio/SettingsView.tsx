@@ -27,6 +27,7 @@ type Settings = {
   usgPrintPaper: string; usgSignatureUrl: string;
   usgPrintFontSize: number; usgPrintLineHeight: number;
   usgPrintSpacing: string; usgPrintShowTechnique: boolean; usgPrintShowThanks: boolean;
+  usgSidebarPosition?: string; usgLogoPosition?: string; usgAddressPosition?: string; usgPrintFontFamily?: string;
   usgAutoBackup: boolean;
   // v6 integrations (secrets arrive masked — only their presence flags)
   careApiBase: string; careApiKeySet: boolean;
@@ -444,14 +445,14 @@ export function SettingsView() {
           <Field label="Declaration (optional)" hint="Boxed legal line under the signature, e.g. the PC-PNDT declaration. Leave blank to omit.">
             <Textarea value={s.usgDeclarationLine ?? ""} onChange={(e) => set("usgDeclarationLine", e.target.value)} rows={2} className="text-[12px]" />
           </Field>
-          <Field label="Print style" hint="Premium = gradient letterhead with banded sections. Classic = plain black-and-white serif letterhead — traditional look, saves ink and prints fast.">
+          <Field label="Print style" hint="Premium = gradient masthead with banded sections. Classic = plain B/W serif. Premium Sidebar = two-column layout with images in a sidebar (like the reference clinic format).">
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={() => setS({ ...s, usgPrintStyle: "premium" } as Settings)}
                 className={cn(
                   "flex-1 rounded-lg border px-3 py-2 text-left text-[12px] font-semibold transition-colors",
-                  (s.usgPrintStyle ?? "premium") !== "classic"
+                  (s.usgPrintStyle ?? "premium") === "premium"
                     ? "border-rose-300 bg-rose-50 text-rose-800 ring-1 ring-rose-200"
                     : "border-border bg-panel text-muted-foreground hover:border-rose-200",
                 )}
@@ -472,8 +473,76 @@ export function SettingsView() {
                 Classic
                 <span className="block text-[10px] font-normal text-faint">Plain B/W serif · ink saver</span>
               </button>
+              <button
+                type="button"
+                onClick={() => setS({ ...s, usgPrintStyle: "premium_sidebar" } as Settings)}
+                className={cn(
+                  "flex-1 rounded-lg border px-3 py-2 text-left text-[12px] font-semibold transition-colors",
+                  s.usgPrintStyle === "premium_sidebar"
+                    ? "border-violet-300 bg-violet-50 text-violet-800 ring-1 ring-violet-200"
+                    : "border-border bg-panel text-muted-foreground hover:border-violet-200",
+                )}
+              >
+                Premium Sidebar
+                <span className="block text-[10px] font-normal text-faint">Two-column · image sidebar</span>
+              </button>
             </div>
           </Field>
+
+          {/* v6.7 — Sidebar layout configuration */}
+          {s.usgPrintStyle === "premium_sidebar" && (
+            <div className="rounded-lg border border-violet-200 bg-violet-50/30 p-3 space-y-2">
+              <p className="text-[11px] font-bold uppercase text-violet-700">Sidebar Layout</p>
+              <Field label="Image sidebar position" hint="Where the image sidebar appears on the printed report.">
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => set("usgSidebarPosition", "right")}
+                    className={cn("rounded border px-3 py-1.5 text-[11px] font-semibold",
+                      (s.usgSidebarPosition ?? "right") === "right" ? "border-violet-400 bg-violet-100 text-violet-800" : "border-border bg-panel text-muted-foreground")}>
+                    Right (default)
+                  </button>
+                  <button type="button" onClick={() => set("usgSidebarPosition", "left")}
+                    className={cn("rounded border px-3 py-1.5 text-[11px] font-semibold",
+                      s.usgSidebarPosition === "left" ? "border-violet-400 bg-violet-100 text-violet-800" : "border-border bg-panel text-muted-foreground")}>
+                    Left
+                  </button>
+                </div>
+              </Field>
+              <Field label="Logo position" hint="Where the hospital logo appears in the top bar.">
+                <div className="flex gap-2">
+                  {(["left", "right", "center"] as const).map((pos) => (
+                    <button key={pos} type="button" onClick={() => set("usgLogoPosition", pos)}
+                      className={cn("rounded border px-3 py-1.5 text-[11px] font-semibold capitalize",
+                        (s.usgLogoPosition ?? "left") === pos ? "border-violet-400 bg-violet-100 text-violet-800" : "border-border bg-panel text-muted-foreground")}>
+                      {pos}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+              <Field label="Address / contact position" hint="Where the clinic contact info appears in the top bar.">
+                <div className="flex gap-2">
+                  {(["right", "left", "center"] as const).map((pos) => (
+                    <button key={pos} type="button" onClick={() => set("usgAddressPosition", pos)}
+                      className={cn("rounded border px-3 py-1.5 text-[11px] font-semibold capitalize",
+                        (s.usgAddressPosition ?? "right") === pos ? "border-violet-400 bg-violet-100 text-violet-800" : "border-border bg-panel text-muted-foreground")}>
+                      {pos}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+              <Field label="Font family" hint="Body text font for the sidebar format.">
+                <div className="flex gap-2">
+                  {(["sans-serif", "serif", "system"] as const).map((fam) => (
+                    <button key={fam} type="button" onClick={() => set("usgPrintFontFamily", fam)}
+                      className={cn("rounded border px-3 py-1.5 text-[11px] font-semibold",
+                        (s.usgPrintFontFamily ?? "sans-serif") === fam ? "border-violet-400 bg-violet-100 text-violet-800" : "border-border bg-panel text-muted-foreground")}
+                      style={{ fontFamily: fam === "serif" ? "serif" : fam === "system" ? "system-ui" : "sans-serif" }}>
+                      {fam === "sans-serif" ? "Sans" : fam === "serif" ? "Serif" : "System"}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+            </div>
+          )}
           <Field label="Paper size" hint="A4 = full sheet. A5 = half-sheet — the whole report scales down for A5 stock; ideal for short studies and quick prints.">
             <div className="flex gap-2">
               <button

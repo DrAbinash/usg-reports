@@ -49,7 +49,7 @@ model HospitalSettings {
   usgShowMachine    Boolean  @default(true)
   usgFooterLine     String   @default("Kindly co-relate with clinico-pathological findings.")
   usgDeclarationLine String  @default("") // optional PC-PNDT style declaration under the signature
-  usgPrintStyle     String   @default("premium") // premium (gradient letterhead) | classic (plain B/W)
+  usgPrintStyle     String   @default("premium") // premium (gradient letterhead) | classic (plain B/W) | premium_sidebar (two-column with image sidebar)
   usgPrintCompact   Boolean  @default(false) // compact density for long studies
   usgPrintPaper     String   @default("a4")    // a4 | a5 (half-sheet for short studies)
   usgSignatureUrl   String   @default("")      // scanned signature image printed over the name line
@@ -66,6 +66,14 @@ model HospitalSettings {
   usgPrintSpacing      String  @default("tight") // tight | normal | relaxed (section gaps)
   usgPrintShowTechnique Boolean @default(true) // Technique band on printed reports
   usgPrintShowThanks   Boolean @default(true)  // "Thanks For Your Referral." tagline
+
+  // ── v6.7 PREMIUM sidebar layout (two-column with image sidebar) ──────
+  // When usgPrintStyle = "premium_sidebar", the report uses a two-column
+  // layout: images in a sidebar (left or right) + text in the main column.
+  usgSidebarPosition  String   @default("right") // right | left — image sidebar position
+  usgLogoPosition     String   @default("left")   // left | right | center
+  usgAddressPosition  String   @default("right")  // right | left | center
+  usgPrintFontFamily  String   @default("sans-serif") // sans-serif | serif | system
   /** Nightly full-clinic backup to data/backups (v5) — off by default. */
   usgAutoBackup     Boolean  @default(false)
   /** HMAC secret for the printed-report verification QR (v5, minted once). */

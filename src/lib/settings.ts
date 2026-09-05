@@ -113,6 +113,7 @@ export async function updateSettings(patch: SettingsUpdate) {
     "usgDoctorBirthday",
     "usgFooterLine", "usgDeclarationLine", "usgPrintStyle",
     "usgPrintPaper", "usgSignatureUrl", "usgPrintSpacing",
+    "usgSidebarPosition", "usgLogoPosition", "usgAddressPosition", "usgPrintFontFamily",
     // v6 integrations (URLs only — keys go through SECRET_FIELDS below)
     "careApiBase", "orthancUrl", "orthancUsername",
     // v6 PC-PNDT Form F fixed details
@@ -145,9 +146,26 @@ export async function updateSettings(patch: SettingsUpdate) {
   } else if (typeof patch.usgShowMachine === "boolean") {
     data.usgShowMachine = patch.usgShowMachine;
   }
-  // Print style: anything other than "classic" means the premium letterhead.
+  // Print style: "classic" | "premium" | "premium_sidebar"
   if (typeof patch.usgPrintStyle === "string") {
-    data.usgPrintStyle = patch.usgPrintStyle.trim() === "classic" ? "classic" : "premium";
+    const style = patch.usgPrintStyle.trim();
+    data.usgPrintStyle = (style === "classic" || style === "premium_sidebar") ? style : "premium";
+  }
+  // v6.7 sidebar layout settings
+  if (typeof patch.usgSidebarPosition === "string") {
+    data.usgSidebarPosition = patch.usgSidebarPosition.trim() === "left" ? "left" : "right";
+  }
+  if (typeof patch.usgLogoPosition === "string") {
+    const pos = patch.usgLogoPosition.trim();
+    data.usgLogoPosition = (pos === "right" || pos === "center") ? pos : "left";
+  }
+  if (typeof patch.usgAddressPosition === "string") {
+    const pos = patch.usgAddressPosition.trim();
+    data.usgAddressPosition = (pos === "left" || pos === "center") ? pos : "right";
+  }
+  if (typeof patch.usgPrintFontFamily === "string") {
+    const fam = patch.usgPrintFontFamily.trim();
+    data.usgPrintFontFamily = (fam === "serif" || fam === "system") ? fam : "sans-serif";
   }
   // Paper size: anything other than "a5" means A4.
   if (typeof patch.usgPrintPaper === "string") {

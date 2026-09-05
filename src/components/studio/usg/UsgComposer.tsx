@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, CalendarDays, ChevronDown, Command, FileCheck2, Loader2, Phone, Printer, Save, Search, Settings2 } from "lucide-react";
+import { ArrowLeft, CalendarDays, ChevronDown, Command, FileCheck2, Loader2, Maximize2, Minimize2, Phone, Printer, Save, Search, Settings2 } from "lucide-react";
 import type { UsgComposerState, UsgPathologyDef } from "@/lib/usg/types";
 import { USG_SEX_CHILD } from "@/lib/usg/types";
 import { USG_STUDIES, STUDY_GROUPS, applyNormalOverrides, getStudy, normalOverrideKey, type NormalOverrides } from "@/lib/usg/studies";
@@ -156,6 +156,8 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   );
   const [finalizedHere, setFinalizedHere] = useState(report?.status === "FINALIZED");
   const [qualityOpen, setQualityOpen] = useState(false);
+  const [headerCollapsed, setHeaderCollapsed] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewSrResult, setReviewSrResult] = useState<{ vars: Record<string, Record<string, string>>; extras: Record<string, string>; matchedCount: number } | null>(null);
   const [reviewSrMeasurements, setReviewSrMeasurements] = useState<Array<{ conceptName: string; value: string; unit: string; path?: string }>>([]);
@@ -526,6 +528,29 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     return d ? lmpSummary(d) : null;
   }, [lmp]);
 
+  /** Toggle browser fullscreen mode — the doctor presses a button, not F11. */
+  const toggleFullscreen = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+        setFullscreen(true);
+      } else {
+        await document.exitFullscreen();
+        setFullscreen(false);
+      }
+    } catch {
+      // Some browsers/contexts block fullscreen — silently ignore
+      setFullscreen((v) => !v);
+    }
+  };
+
+  /** Listen for native fullscreen changes (Esc key exits fullscreen). */
+  useEffect(() => {
+    const onFsChange = () => setFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
+
   const persist = async (status: "" | "finalize"): Promise<string | null> => {
     if (!patientName.trim()) {
       toast.error("Patient name is required");
@@ -745,84 +770,263 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* v6 — CARE order banner: bill-desk context + PACS + Form F */}
-      {order ? (
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-sky-100 bg-sky-50/60 px-4 py-2 text-[11.5px]">
-          <Link2 className="h-3.5 w-3.5 text-sky-600" />
-          {/* Accession when the ERP supplied one; otherwise the bill-desk
-              worklist id — the banner always shows a stable identifier. */}
-          <span className="font-mono font-bold text-sky-800">
-            {order.accessionNumber ?? (order.careWorklistId ? `WL ${order.careWorklistId}` : "Bill-desk order")}
-          </span>
-          {order.billNumber ? <span className="text-sky-700">· Bill {order.billNumber}</span> : null}
-          {order.testName ? <span className="truncate text-sky-700">· {order.testName}</span> : null}
-          {order.billingStatus ? (
-            <span
-              className={cn(
-                "rounded-full px-2 py-0.5 text-[10px] font-bold ring-1",
-                order.billingStatus === "PAID"
-                  ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-                  : order.billingStatus === "DUE"
-                    ? "bg-amber-50 text-amber-700 ring-amber-200"
-                    : "bg-sky-50 text-sky-700 ring-sky-200",
+      {/* ══ v6.8 COMPACT HEADER ════════════════════════════════════════════ */}
+      <div className="shrink-0 border-b border-border bg-card/95 backdrop-blur">
+        {/* ── Row 1: compact patient line + fullscreen + actions ─────────── */}
+        <div
+          className={cn("flex items-center gap-2 px-3 py-1.5 cursor-pointer select-none", headerCollapsed ? "hover:bg-muted/40" : "")}
+          onClick={() => setHeaderCollapsed((v) => !v)}
+          title={headerCollapsed ? "Click to expand patient details" : "Click to collapse — start reporting"}
+        >
+          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onBack(); }} className="h-7 w-7 p-0 text-muted-foreground shrink-0">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+
+          {headerCollapsed ? (
+            <div className="flex min-w-0 flex-1 items-center gap-2 text-[12px]">
+              <span className="truncate font-bold text-foreground">{patientName || "New report"}</span>
+              {patientAge ? <span className="text-muted-foreground shrink-0">{patientAge}y</span> : null}
+              <span className="text-muted-foreground shrink-0">{patientSex === USG_SEX_CHILD ? "Child" : patientSex}</span>
+              {referredBy ? <span className="truncate text-faint hidden sm:inline">· {referredBy}</span> : null}
+              <span className="text-faint shrink-0 hidden md:inline">{resolved.study.label}</span>
+              {abnormalCount ? (
+                <span className="shrink-0 rounded-full bg-rose-50 px-1.5 py-0.5 text-[9px] font-bold text-rose-700">{abnormalCount} organ{abnormalCount > 1 ? "s" : ""}</span>
+              ) : (
+                <span className="shrink-0 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">All normal</span>
               )}
-            >
-              {order.billingStatus.replace("_", " ")}
-            </span>
-          ) : null}
-          {orderUid ? (
-            <span className="flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-700 ring-1 ring-violet-200">
-              <ScanLine className="h-3 w-3" /> PACS
-            </span>
-          ) : null}
-          <div className="ml-auto flex items-center gap-1.5">
-            {orderUid ? (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => void pullFromMachine()}
-                disabled={pulling || isFinal}
-                className="h-7 border-violet-200 bg-white px-2 text-[11px] font-semibold text-violet-700 hover:bg-violet-50"
-                title="Fill this study's measurement slots from the machine (DICOM SR, OCR fallback)"
-              >
-                {pulling ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <ScanLine className="mr-1 h-3 w-3" />}
-                Pull from machine
-              </Button>
-            ) : null}
-            {study.pcpndt && formFDefaults ? (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setFormFOpen(true)}
-                className="h-7 border-rose-200 bg-white px-2 text-[11px] font-semibold text-rose-700 hover:bg-rose-50"
-                title="PC-PNDT Form F — demographics pre-filled from the bill desk"
-              >
-                <FileCheck2Icon className="mr-1 h-3 w-3" />
-                Form F
+              {serial ? <span className="shrink-0 rounded-full bg-sky-50 px-1.5 py-0.5 text-[9px] font-bold text-sky-700">{serial}</span> : null}
+              {isFinal ? <span className="shrink-0 text-[10px] font-bold text-amber-600">FINAL</span> : null}
+            </div>
+          ) : (
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <span className="truncate text-[13px] font-bold text-foreground">{patientName || "New report"}</span>
+              <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground rotate-180" />
+            </div>
+          )}
+
+          {/* Fullscreen toggle — always visible at center-top */}
+          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); void toggleFullscreen(); }}
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground shrink-0"
+            title={fullscreen ? "Exit fullscreen (Esc)" : "Enter fullscreen — hides browser tabs"}>
+            {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+          </Button>
+
+          {/* Quick actions — always visible */}
+          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+            <Button size="sm" variant="outline" onClick={() => persist("")} disabled={busy !== "" || isFinal}
+              className="h-7 border-border bg-panel px-2 text-[10px]">
+              {busy === "save" ? <Loader2 className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
+            </Button>
+            <Button size="sm" onClick={() => setQualityOpen(true)} disabled={busy !== "" || isFinal}
+              className="h-7 bg-emerald-600 px-2 hover:bg-emerald-700">
+              {busy === "finalize" ? <Loader2 className="h-3.5 w-3.5" /> : <FileCheck2 className="h-3.5 w-3.5" />}
+            </Button>
+            <Button size="sm" variant="outline" onClick={print} disabled={busy !== ""}
+              className="h-7 border-rose-200 bg-rose-50 px-2 text-rose-700 hover:bg-rose-100">
+              {busy === "print" ? <Loader2 className="h-3.5 w-3.5" /> : <Printer className="h-3.5 w-3.5" />}
+            </Button>
+            {isFinal ? (
+              <Button size="sm" variant="outline" onClick={() => downloadReportPdf({ reportId: savedIdRef.current ?? report?.id ?? "", patientName, serial, date: fmtPrintDate(scanDate) })}
+                title="Download PDF" className="h-7 border-sky-200 bg-sky-50 px-2 text-sky-700 hover:bg-sky-100">
+                <FileDown className="h-3.5 w-3.5" />
               </Button>
             ) : null}
           </div>
         </div>
-      ) : null}
 
-      {/* Machine measurement pull summary — what matched, what didn't */}
-      {pullSummary ? (
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-violet-100 bg-violet-50/50 px-4 py-1.5 text-[11px] text-violet-800">
-          <b>Pulled {pullSummary.matchedCount} slot(s)</b>
-          <span className="text-violet-600">{pullSummary.source === "sr" ? "from machine SR" : pullSummary.source === "ocr" ? "via OCR — verify" : "nothing found"}</span>
-          {Object.keys(pullSummary.extras).length ? (
-            <span className="truncate text-violet-600">
-              · unmatched: {Object.entries(pullSummary.extras).slice(0, 6).map(([k, v]) => `${k} ${v}`).join("; ")}
-            </span>
+        {/* ── Row 2: study title + status badges (thin line) ─────────────── */}
+        <div className="flex items-center gap-1.5 px-3 pb-1 text-[10px] text-muted-foreground">
+          <span className="font-semibold text-foreground">{resolved.title}</span>
+          <span className={cn("rounded-full px-1.5 py-0.5 font-semibold", abnormalCount ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700")}>
+            {abnormalCount ? `${abnormalCount} organ${abnormalCount > 1 ? "s" : ""} affected` : "All normal"}
+          </span>
+          {serial ? <span className="rounded-full bg-sky-50 px-1.5 py-0.5 font-bold text-sky-700">{serial}</span> : null}
+          {isFinal ? (
+            <span className="rounded-full bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-700">finalized</span>
+          ) : (
+            <span className="rounded-full bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-700">draft</span>
+          )}
+          {lastAutosave && !isFinal ? (
+            <span className="text-[9px] text-emerald-600">· autosaved {new Date(lastAutosave).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>
           ) : null}
-          <button className="ml-auto text-[10px] font-bold text-violet-500 underline" onClick={() => setPullSummary(null)}>
-            dismiss
-          </button>
+          <span className="ml-auto hidden items-center gap-1 text-faint md:flex" title="Keyboard shortcuts">
+            <Command className="h-2.5 w-2.5" /> Ctrl+S · Ctrl+↵ · ?
+          </span>
         </div>
-      ) : null}
 
-      {/* Critical findings banner — shows when a critical pathology is selected */}
-      <div className="shrink-0 px-4 pt-2">
+        {/* ── Expanded: full patient input form ──────────────────────────── */}
+        {!headerCollapsed && (
+          <>
+            {/* CARE order banner */}
+            {order ? (
+              <div className="flex flex-wrap items-center gap-2 border-t border-sky-100 bg-sky-50/60 px-3 py-1 text-[10px]">
+                <Link2 className="h-3 w-3 text-sky-600" />
+                <span className="font-mono font-bold text-sky-800">
+                  {order.accessionNumber ?? (order.careWorklistId ? `WL ${order.careWorklistId}` : "Bill-desk order")}
+                </span>
+                {order.billNumber ? <span className="text-sky-700">· Bill {order.billNumber}</span> : null}
+                {order.testName ? <span className="truncate text-sky-700">· {order.testName}</span> : null}
+                {order.billingStatus ? (
+                  <span className={cn("rounded-full px-1.5 py-0.5 text-[9px] font-bold ring-1",
+                    order.billingStatus === "PAID" ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-amber-50 text-amber-700 ring-amber-200")}>
+                    {order.billingStatus}
+                  </span>
+                ) : null}
+                <div className="ml-auto flex items-center gap-1">
+                  {orderUid ? (
+                    <Button size="sm" variant="outline" onClick={() => void pullFromMachine()} disabled={pulling || isFinal}
+                      className="h-6 border-violet-200 bg-white px-1.5 text-[10px] font-semibold text-violet-700 hover:bg-violet-50">
+                      {pulling ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <ScanLine className="mr-1 h-3 w-3" />}
+                      Pull
+                    </Button>
+                  ) : null}
+                  {study.pcpndt && formFDefaults ? (
+                    <Button size="sm" variant="outline" onClick={() => setFormFOpen(true)}
+                      className="h-6 border-rose-200 bg-white px-1.5 text-[10px] font-semibold text-rose-700 hover:bg-rose-50">
+                      <FileCheck2Icon className="mr-1 h-3 w-3" /> Form F
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
+            {/* Pull summary */}
+            {pullSummary ? (
+              <div className="flex flex-wrap items-center gap-2 border-t border-violet-100 bg-violet-50/50 px-3 py-1 text-[10px] text-violet-800">
+                <b>Pulled {pullSummary.matchedCount} slot(s)</b>
+                <span className="text-violet-600">{pullSummary.source === "sr" ? "from SR" : pullSummary.source === "ocr" ? "via OCR" : "nothing"}</span>
+                {Object.keys(pullSummary.extras).length ? (
+                  <span className="truncate text-violet-600">
+                    · unmatched: {Object.entries(pullSummary.extras).slice(0, 4).map(([k, v]) => `${k} ${v}`).join("; ")}
+                  </span>
+                ) : null}
+                <button className="ml-auto text-[9px] font-bold text-violet-500 underline" onClick={() => setPullSummary(null)}>dismiss</button>
+              </div>
+            ) : null}
+
+            {/* Patient inputs — compact single row */}
+            <div className="flex flex-wrap items-end gap-1.5 border-t border-border px-3 py-2">
+              <div className="grid flex-1 min-w-[140px] gap-0.5">
+                <Label className="text-[9px] font-semibold uppercase tracking-wide text-faint">Patient</Label>
+                <Input value={patientName} onChange={(e) => onNameChange(e.target.value)} placeholder="Name"
+                  list="usg-patient-names" disabled={isFinal}
+                  className="h-8 border-border bg-panel text-[12px] font-semibold" />
+                <datalist id="usg-patient-names">
+                  {patients.map((p) => (
+                    <option key={p.id} value={p.name}>{p.phone ? `${p.phone}${p.scanCount ? ` · ${p.scanCount} scan${p.scanCount > 1 ? "s" : ""}` : ""}` : p.scanCount ? `${p.scanCount} scan${p.scanCount > 1 ? "s" : ""}` : ""}</option>
+                  ))}
+                </datalist>
+              </div>
+              <div className="grid w-[110px] gap-0.5">
+                <Label className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-faint"><Phone className="h-2.5 w-2.5" />Phone</Label>
+                <Input value={patientPhone} onChange={(e) => setPatientPhone(e.target.value)} placeholder="Optional"
+                  inputMode="tel" disabled={isFinal}
+                  className="h-8 border-border bg-panel text-[11px]" />
+              </div>
+              <div className="grid w-[70px] gap-0.5">
+                <Label className="text-[9px] font-semibold uppercase tracking-wide text-faint">Age</Label>
+                <Input value={patientAge} onChange={(e) => setPatientAge(e.target.value)} placeholder="Yrs"
+                  className="h-8 border-border bg-panel text-[12px]" />
+              </div>
+              <div className="grid w-[72px] gap-0.5">
+                <Label className="text-[9px] font-semibold uppercase tracking-wide text-faint">Sex</Label>
+                <Select value={patientSex} onValueChange={(v) => changeSex(v as "F" | "M" | typeof USG_SEX_CHILD)}>
+                  <SelectTrigger className="h-8 border-border bg-panel text-[12px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="F">F</SelectItem>
+                    <SelectItem value="M">M</SelectItem>
+                    <SelectItem value={USG_SEX_CHILD}>Child</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid flex-1 min-w-[140px] gap-0.5">
+                <Label className="text-[9px] font-semibold uppercase tracking-wide text-faint">Referred by</Label>
+                <Input value={referredBy} onChange={(e) => setReferredBy(e.target.value)} placeholder="Dr. —"
+                  className="h-8 border-border bg-panel text-[12px]" />
+              </div>
+              <div className="grid w-[130px] gap-0.5">
+                <Label className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-faint"><CalendarDays className="h-2.5 w-2.5" />Scan date</Label>
+                <Input type="date" value={scanDate} onChange={(e) => setScanDate(e.target.value)} disabled={isFinal}
+                  className="h-8 border-border bg-panel text-[11px]" />
+              </div>
+              <div className="grid min-w-[160px] gap-0.5">
+                <Label className="text-[9px] font-semibold uppercase tracking-wide text-faint">Study</Label>
+                <Select value={studyKey} onValueChange={pickStudy}>
+                  <SelectTrigger className="h-8 border-border bg-panel text-[12px] font-semibold">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-96 overflow-y-auto">
+                    {STUDY_GROUPS.map((g) => {
+                      const studies = USG_STUDIES.filter((s) => s.group === g.key);
+                      if (!studies.length) return null;
+                      return (
+                        <SelectGroup key={g.key}>
+                          <SelectLabel className="text-[10px] font-bold uppercase tracking-wider text-faint">{g.label}</SelectLabel>
+                          {studies.map((s) => (
+                            <SelectItem key={s.key} value={s.key} className="text-[12px]">{s.label}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      );
+                    })}
+                    {USG_STUDIES.filter((s) => !s.group || !STUDY_GROUPS.some((g) => g.key === s.group)).map((s) => (
+                      <SelectItem key={s.key} value={s.key} className="text-[12px]">{s.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {isFinal ? (
+                <Button size="sm" variant="outline" disabled={busy !== ""}
+                  onClick={() => {
+                    const id = savedIdRef.current ?? report?.id;
+                    if (!id) return;
+                    void shareReportPdf({ reportId: id, patientName, serial, date: fmtPrintDate(scanDate) }).then((r) => {
+                      if (r === "shared") toast.success("Shared via the device share sheet");
+                      else if (r === "downloaded") toast.success("PDF saved — WhatsApp opened");
+                      else toast.error("Could not build the PDF");
+                    });
+                  }}
+                  title="Share on WhatsApp" className="h-8 border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100">
+                  <MessageCircle className="h-3.5 w-3.5" />
+                </Button>
+              ) : null}
+            </div>
+
+            {/* Secondary row: technique toggle + calculators + LMP */}
+            <div className="flex flex-wrap items-center gap-1.5 px-3 pb-1.5 text-[10px] text-muted-foreground">
+              <button onClick={() => setShowTechnique((v) => !v)}
+                className="flex items-center gap-1 rounded-full border border-border bg-panel px-1.5 py-0.5 hover:text-foreground">
+                <Settings2 className="h-2.5 w-2.5" /> Technique
+                <ChevronDown className={cn("h-2.5 w-2.5 transition-transform", showTechnique && "rotate-180")} />
+              </button>
+              <UsgCalculators />
+              {isPregnancyStudy && (
+                <div className="flex items-center gap-1">
+                  <Label className="flex items-center gap-0.5 text-[9px] font-bold uppercase text-rose-600">
+                    <CalendarDays className="h-2.5 w-2.5" /> LMP
+                  </Label>
+                  <Input type="date" value={lmp} onChange={(e) => applyLmp(e.target.value)}
+                    className="h-6 w-[110px] border-rose-200 bg-white text-[11px]" />
+                  {lmpInfo ? (
+                    <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] font-bold text-rose-700 ring-1 ring-rose-200">
+                      {lmpInfo.weeks}w{lmpInfo.days}d · EDD {lmpInfo.edd}
+                    </span>
+                  ) : null}
+                </div>
+              )}
+            </div>
+
+            {showTechnique ? (
+              <div className="flex items-start gap-1 px-3 pb-1.5">
+                <Textarea value={technique} onChange={(e) => setTechnique(e.target.value)} rows={1} disabled={isFinal}
+                  className="border-border bg-panel text-[11px]" placeholder="Technique…" />
+                <DictationButton onText={(t) => setTechnique((prev) => appendTranscript(prev, t))}
+                  title="Dictate technique" />
+              </div>
+            ) : null}
+          </>
+        )}
+
+        {/* Critical findings banner (always visible — even when collapsed) */}
         <UsgCriticalBanner
           selectedPathologies={state.organs.flatMap((o) =>
             (o.pathologies ?? (o.pathology ? [o.pathology] : [])).map((k) => ({
@@ -830,476 +1034,35 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
             })),
           )}
         />
-      </div>
 
-      {/* Patient strip */}
-      <div className="shrink-0 border-b border-border bg-card/80 px-4 py-3 backdrop-blur">
-        <div className="flex flex-wrap items-end gap-2.5">
-          <Button variant="ghost" size="sm" onClick={onBack} className="h-8 px-2 text-muted-foreground">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div className="grid flex-1 min-w-[180px] gap-1">
-            <Label className="text-[10px] font-semibold uppercase tracking-wide text-faint">Patient</Label>
-            <Input value={patientName} onChange={(e) => onNameChange(e.target.value)} placeholder="Name"
-              list="usg-patient-names"
-              className="h-9 border-border bg-panel text-[13px] font-semibold" />
-            <datalist id="usg-patient-names">
-              {patients.map((p) => (
-                <option key={p.id} value={p.name}>{p.phone ? `${p.phone}${p.scanCount ? ` · ${p.scanCount} scan${p.scanCount > 1 ? "s" : ""}` : ""}` : p.scanCount ? `${p.scanCount} scan${p.scanCount > 1 ? "s" : ""}` : ""}</option>
-              ))}
-            </datalist>
-          </div>
-          <div className="grid w-[150px] gap-1">
-            <Label className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-faint">
-              <Phone className="h-3 w-3" /> Phone
-            </Label>
-            <Input value={patientPhone} onChange={(e) => setPatientPhone(e.target.value)} placeholder="Optional"
-              inputMode="tel" disabled={isFinal}
-              title={isFinal ? "Finalized reports keep their patient details" : "Links repeat scans into one patient history"}
-              className="h-9 border-border bg-panel text-[12.5px]" />
-          </div>
-          <div className="grid w-[90px] gap-1">
-            <Label className="text-[10px] font-semibold uppercase tracking-wide text-faint">Age</Label>
-            <Input value={patientAge} onChange={(e) => setPatientAge(e.target.value)} placeholder="Yrs"
-              className="h-9 border-border bg-panel text-[13px]" />
-          </div>
-          <div className="grid w-[92px] gap-1">
-            <Label className="text-[10px] font-semibold uppercase tracking-wide text-faint">Sex</Label>
-            <Select value={patientSex} onValueChange={(v) => changeSex(v as "F" | "M" | typeof USG_SEX_CHILD)}>
-              <SelectTrigger className="h-9 border-border bg-panel text-[13px]"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="F">F</SelectItem>
-                <SelectItem value="M">M</SelectItem>
-                <SelectItem value={USG_SEX_CHILD}>Child</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid flex-1 min-w-[180px] gap-1">
-            <Label className="text-[10px] font-semibold uppercase tracking-wide text-faint">Referred by</Label>
-            <Input value={referredBy} onChange={(e) => setReferredBy(e.target.value)} placeholder="Dr. —"
-              className="h-9 border-border bg-panel text-[13px]" />
-          </div>
-          <div className="grid w-[150px] gap-1">
-            <Label className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-faint">
-              <CalendarDays className="h-3 w-3" /> Scan date
-            </Label>
-            <Input
-              type="date"
-              value={scanDate}
-              onChange={(e) => setScanDate(e.target.value)}
-              disabled={isFinal}
-              title={isFinal ? "Finalized reports keep their scan date" : "Back-date if the report is typed up later"}
-              className="h-9 border-border bg-panel text-[12.5px]" />
-          </div>
-          <div className="grid min-w-[190px] gap-1">
-            <Label className="text-[10px] font-semibold uppercase tracking-wide text-faint">Study</Label>
-            <Select value={studyKey} onValueChange={pickStudy}>
-              <SelectTrigger className="h-9 border-border bg-panel text-[13px] font-semibold">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="max-h-96 overflow-y-auto">
-                {STUDY_GROUPS.map((g) => {
-                  const studies = USG_STUDIES.filter((s) => s.group === g.key);
-                  if (!studies.length) return null;
-                  return (
-                    <SelectGroup key={g.key}>
-                      <SelectLabel className="text-[10px] font-bold uppercase tracking-wider text-faint">{g.label}</SelectLabel>
-                      {studies.map((s) => (
-                        <SelectItem key={s.key} value={s.key} className="text-[12.5px]">{s.label}</SelectItem>
-                      ))}
-                    </SelectGroup>
-                  );
-                })}
-                {/* Ungrouped fallback (should not happen — every study has a group). */}
-                {USG_STUDIES.filter((s) => !s.group || !STUDY_GROUPS.some((g) => g.key === s.group)).map((s) => (
-                  <SelectItem key={s.key} value={s.key} className="text-[12.5px]">{s.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Button size="sm" variant="outline" onClick={() => persist("")} disabled={busy !== "" || isFinal}
-              className="h-9 border-border bg-panel">
-              {busy === "save" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Save
-            </Button>
-            <Button size="sm" onClick={() => setQualityOpen(true)} disabled={busy !== "" || isFinal}
-              className="h-9 bg-emerald-600 hover:bg-emerald-700">
-              {busy === "finalize" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck2 className="h-4 w-4" />}
-              Finalize
-            </Button>
-            <Button size="sm" variant="outline" onClick={print} disabled={busy !== ""}
-              className="h-9 border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100">
-              {busy === "print" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-              Print {paperLabel}
-            </Button>
-            {isFinal ? (
-              <>
-                <Button size="sm" variant="outline" onClick={() => downloadReportPdf({ reportId: savedIdRef.current ?? report?.id ?? "", patientName, serial, date: fmtPrintDate(scanDate) })}
-                  title="Download the report as a PDF (with the verification QR)"
-                  className="h-9 border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100">
-                  <FileDown className="h-4 w-4" /> PDF
-                </Button>
-                <Button size="sm" variant="outline" disabled={busy !== ""}
-                  onClick={() => {
-                    const id = savedIdRef.current ?? report?.id;
-                    if (!id) return;
-                    void shareReportPdf({ reportId: id, patientName, serial, date: fmtPrintDate(scanDate) }).then((r) => {
-                      if (r === "shared") toast.success("Shared via the device share sheet");
-                      else if (r === "downloaded") toast.success("PDF saved — WhatsApp opened to attach it");
-                      else toast.error("Could not build the PDF");
-                    });
-                  }}
-                  title="Share on WhatsApp — PDF via the mobile share sheet, or download + wa.me on desktop"
-                  className="h-9 border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100">
-                  <MessageCircle className="h-4 w-4" /> WhatsApp
-                </Button>
-              </>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-          <button
-            onClick={() => setShowTechnique((v) => !v)}
-            className="flex items-center gap-1 rounded-full border border-border bg-panel px-2 py-0.5 hover:text-foreground"
-          >
-            <Settings2 className="h-3 w-3" /> Technique
-            <ChevronDown className={cn("h-3 w-3 transition-transform", showTechnique && "rotate-180")} />
-          </button>
-          <UsgCalculators />
-          {lastAutosave && !isFinal ? (
-            <span
-              className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700"
-              title="A crash-recovery copy is kept on this device while you type"
-            >
-              autosaved {new Date(lastAutosave).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
-            </span>
-          ) : null}
-          <span className="hidden items-center gap-1 rounded-full border border-border bg-panel px-2 py-0.5 text-[10px] font-medium text-faint md:flex" title="Keyboard shortcuts">
-            <Command className="h-3 w-3" /> K study · Ctrl+S save · Ctrl+↵ finalize
-          </span>
-          <span className="font-semibold text-foreground">{resolved.title}</span>
-          <span className={cn("rounded-full px-2 py-0.5 font-semibold", abnormalCount ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700")}>
-            {abnormalCount ? `${abnormalCount} organ${abnormalCount > 1 ? "s" : ""} affected` : "All normal"}
-          </span>
-          {serial ? (
-            <span className="rounded-full bg-sky-50 px-2 py-0.5 font-bold tracking-wide text-sky-700">{serial}</span>
-          ) : isFinal ? null : (
-            <span className="text-faint">register no. assigned on finalize</span>
-          )}
-          {isFinal ? (
-            <span className="rounded-full bg-amber-50 px-2 py-0.5 font-semibold text-amber-700">finalized — reprint only</span>
-          ) : (
-            <span className="rounded-full bg-amber-50 px-2 py-0.5 font-semibold text-amber-700">draft — prints PROVISIONAL</span>
-          )}
-        </div>
-        {showTechnique ? (
-          <div className="mt-2 flex items-start gap-1">
-            <Textarea
-              value={technique}
-              onChange={(e) => setTechnique(e.target.value)}
-              rows={2}
-              disabled={isFinal}
-              className="border-border bg-panel text-[12px]"
-              placeholder="Technique…"
-            />
-            <DictationButton
-              onText={(t) => setTechnique((prev) => appendTranscript(prev, t))}
-              title="Dictate the technique — recognised speech appends here"
-            />
+        {/* Crash recovery banner */}
+        {restoreSnap ? (
+          <div className="border-t border-amber-200 bg-amber-50/90 px-3 py-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] font-semibold text-amber-800">
+                Unsaved draft from {new Date(restoreSnap.savedAt).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })} — newer than saved.
+              </span>
+              <div className="ml-auto flex gap-1">
+                <Button size="sm" className="h-6 bg-amber-600 px-2 text-[10px] hover:bg-amber-700" onClick={restoreDraft}>Restore</Button>
+                <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => { clearDraft(dKey); setRestoreSnap(null); }}>Discard</Button>
+              </div>
+            </div>
           </div>
         ) : null}
+
+        {/* Follow-up diff */}
+        {diffSource && !isFinal ? (
+          <UsgDiffPanel source={diffSource} state={state} pathologies={pathologies} />
+        ) : null}
+
+        {/* Pregnancy timeline */}
+        {state.studyKey.startsWith("ob-") && patientReports.length > 0 && (
+          <div className="px-3 py-1">
+            <UsgPregnancyTimeline timeline={buildPregnancyTimeline(patientReports)} />
+          </div>
+        )}
       </div>
 
-      {/* Crash-recovery banner — a local snapshot newer than the saved row */}
-      {restoreSnap ? (
-        <div className="shrink-0 border-b border-amber-200 bg-amber-50/90 px-4 py-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11.5px] font-semibold text-amber-800">
-              Unsaved draft found on this device from{" "}
-              {new Date(restoreSnap.savedAt).toLocaleString("en-IN", {
-                day: "2-digit",
-                month: "short",
-                hour: "2-digit",
-                minute: "2-digit",
-              })}{" "}
-              — newer than the saved copy.
-            </span>
-            <div className="ml-auto flex gap-1.5">
-              <Button
-                size="sm"
-                className="h-7 bg-amber-600 px-2.5 text-[11px] hover:bg-amber-700"
-                onClick={restoreDraft}
-              >
-                Restore
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 px-2.5 text-[11px]"
-                onClick={() => {
-                  clearDraft(dKey);
-                  setRestoreSnap(null);
-                }}
-              >
-                Discard
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Follow-up diff — what changed vs the previous scan */}
-      {diffSource && !isFinal ? (
-        <UsgDiffPanel source={diffSource} state={state} pathologies={pathologies} />
-      ) : null}
-
-      {/* LMP calculator — pregnancy studies */}
-      {isPregnancyStudy ? (
-        <div className="shrink-0 border-b border-border bg-gradient-to-r from-pink-50/80 to-rose-50/60 px-4 py-2.5">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <Label className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-rose-600">
-              <CalendarDays className="h-3 w-3" /> LMP calculator
-            </Label>
-            <Input
-              type="date"
-              value={lmp}
-              onChange={(e) => applyLmp(e.target.value)}
-              className="h-8 w-[150px] border-rose-200 bg-white text-[12.5px]"
-              title="Last menstrual period — fills GA & EDD below"
-            />
-            {lmpInfo ? (
-              <span className="rounded-full bg-white px-3 py-1 text-[11.5px] font-bold text-rose-700 ring-1 ring-rose-200">
-                GA {lmpInfo.weeks} wk {lmpInfo.days} d · EDD {lmpInfo.edd}
-              </span>
-            ) : (
-              <span className="text-[11px] text-rose-400">enter LMP — GA &amp; EDD auto-fill into the biometry slots</span>
-            )}
-          </div>
-        </div>
-      ) : null}
-
-      {/* Hadlock biometry calculator — antenatal scans (the format's mm slots) */}
-      {studyKey === "ob" ? (
-        <UsgBiometryCalc
-          scanDate={scanDate}
-          onFill={(vars) =>
-            setState((s) => {
-              let next = s;
-              for (const [k, v] of Object.entries(vars)) next = setOrganVar(next, "biometry", k, v);
-              return next;
-            })
-          }
-        />
-      ) : null}
-
-      {/* Body: organ cards + preview */}
-      <div className="grid min-h-0 flex-1 gap-4 overflow-hidden p-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,460px)]">
-        <div className="studio-scroll min-h-0 space-y-3 overflow-y-auto pr-1">
-          {study.organs.map((def) => {
-            const st = state.organs.find((o) => o.organ === def.key);
-            if (!st) return null;
-            return (
-              <UsgOrganCard
-                key={def.key}
-                def={def}
-                state={st}
-                pathologies={pathologiesForOrgan(pathologies, def.key)}
-                normalOverride={normalOverrides?.[normalOverrideKey(studyKey, def.key)] ?? null}
-                onSaveNormal={(text) => saveNormalOverride(def.key, text)}
-                onResetNormal={() => resetNormalOverride(def.key)}
-                onToggle={(k) => togglePathology(def.key, k)}
-                onVar={(k, v) => setState((s) => setOrganVar(s, def.key, k, v))}
-                onText={(t) => setState((s) => setOrganText(s, def.key, t))}
-                onAddCustom={(organ) => setDialogOrgan(organ)}
-              />
-            );
-          })}
-
-          <UsgImagesCard
-            images={images}
-            pending={pendingImages}
-            readOnly={isFinal}
-            onAdd={addImage}
-            onCaption={setCaption}
-            onRemove={removeImage}
-            onMove={moveImage}
-            onPickDicom={orderUid ? () => setDicomOpen(true) : undefined}
-            pacsLinked={!!orderUid}
-            onOcrMeasurements={(vars) => {
-              let applied = 0;
-              setState((s) => {
-                let next = s;
-                for (const [organ, kv] of Object.entries(vars)) {
-                  for (const [k, v] of Object.entries(kv)) {
-                    if (!v) continue;
-                    next = setOrganVar(next, organ, k, v);
-                    applied++;
-                  }
-                }
-                return next;
-              });
-              if (applied > 0) {
-                toast.success(`OCR filled ${applied} measurement slot(s) — verify values`);
-              }
-            }}
-          />
-        </div>
-
-        {/* Right rail: impression + live preview */}
-        <div className="studio-scroll min-h-0 space-y-3 overflow-y-auto lg:sticky lg:top-0 lg:self-start">
-          <div className="rounded-xl border border-border bg-card p-3.5 shadow-sm">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-[12px] font-bold tracking-wide">IMPRESSION</span>
-              <div className="flex items-center gap-1.5">
-                {impressionManual ? (
-                  <DictationButton
-                    onText={(t) =>
-                      setState((s) => ({ ...s, impressionOverride: appendTranscript(s.impressionOverride ?? "", t) }))
-                    }
-                    title="Dictate the impression"
-                  />
-                ) : null}
-                <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  manual
-                <Switch
-                  checked={impressionManual}
-                  onCheckedChange={(v) => {
-                    setImpressionManual(v);
-                    setState((s) => ({
-                      ...s,
-                      impressionOverride: v ? resolved.impression.join("\n") : null,
-                    }));
-                  }}
-                  className="scale-90 data-[state=checked]:bg-rose-500"
-                />
-              </label>
-            </div>
-            {impressionManual ? (
-              <Textarea
-                value={state.impressionOverride ?? ""}
-                onChange={(e) => setState((s) => ({ ...s, impressionOverride: e.target.value }))}
-                rows={4}
-                className="text-[12px] leading-relaxed"
-                placeholder="One impression line per row…"
-              />
-            ) : (
-              <ol className="ml-4 space-y-1">
-                {resolved.impression.map((l, i) => (
-                  <li key={i} className="list-decimal text-[12px] font-semibold leading-snug text-foreground">{l}</li>
-                ))}
-              </ol>
-            )}
-            {resolved.suggestions.length ? (
-              <div className="mt-2 space-y-0.5 border-t border-dashed border-border pt-2">
-                {resolved.suggestions.map((s, i) => (
-                  <p key={i} className="text-[11px] font-semibold text-amber-700">{s}</p>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-            <div className="flex items-center gap-2 border-b border-border bg-panel px-3 py-2">
-              <Search className="h-3.5 w-3.5 text-faint" />
-              <span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-                Live preview — {paperLabel}
-              </span>
-              <span className={cn("ml-auto rounded-full px-2 py-0.5 text-[9px] font-bold", isFinal ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>
-                {isFinal ? "FINAL" : "PROVISIONAL"}
-              </span>
-            </div>
-            <iframe
-              title="USG report preview"
-              srcDoc={previewHtml}
-              className="h-[640px] w-full bg-white"
-              sandbox="allow-same-origin"
-            />
-          </div>
-        </div>
-      </div>
-      </div>
-
-      {/* Hidden print frame */}
-      <iframe ref={printRef} title="print" className="hidden" />
-
-      {/* v6 — Orthanc key-image picker + PC-PNDT Form F */}
-      <UsgDicomPicker
-        open={dicomOpen}
-        onClose={() => setDicomOpen(false)}
-        reportId={reportIdForPacs}
-        studyInstanceUid={orderUid}
-        onAdded={() => void reloadImages()}
-      />
-      {formFDefaults ? (
-        <UsgFormFDialog
-          open={formFOpen}
-          onClose={() => setFormFOpen(false)}
-          defaults={formFDefaults}
-          order={order ?? null}
-          report={report ? { id: report.id, stateJson: report.stateJson } : null}
-        />
-      ) : null}
-
-      <UsgPathologyDialog
-        open={dialogOrgan !== null}
-        organKey={dialogOrgan ?? ""}
-        organLabel={study.organs.find((o) => o.key === dialogOrgan)?.label ?? ""}
-        editing={null}
-        onClose={() => setDialogOrgan(null)}
-        onSaved={onSaved}
-      />
-
-      <UsgStudyPicker
-        open={pickerOpen}
-        currentKey={studyKey}
-        onPick={pickStudy}
-        onClose={() => setPickerOpen(false)}
-      />
-
-      {/* Pre-finalize quality checklist */}
-      <UsgQualityChecklist
-        open={qualityOpen}
-        onOpenChange={setQualityOpen}
-        state={state}
-        resolved={resolved}
-        onForceFinalize={() => void persist("finalize")}
-      />
-
-      {/* Measurement review dialog (Pull from machine) */}
-      {reviewSrResult && (
-        <UsgMeasurementReviewDialog
-          open={reviewOpen}
-          onOpenChange={setReviewOpen}
-          srResult={reviewSrResult}
-          srMeasurements={reviewSrMeasurements}
-          onAccept={(vars) => {
-            let applied = 0;
-            setState((s) => {
-              let next = s;
-              for (const [organ, kv] of Object.entries(vars)) {
-                for (const [k, v] of Object.entries(kv)) {
-                  if (!v) continue;
-                  next = setOrganVar(next, organ, k, v);
-                  applied++;
-                }
-              }
-              return next;
-            });
-            if (applied > 0) {
-              toast.success(`${applied} measurement(s) filled from machine SR`);
-            }
-          }}
-        />
-      )}
-
-      {/* Pregnancy timeline for obstetric patients */}
-      {state.studyKey.startsWith("ob-") && patientReports.length > 0 && (
-        <div className="px-4 py-2">
-          <UsgPregnancyTimeline timeline={buildPregnancyTimeline(patientReports)} />
-        </div>
-      )}
     </div>
   );
 }

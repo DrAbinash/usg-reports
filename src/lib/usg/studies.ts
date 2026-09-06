@@ -675,8 +675,15 @@ export const STUDY_GROUPS: { key: string; label: string }[] = [
   { key: "cardiac", label: "Cardiac" },
 ];
 
+/** Quick lookup by key. O(1) via a Map built once at module load — the
+ *  prior `.find()` scanned the studies array on every call. */
+const STUDY_MAP: ReadonlyMap<string, UsgStudyDef> = new Map(
+  USG_STUDIES.map((s) => [s.key, s]),
+);
+
+/** Quick lookup by key. */
 export function getStudy(key: string): UsgStudyDef | undefined {
-  return USG_STUDIES.find((s) => s.key === key);
+  return STUDY_MAP.get(key);
 }
 
 /** Normal-wording override map — key `${studyKey}:${organKey}` → text (v5). */

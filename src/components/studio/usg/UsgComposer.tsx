@@ -43,6 +43,7 @@ import { UsgDicomPicker } from "./UsgDicomPicker";
 import { UsgFormFDialog, type FormFDefaults, type FormFOrderLite } from "./UsgFormFDialog";
 import { DictationButton } from "./DictationButton";
 import { UsgStudyPicker } from "./UsgStudyPicker";
+import { UsgShortcutOverlay } from "./UsgShortcutOverlay";
 import { UsgCriticalBanner } from "./UsgCriticalBanner";
 import { UsgQualityChecklist } from "./UsgQualityChecklist";
 import { UsgMeasurementReviewDialog } from "./UsgMeasurementReviewDialog";
@@ -675,11 +676,18 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     setImages((prev) => prev.map((p) => (p.id === key ? { ...p, caption } : p)));
     if (captionTimer.current) clearTimeout(captionTimer.current);
     captionTimer.current = setTimeout(() => {
-      void fetch(`/api/usg/reports/${savedIdRef.current}/images/${key}`, {
+      // Audit #6 — silently swallowed fetch failures meant a caption edit
+      // looked saved but never reached the server. Surface the failure.
+      fetch(`/api/usg/reports/${savedIdRef.current}/images/${key}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ caption }),
-      });
+      }).then(
+        (res) => {
+          if (!res.ok) toast.error(`Caption save failed (${res.status})`);
+        },
+        (err) => toast.error(`Caption save failed — ${err?.message ?? "network error"}`),
+      );
     }, 600);
   };
 
@@ -689,7 +697,12 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
       return;
     }
     setImages((prev) => prev.filter((p) => p.id !== key));
-    void fetch(`/api/usg/reports/${savedIdRef.current}/images/${key}`, { method: "DELETE" });
+    fetch(`/api/usg/reports/${savedIdRef.current}/images/${key}`, { method: "DELETE" }).then(
+      (res) => {
+        if (!res.ok) toast.error(`Remove failed (${res.status}) — refresh the page`);
+      },
+      (err) => toast.error(`Remove failed — ${err?.message ?? "network error"}`),
+    );
   };
 
   const moveImage = (kind: "server" | "pending", key: string, dir: -1 | 1) => {
@@ -713,11 +726,16 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
       // Persist the new order (positions are 1-based × 10).
       for (const [idx, img] of next.entries()) {
         if (idx === i || idx === j) {
-          void fetch(`/api/usg/reports/${savedIdRef.current}/images/${img.id}`, {
+          fetch(`/api/usg/reports/${savedIdRef.current}/images/${img.id}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ sortOrder: (idx + 1) * 10 }),
-          });
+          }).then(
+            (res) => {
+              if (!res.ok) toast.error(`Order save failed (${res.status})`);
+            },
+            (err) => toast.error(`Order save failed — ${err?.message ?? "network error"}`),
+          );
         }
       }
       return next.map((img, idx) => (idx === i || idx === j ? { ...img, sortOrder: (idx + 1) * 10 } : img));
@@ -1254,6 +1272,11 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
           }}
         />
       )}
+
+      {/* Audit #13 — UsgShortcutOverlay was exported but never mounted,
+          so the advertised "?" shortcut silently did nothing. Mount it
+          here so the overlay opens when the doctor presses "?". */}
+      <UsgShortcutOverlay />
 
     </div>
   );

@@ -330,6 +330,51 @@ describe("settings clamp the dials on save", () => {
   });
 });
 
+// ── v6.8 audit #9 — URL scheme validation in print.ts ─────────────────────
+// Defense-in-depth: a malicious `javascript:` URL stored in logoUrl /
+// signatureUrl must NOT appear in the rendered HTML. The esc() helper
+// already neutralizes attribute-breakout, but if the value ever leaks
+// into a non-escaped context, the scheme would execute.
+describe("v6.8 audit #9 — print.ts URL scheme validation", () => {
+  test("javascript: logoUrl is dropped (no <img src=javascript:...>)", () => {
+    const html = buildUsgReportHtml(
+      { ...BASE_SETTINGS, logoUrl: "javascript:alert(1)" },
+      PATIENT,
+      resolvedReport(),
+    );
+    expect(html).not.toContain("javascript:alert(1)");
+    expect(html).toContain("logo-fallback"); // falls back to the USG block
+  });
+
+  test("javascript: signatureUrl is dropped (no signature <img>)", () => {
+    const html = buildUsgReportHtml(
+      { ...BASE_SETTINGS, usgSignatureUrl: "javascript:alert(1)" },
+      PATIENT,
+      resolvedReport(),
+    );
+    expect(html).not.toContain("javascript:alert(1)");
+  });
+
+  test("legitimate http(s) logoUrl passes through unchanged", () => {
+    const html = buildUsgReportHtml(
+      { ...BASE_SETTINGS, logoUrl: "https://example.com/logo.png" },
+      PATIENT,
+      resolvedReport(),
+    );
+    expect(html).toContain("https://example.com/logo.png");
+  });
+
+  test("legitimate data: image URL passes through", () => {
+    const dataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    const html = buildUsgReportHtml(
+      { ...BASE_SETTINGS, logoUrl: dataUrl },
+      PATIENT,
+      resolvedReport(),
+    );
+    expect(html).toContain("data:image/png;base64,");
+  });
+});
+
 // ── helpers ────────────────────────────────────────────────────────────────
 
 async function pdfText(bytesPromise: Promise<Uint8Array>): Promise<string> {

@@ -78,8 +78,13 @@ export function UsgImagesCard({
         const { dataUrl: cropped } = await autoCropImage(dataUrl);
         onAdd(cropped);
         return;
-      } catch {
-        // Fall back to uncropped if auto-crop fails
+      } catch (err) {
+        // Audit #12 — surface the failure instead of silently swallowing
+        // it. The uncropped image still attaches so the doctor isn't
+        // blocked, but they see WHY the crop didn't happen.
+        toast.error("Auto-crop failed — attached the uncropped image", {
+          description: (err as Error)?.message ?? "Unknown error",
+        });
       }
     }
     onAdd(dataUrl);
@@ -110,15 +115,22 @@ export function UsgImagesCard({
             });
           }
         } catch (e) {
-          toast.error("OCR failed — Tesseract may not be loaded");
+          // Audit #12 — include the underlying error message so the doctor
+          // (or support) can act on the actual cause, not just "OCR failed".
+          const msg = (e as Error)?.message ?? "Unknown error";
+          toast.error("OCR failed — Tesseract may not be loaded", {
+            description: msg,
+          });
         } finally {
           setOcrLoading(false);
         }
       };
       reader.readAsDataURL(file);
-    } catch {
+    } catch (e) {
       setOcrLoading(false);
-      toast.error("Could not read the image for OCR");
+      toast.error("Could not read the image for OCR", {
+        description: (e as Error)?.message ?? "Unknown error",
+      });
     }
   };
 

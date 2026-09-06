@@ -70,7 +70,11 @@ export function pingCare() {
 }
 
 export type CareWorklistItem = {
-  worklistId: string;
+  /** The ERP-side worklist entry ID. Required in the canonical v6.1+ flow,
+   *  but optional so the test for legacy accession-only rows (and any
+   *  pre-v6.1 ERP build) keeps compiling. `careSync.normalizeCareRow`
+   *  handles a missing worklistId by falling back to accessionNumber. */
+  worklistId?: string | null;
   accessionNumber: string;
   patientName: string;
   patientAge?: string | null;

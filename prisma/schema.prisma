@@ -160,6 +160,13 @@ model UsgReport {
   reportHtml    String?   // frozen snapshot at finalize
   finalizedAt   DateTime?
 
+  // v6.9 — Follow-up reminders. When the radiologist sets followUpDate,
+  // the report surfaces on the studio home and Insights as "due" on that
+  // date. Cleared by setting followUpDate=null. followUpNote is the
+  // one-line reason ("recheck ovarian cyst in 6 weeks").
+  followUpDate  DateTime?
+  followUpNote  String?
+
   // Register discipline: sequential number stamped at FIRST finalization —
   // printed as USG-0001 and never renumbered, even if an earlier report is
   // deleted. Drafts carry no number until they are finalized.
@@ -176,8 +183,10 @@ model UsgReport {
   @@index([patientName])
   @@index([patientId])
   @@index([createdAt])
+  @@index([followUpDate])
 
   images UsgReportImage[]
+  criticalCommunications UsgCriticalCommunication[]
 }
 
 // ── USG Studio — machine stills attached to a report (v5) ────────────────
@@ -348,3 +357,48 @@ model UsgSyncState {
   lastError     String?
   updatedAt     DateTime  @updatedAt
 }
+
+// ── USG Studio — critical findings communication log (v6.9) ─────────────
+// Indian PCPNDT/NMC and ACR-required: when a critical finding is detected
+// (e.g. ectopic pregnancy with hemoperitoneum, suspicious breast mass,
+// fetal demise), the radiologist MUST document that they communicated it
+// to the referring physician — who, when, by what method, and whether the
+// referring physician acknowledged receipt. This is the legal record.
+model UsgCriticalCommunication {
+  id              String   @id @default(cuid())
+  reportId        String
+  report          UsgReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  // The finding that triggered the communication (free text — copy from
+  // the impression line so the log is self-contained even if the report
+  // is later amended).
+  findingText     String
+  // Who the radiologist spoke to (referring doctor name; free text — the
+  // studio has no doctor directory).
+  communicatedTo  String
+  // When the communication happened (separate from createdAt so a back-
+  // dated entry for "I called yesterday" is honest).
+  communicatedAt  DateTime
+  // How: phone / whatsapp / sms / in-person / email
+  method          String
+  // Optional: who on the studio side made the call (defaults to "self"
+  // since this is a single-doctor studio).
+  communicatedBy  String   @default("self")
+  // Acknowledgement: did the referring physician confirm receipt?
+  acknowledged    Boolean  @default(false)
+  acknowledgedAt  DateTime?
+  acknowledgedBy  String?
+  // Free-form notes (e.g. "asked patient to come back tomorrow for recheck")
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([reportId])
+  @@index([communicatedAt])
+}
+
+// ── USG Studio — follow-up reminders (v6.9) ─────────────────────────────
+// A flag on the report itself: "this patient should come back for a
+// follow-up scan on YYYY-MM-DD". Surfaces on the studio home and Insights
+// as a "Follow-ups due" widget so the doctor can call patients back.
+// Backed by two new columns on UsgReport (see that model).
+

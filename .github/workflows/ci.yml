@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-progress runs on the same ref when a new commit lands.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests + Typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      DATABASE_URL: file:/tmp/test.db
+      # Use a fixed test key so the dev-fallback in secretCrypto.ts doesn't
+      # log a warning. Real prod deploys set SECRET_ENCRYPTION_KEY.
+      SECRET_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      # Disable LAN defaults pre-fill so tests get blank-by-blank behaviour.
+      INTEGRATION_DEFAULTS: "off"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Push test schema
+        run: npx prisma db push --skip-generate
+
+      - name: Run tests
+        run: npm test
+
+      - name: Typecheck (production code only)
+        # tsconfig.check.json is the production-code subset — excludes the
+        # 3 pre-existing test-file-only errors that predate the v6.8 audit.
+        # Production code MUST pass with zero errors.
+        run: npx tsc --noEmit -p tsconfig.check.json

@@ -33,6 +33,7 @@ import type { FormFDefaults } from "./UsgFormFDialog";
 import type { DiffSource } from "./UsgDiffPanel";
 import { shareReportPdf } from "./sharePdf";
 import { UsgPacsReturnButton } from "./UsgPacsReturnButton";
+import { UsgFollowUpWidget } from "./UsgFollowUpWidget";
 
 // Audit #15 — the prior `EMPTY_SETTINGS` constant duplicated the Prisma
 // schema defaults in two places (DB + frontend), and a divergence would
@@ -596,6 +597,9 @@ export function UsgStudioView() {
         )
       ) : (
         <>
+          {/* v6.9 — Follow-up reminders widget (shows due + upcoming) */}
+          <UsgFollowUpWidget />
+
           {/* Search + filters */}
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-[220px] flex-1">

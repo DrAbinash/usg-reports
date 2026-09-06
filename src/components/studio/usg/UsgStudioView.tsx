@@ -142,6 +142,12 @@ export function UsgStudioView() {
         usgPrintSpacing: s.usgPrintSpacing ?? "tight",
         usgPrintShowTechnique: s.usgPrintShowTechnique !== false && s.usgPrintShowTechnique !== "false",
         usgPrintShowThanks: s.usgPrintShowThanks !== false && s.usgPrintShowThanks !== "false",
+        // v6.10 feature toggles (per-clinic)
+        enableCriticalComm: s.enableCriticalComm !== false,
+        enableFollowUps: s.enableFollowUps !== false,
+        enableAiDraft: s.enableAiDraft !== false,
+        enableBirads: s.enableBirads !== false,
+        enableDicomSr: s.enableDicomSr !== false,
       });
     }
     if (rRes.ok) setReports(((await rRes.json()).reports ?? []) as UsgReportRow[]);
@@ -597,8 +603,9 @@ export function UsgStudioView() {
         )
       ) : (
         <>
-          {/* v6.9 — Follow-up reminders widget (shows due + upcoming) */}
-          <UsgFollowUpWidget />
+          {/* v6.9 — Follow-up reminders widget (shows due + upcoming)
+              v6.10 — gated by the enableFollowUps feature toggle */}
+          <UsgFollowUpWidget enabled={settings?.enableFollowUps !== false} />
 
           {/* Search + filters */}
           <div className="flex flex-wrap items-center gap-2">

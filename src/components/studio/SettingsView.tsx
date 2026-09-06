@@ -13,6 +13,7 @@ import { Building2, ShieldCheck, Check, Palette, Upload, Trash2, Waves, Download
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { auditLabel } from "@/lib/usg/auditShared";
+import { UsgClinicsAdmin } from "./usg/UsgClinicsAdmin";
 
 type Settings = {
   appTitle: string; hospitalName: string; addressLine: string; phone: string; email: string;
@@ -34,6 +35,12 @@ type Settings = {
   orthancUrl: string; orthancUsername: string; orthancPasswordSet: boolean;
   geminiApiKeySet: boolean;
   pcpndtCentreName: string; pcpndtRegistrationNo: string; pcpndtPlace: string;
+  // v6.10 feature toggles (per-clinic)
+  enableCriticalComm?: boolean;
+  enableFollowUps?: boolean;
+  enableAiDraft?: boolean;
+  enableBirads?: boolean;
+  enableDicomSr?: boolean;
 };
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -159,6 +166,27 @@ export function SettingsView() {
   if (!s) return <div className="p-6 text-[13px] text-faint">Loading settings…</div>;
 
   const set = (k: keyof Settings, v: string) => setS({ ...s, [k]: v } as Settings);
+  // v6.10 — boolean setter for the per-clinic feature toggles. Saves
+  // immediately (no Save button click needed) so the toggle reflects
+  // the persisted state on next page reload.
+  const setBool = async (k: keyof Settings, v: boolean) => {
+    setS({ ...s, [k]: v } as Settings);
+    try {
+      const r = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ [k]: v }),
+      }).then((res) => res.json());
+      if (r.settings) {
+        toast.success(v ? "Feature enabled" : "Feature disabled");
+        setS(r.settings);
+      } else {
+        toast.error("Could not save toggle");
+      }
+    } catch {
+      toast.error("Could not save toggle — network error");
+    }
+  };
 
   const save = async () => {
     const body: Record<string, string> = { ...s } as unknown as Record<string, string>;
@@ -313,6 +341,7 @@ export function SettingsView() {
           <TabsTrigger value="integrations" className="text-[12px]"><Link2 className="mr-1.5 h-3.5 w-3.5" />Integrations</TabsTrigger>
           <TabsTrigger value="security" className="text-[12px]"><ShieldCheck className="mr-1.5 h-3.5 w-3.5" />Security</TabsTrigger>
           <TabsTrigger value="data" className="text-[12px]"><Database className="mr-1.5 h-3.5 w-3.5" />Data &amp; activity</TabsTrigger>
+          <TabsTrigger value="clinics" className="text-[12px]"><Building2 className="mr-1.5 h-3.5 w-3.5" />Clinics</TabsTrigger>
         </TabsList>
 
         <TabsContent value="appearance" className="mt-4 space-y-5 rounded-xl border border-border bg-card p-5">
@@ -1020,7 +1049,54 @@ export function SettingsView() {
             )}
           </div>
         </TabsContent>
+
+        {/* v6.10 — Clinics admin tab */}
+        <TabsContent value="clinics" className="mt-4 space-y-4 rounded-xl border border-border bg-card p-5">
+          <UsgClinicsAdmin />
+
+          {/* Feature toggles (per-clinic) */}
+          <div className="space-y-3 rounded-xl border border-violet-200 bg-violet-50/40 p-3.5">
+            <div className="flex items-center gap-2 text-[12px] font-bold text-violet-800">
+              <ShieldCheck className="h-4 w-4" /> Feature toggles (per-clinic)
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Turn off features this clinic doesn't want. Defaults to all-on. Changes apply on next page reload.
+            </p>
+            <FeatureToggle field="enableCriticalComm" label="Critical Findings Communication Log" hint="PCPNDT/NMC legal record of referring-physician contact" value={!!s?.enableCriticalComm} onToggle={(v) => setBool("enableCriticalComm", v)} />
+            <FeatureToggle field="enableFollowUps" label="Follow-up Reminders" hint="Dashboard widget + per-report followUpDate" value={!!s?.enableFollowUps} onToggle={(v) => setBool("enableFollowUps", v)} />
+            <FeatureToggle field="enableAiDraft" label="AI Draft (Ollama)" hint="Local AI findings-draft assistant (requires OLLAMA_URL)" value={!!s?.enableAiDraft} onToggle={(v) => setBool("enableAiDraft", v)} />
+            <FeatureToggle field="enableBirads" label="BI-RADS structured reporting" hint="Breast study BI-RADS assessment picker" value={!!s?.enableBirads} onToggle={(v) => setBool("enableBirads", v)} />
+            <FeatureToggle field="enableDicomSr" label="DICOM SR PDF attachment" hint="Reserved — embed SR XML in PDF (future)" value={!!s?.enableDicomSr} onToggle={(v) => setBool("enableDicomSr", v)} />
+          </div>
+        </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+/** v6.10 — A single per-clinic feature toggle row. */
+function FeatureToggle({
+  field, label, hint, value, onToggle,
+}: {
+  field: string;
+  label: string;
+  hint: string;
+  value: boolean;
+  onToggle: (v: boolean) => void;
+}) {
+  return (
+    <label className="flex items-start gap-2 rounded-lg border border-border bg-white p-2.5 cursor-pointer hover:bg-muted/30 transition-colors">
+      <Switch
+        checked={value}
+        onCheckedChange={onToggle}
+        id={`toggle-${field}`}
+        className="mt-0.5"
+      />
+      <div className="min-w-0 flex-1">
+        <p className="text-[12px] font-semibold text-foreground">{label}</p>
+        <p className="text-[10.5px] text-muted-foreground leading-snug">{hint}</p>
+      </div>
+      <input type="hidden" name={field} value={value ? "1" : "0"} />
+    </label>
   );
 }

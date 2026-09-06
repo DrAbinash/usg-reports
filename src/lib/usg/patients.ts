@@ -17,6 +17,9 @@
  */
 import { db } from "@/lib/db";
 
+/** "default" clinic id — the original single-doctor install's clinic. */
+const DEFAULT_CLINIC = "default";
+
 /** "  Dr.   RANI  devi " → "dr. rani devi" (collapse inner whitespace). */
 export function normalizeName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, " ");
@@ -33,13 +36,13 @@ export type PatientRow = { id: string; name: string; phone: string };
  * Find (or create) the patient a report belongs to. Returns the patient id,
  * or null when the name is blank (report stays unlinked, like legacy rows).
  */
-export async function linkPatient(name: string, phone: string): Promise<string | null> {
+export async function linkPatient(name: string, phone: string, clinicId: string = DEFAULT_CLINIC): Promise<string | null> {
   const normName = normalizeName(name);
   if (!normName) return null;
   const normPhone = normalizePhone(phone);
   const display = name.trim();
 
-  const found = await findPatient(normName, normPhone);
+  const found = await findPatient(normName, normPhone, clinicId);
   if (found) {
     // Adopt: a blank-phone patient gains a phone the first time one is typed.
     if (normPhone && !found.normPhone) {
@@ -53,12 +56,12 @@ export async function linkPatient(name: string, phone: string): Promise<string |
 
   try {
     const created = await db.usgPatient.create({
-      data: { name: display, phone: phone.trim(), normName, normPhone },
+      data: { clinicId, name: display, phone: phone.trim(), normName, normPhone },
     });
     return created.id;
   } catch {
     // Unique race (concurrent save of the same person) — refind and reuse.
-    const raced = await findPatient(normName, normPhone);
+    const raced = await findPatient(normName, normPhone, clinicId);
     return raced?.id ?? null;
   }
 }
@@ -66,20 +69,22 @@ export async function linkPatient(name: string, phone: string): Promise<string |
 async function findPatient(
   normName: string,
   normPhone: string,
+  clinicId: string = DEFAULT_CLINIC,
 ): Promise<{ id: string; name: string; phone: string; normPhone: string } | null> {
   const exact = await db.usgPatient.findUnique({
-    where: { normName_normPhone: { normName, normPhone } },
+    where: { clinicId_normName_normPhone: { clinicId, normName, normPhone } },
   });
   if (exact) return exact;
   if (normPhone) {
     // Phone typed now, patient walked in earlier without one — adopt.
-    return db.usgPatient.findFirst({ where: { normName, normPhone: "" } });
+    return db.usgPatient.findFirst({ where: { clinicId, normName, normPhone: "" } });
   }
   return null;
 }
 
-/** Registry listing with per-patient scan counts + last scan date. */
-export async function listPatients(q = ""): Promise<
+/** Registry listing with per-patient scan counts + last scan date.
+ *  v6.10 — scoped by clinicId. */
+export async function listPatients(q = "", clinicId: string = DEFAULT_CLINIC): Promise<
   {
     id: string;
     name: string;
@@ -90,12 +95,13 @@ export async function listPatients(q = ""): Promise<
   }[]
 > {
   const patients = await db.usgPatient.findMany({
+    where: { clinicId },
     orderBy: { updatedAt: "desc" },
     take: 500,
   });
   const counts = await db.usgReport.groupBy({
     by: ["patientId"],
-    where: { patientId: { not: null } },
+    where: { patientId: { not: null }, clinicId },
     _count: { id: true },
     _max: { scanDate: true, createdAt: true },
   });
@@ -134,6 +140,7 @@ export async function listPatients(q = ""): Promise<
 export async function latestKnownDemographics(
   patientId: string | null,
   name: string,
+  clinicId: string = DEFAULT_CLINIC,
 ): Promise<{ age: string; referredBy: string }> {
   const withEither = [
     { patientAge: { not: "" } },
@@ -141,14 +148,12 @@ export async function latestKnownDemographics(
   ];
   const prior = patientId
     ? await db.usgReport.findFirst({
-        where: { patientId, OR: withEither },
+        where: { patientId, clinicId, OR: withEither },
         orderBy: [{ finalizedAt: "desc" }, { updatedAt: "desc" }, { createdAt: "desc" }],
         select: { patientAge: true, referredBy: true },
       })
     : await db.usgReport.findFirst({
-        // No registry link (legacy rows): the patient relation's normName is
-        // the studio's own conservative match key (name + phone equality).
-        where: { patient: { normName: normalizeName(name) }, OR: withEither },
+        where: { clinicId, patient: { normName: normalizeName(name) }, OR: withEither },
         orderBy: [{ finalizedAt: "desc" }, { updatedAt: "desc" }, { createdAt: "desc" }],
         select: { patientAge: true, referredBy: true },
       });

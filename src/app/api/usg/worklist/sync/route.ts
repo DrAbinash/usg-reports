@@ -1,4 +1,4 @@
-import { requireSession } from "@/lib/auth";
+import { requireSession, getActiveClinicId } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
 import { fetchBillingStatus, fetchWorklist, finalizeReport } from "@/lib/usg/careClient";
@@ -24,6 +24,7 @@ import { audit } from "@/lib/usg/audit";
 export async function POST() {
   const guard = await requireSession();
   if (guard) return guard;
+  const clinicId = await getActiveClinicId();
 
   const s = await getSettings();
   const careConfigured = !!(s.careApiBase && s.careApiKey);
@@ -40,7 +41,7 @@ export async function POST() {
     const r = await fetchWorklist();
     if (r.ok) {
       careOk = true;
-      importStats = await importCareRows(r.data);
+      importStats = await importCareRows(r.data, clinicId);
     } else {
       lastError = r.error;
     }
@@ -51,7 +52,7 @@ export async function POST() {
     const r = await listStudies();
     if (r.ok) {
       orthancOk = true;
-      attachStats = await attachOrthancStudies(r.data);
+      attachStats = await attachOrthancStudies(r.data, clinicId);
     } else {
       lastError = lastError ?? r.error;
     }
@@ -112,16 +113,17 @@ export async function POST() {
         });
       }
     }
-    const stillPending = await db.usgCareOrder.count({ where: { status: "REPORTED", careSyncedAt: null } });
+    const stillPending = await db.usgCareOrder.count({ where: { clinicId, status: "REPORTED", careSyncedAt: null } });
     if (stillPending === 0 && lastError && /finalize|pcpndt|match center/i.test(lastError)) {
       lastError = null; // the last blocking finalize flushed
     }
   }
 
   await db.usgSyncState.upsert({
-    where: { id: "singleton" },
+    where: { clinicId },
     create: {
-      id: "singleton",
+      id: clinicId === "default" ? "singleton" : clinicId,
+      clinicId,
       lastSyncAt: new Date(),
       lastCareOk: careOk,
       lastOrthancOk: orthancOk,

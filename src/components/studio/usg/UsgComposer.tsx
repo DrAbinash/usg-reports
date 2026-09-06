@@ -46,7 +46,10 @@ import { UsgStudyPicker } from "./UsgStudyPicker";
 import { UsgShortcutOverlay } from "./UsgShortcutOverlay";
 import { UsgGrowthChart } from "./UsgGrowthChart";
 import { UsgCriticalCommDialog } from "./UsgCriticalCommDialog";
+import { UsgAiDraftPanel } from "./UsgAiDraftPanel";
+import { UsgBiradsPicker } from "./UsgBiradsPicker";
 import { scanForCriticalFindings } from "@/lib/usg/criticalFindings";
+import { biradsImpressionLine, biradsFollowUpDays, type BiradsCategory } from "@/lib/usg/birads";
 import { UsgCriticalBanner } from "./UsgCriticalBanner";
 import { UsgQualityChecklist } from "./UsgQualityChecklist";
 import { UsgMeasurementReviewDialog } from "./UsgMeasurementReviewDialog";
@@ -193,6 +196,9 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
 
   // v6.9 — Critical findings communication log dialog.
   const [commOpen, setCommOpen] = useState(false);
+
+  // v6.10 — BI-RADS assessment category (breast studies only).
+  const [birads, setBirads] = useState<BiradsCategory | null>(null);
 
   const orderUid = order?.studyInstanceUid ?? null;
   const reportIdForPacs = savedIdRef.current ?? report?.id ?? null;
@@ -853,6 +859,8 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
               // v6.9 — show "Log communication" button when a critical
               // finding is active on this report. Lets the radiologist
               // document PCPNDT/NMC-required referring-physician contact.
+              // v6.10 — gated by the enableCriticalComm feature toggle.
+              if (settings.enableCriticalComm === false) return null;
               const sel = state.organs.flatMap((o) =>
                 (o.pathologies ?? (o.pathology ? [o.pathology] : [])).map((k) => ({
                   key: k, label: k, organ: o.organ,
@@ -1182,6 +1190,49 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
 
         {/* Right rail: impression + live preview */}
         <div className="studio-scroll min-h-0 space-y-3 overflow-y-auto lg:sticky lg:top-0 lg:self-start">
+          {/* v6.10 — BI-RADS picker for breast studies, gated by the enableBirads toggle */}
+          {state.studyKey === "breast" && settings.enableBirads !== false && !isFinal ? (
+            <UsgBiradsPicker
+              value={birads}
+              onChange={(v) => {
+                setBirads(v);
+                // Append the BI-RADS impression line to the impression.
+                const line = biradsImpressionLine(v);
+                const current = impressionManual ? (state.impressionOverride ?? "") : resolved.impression.join("\n");
+                if (!line) {
+                  // Cleared — leave impression as-is.
+                  return;
+                }
+                // Replace any existing BI-RADS line; append if none.
+                const withoutBirads = current
+                  .split("\n")
+                  .filter((l) => !/^BI-RADS\s/i.test(l.trim()))
+                  .join("\n")
+                  .trim();
+                const next = withoutBirads ? `${withoutBirads}\n${line}` : line;
+                setImpressionManual(true);
+                setState((s) => ({ ...s, impressionOverride: next }));
+                // Suggest a follow-up for BI-RADS 3.
+                const followDays = biradsFollowUpDays(v);
+                if (followDays && savedIdRef.current) {
+                  const d = new Date();
+                  d.setDate(d.getDate() + followDays);
+                  // Best-effort: set the follow-up via the API. Silent on failure.
+                  fetch(`/api/usg/reports/${savedIdRef.current}/follow-up`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      followUpDate: d.toISOString().slice(0, 10),
+                      followUpNote: `BI-RADS 3 — short-interval follow-up (${Math.round(followDays / 30)} months)`,
+                    }),
+                  }).then(
+                    () => toast.success(`BI-RADS 3 follow-up set for ${d.toLocaleDateString("en-IN")}`),
+                    () => {/* silent — the impression line still landed */},
+                  );
+                }
+              }}
+            />
+          ) : null}
           <div className="rounded-xl border border-border bg-card p-3.5 shadow-sm">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-[12px] font-bold tracking-wide">IMPRESSION</span>
@@ -1330,6 +1381,18 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         initialFinding={(impressionManual ? state.impressionOverride ?? "" : resolved.impression.join("\n")).split("\n")[0] ?? ""}
         initialRecipient={referredBy}
       />
+
+      {/* v6.10 — AI Draft assistant (Ollama), gated by the enableAiDraft toggle. */}
+      {settings.enableAiDraft !== false ? (
+        <UsgAiDraftPanel
+          reportId={savedIdRef.current ?? report?.id ?? null}
+          onInsertImpression={(text) => {
+            setImpressionManual(true);
+            setState((s) => ({ ...s, impressionOverride: text }));
+            toast.success("AI impression inserted — review and edit");
+          }}
+        />
+      ) : null}
 
     </div>
   );

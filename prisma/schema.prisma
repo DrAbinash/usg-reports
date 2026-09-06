@@ -7,6 +7,13 @@
 // MRI-side settings columns (radiologist*, careApi*, orthanc*, ohif*)
 // were REMOVED — this app reports ultrasound only. Upgrade is handled by
 // scripts/usg-v4-cleanup.mjs (idempotent; USG data is never touched).
+//
+// v6.10 — multi-clinic: a Clinic model + clinicId on every data table
+// (defaulting to "default" for backward compat). One installation can
+// host multiple trial centers, each with their own letterhead, settings,
+// patients, reports, and audit trail. The PIN auth stays single-PIN
+// (Dr. Abinash is the super-admin who sees all clinics); a clinic
+// switcher in the header selects the active clinic.
 
 generator client {
   provider = "prisma-client-js"
@@ -17,9 +24,44 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ── Settings (single row, id = "singleton") ─────────────────────────────
+// ── Clinic (v6.10) — one row per hosted center ───────────────────────────
+// The original single-doctor install gets a "default" clinic row at first
+// boot; new trial centers get their own rows here. Every data table
+// carries clinicId so list views filter by the active clinic.
+model Clinic {
+  id          String   @id @default(cuid())
+  // Short slug used in URLs / logs (e.g. "default", "care-deoghar",
+  // "rad-demo-1"). Lowercase, [a-z0-9-]+, unique.
+  slug        String   @unique @default("default")
+  name        String   @default("CARE Diagnostics")
+  // Optional branding override — when blank, falls back to the clinic's
+  // HospitalSettings row (appTitle, hospitalName, logoUrl, etc.).
+  brandColor  String   @default("")  // hex, e.g. "#e11d48"
+  // Free-form contact details printed on trial letters if the clinic
+  // hasn't filled its own HospitalSettings yet.
+  contactName String   @default("")
+  contactPhone String  @default("")
+  contactEmail String  @default("")
+  // Trial management: when the trial expires, the clinic's data stays
+  // (read-only) but new reports are blocked. Null = no expiry.
+  trialExpiresAt DateTime?
+  // Soft-disable: a disabled clinic is hidden from the switcher and its
+  // data is read-only. Reversible.
+  disabled    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ── Settings (one row per clinic — id = clinicId, was "singleton") ───────
 model HospitalSettings {
   id              String   @id @default("singleton")
+
+  // v6.10 — every settings row belongs to one clinic. The original
+  // "singleton" row stays as the "default" clinic's settings; new
+  // clinics get their own row with id = clinicId. The clinicId column
+  // is indexed (not unique — HospitalSettings.id IS the clinic id in
+  // the simple case, but having the column lets us join cleanly).
+  clinicId        String   @default("default")
 
   // Header / identity — the letterhead on every printed report
   appTitle        String   @default("CARE USG Studio")
@@ -98,15 +140,32 @@ model HospitalSettings {
   pcpndtRegistrationNo String  @default("34/2020")
   pcpndtPlace         String   @default("DEOGHAR")
 
+  // ── v6.10 feature toggles (per-clinic) ──────────────────────────────
+  // Each toggle defaults to true so existing clinics keep all features;
+  // a trial center can turn off features they don't want (e.g. turn off
+  // AI Draft if they have no Ollama server, turn off Critical Comm log
+  // if they have a paper process already).
+  enableCriticalComm  Boolean  @default(true) // Critical Findings Communication Log
+  enableFollowUps     Boolean  @default(true) // Report Follow-up Reminders
+  enableAiDraft       Boolean  @default(true) // Ollama AI Draft assistant
+  enableBirads        Boolean  @default(true) // BI-RADS structured reporting for breast
+  enableDicomSr       Boolean  @default(true) // DICOM SR PDF attachment (reserved)
+
   updatedAt       DateTime @updatedAt
 }
 
 // ── Sessions for the PIN gate ────────────────────────────────────────────
+// v6.10 — session carries the active clinicId so every API call knows
+// which clinic's data to scope to. Defaults to "default" for backward
+// compat (existing sessions on upgrade get the default clinic).
 model Session {
   id        String   @id @default(cuid())
   tokenHash String   @unique
   expiresAt DateTime
+  clinicId  String   @default("default")
   createdAt DateTime @default(now())
+
+  @@index([clinicId])
 }
 
 // ── USG Studio — patient registry ────────────────────────────────────────
@@ -117,6 +176,7 @@ model Session {
 // strangers stay separate); see src/lib/usg/patients.ts.
 model UsgPatient {
   id        String   @id @default(cuid())
+  clinicId  String   @default("default")
   name      String
   phone     String   @default("")
   /** lowercase, whitespace-collapsed match key of `name`. */
@@ -129,7 +189,9 @@ model UsgPatient {
 
   reports   UsgReport[]
 
-  @@unique([normName, normPhone])
+  // Per-clinic uniqueness: same name+phone can exist in different clinics.
+  @@unique([clinicId, normName, normPhone])
+  @@index([clinicId])
   @@index([normName])
 }
 
@@ -138,6 +200,7 @@ model UsgPatient {
 // reprint; not tied to any external worklist.
 model UsgReport {
   id            String    @id @default(cuid())
+  clinicId      String    @default("default")
   patientName   String
   patientAge    String    @default("")
   patientSex    String    @default("F") // F | M
@@ -179,6 +242,7 @@ model UsgReport {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  @@index([clinicId])
   @@index([status])
   @@index([patientName])
   @@index([patientId])
@@ -212,6 +276,7 @@ model UsgReportImage {
 // review asks for. Rows are never updated or deleted by the app.
 model UsgAudit {
   id          String   @id @default(cuid())
+  clinicId    String   @default("default")
   action      String   // report.save | report.finalize | auth.login | …
   reportId    String?
   serialNo    Int?
@@ -219,7 +284,7 @@ model UsgAudit {
   detail      String   @default("")
   createdAt   DateTime @default(now())
 
-  @@index([createdAt])
+  @@index([clinicId, createdAt])
   @@index([action])
   @@index([reportId])
 }
@@ -230,13 +295,15 @@ model UsgAudit {
 // composer applies them at every normal-text resolution point.
 model UsgNormalOverride {
   id        String   @id @default(cuid())
+  clinicId  String   @default("default")
   studyKey  String
   organKey  String
   text      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([studyKey, organKey])
+  @@unique([clinicId, studyKey, organKey])
+  @@index([clinicId])
 }
 
 // ── USG Studio — user-added custom pathologies ──────────────────────────
@@ -244,6 +311,7 @@ model UsgNormalOverride {
 // anything the doctor adds in the UI is persisted here and merged at runtime.
 model UsgPathology {
   id            String   @id @default(cuid())
+  clinicId      String   @default("default")
   organKey      String
   label         String
   findingText   String   // may contain {variable} tokens
@@ -253,7 +321,8 @@ model UsgPathology {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  @@unique([organKey, label])
+  @@unique([clinicId, organKey, label])
+  @@index([clinicId])
 }
 
 // ── USG Studio — CARE ERP bill-desk worklist orders (v6) ────────────────
@@ -263,6 +332,7 @@ model UsgPathology {
 // deleted by sync — a finalized order stays as the day's record.
 model UsgCareOrder {
   id              String    @id @default(cuid())
+  clinicId        String    @default("default")
 
   // ── Identity (v6.1 fix) ────────────────────────────────────────────────
   // ERP reality: many USG rows carry NO accession number, but always a
@@ -306,7 +376,8 @@ model UsgCareOrder {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  @@index([status])
+  @@index([clinicId])
+  @@index([clinicId, status])
   @@index([studyDate])
   // v6.1 — deterministic identity lookups (plain, NOT unique: legacy
   // duplicates must never fail a NAS boot; resolution is oldest-first).
@@ -321,6 +392,7 @@ model UsgCareOrder {
 // follows the ERP's four-predicate rule (see src/lib/usg/formf.ts).
 model UsgFormF {
   id                  String   @id @default(cuid())
+  clinicId            String   @default("default")
   accessionNumber     String   @default("") // link to the CARE order ("" = walk-in)
   billNumber          String   @default("")
   patientName         String
@@ -344,18 +416,22 @@ model UsgFormF {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
+  @@index([clinicId])
   @@index([patientName])
   @@index([accessionNumber])
 }
 
-// ── USG Studio — worklist sync state (v6, singleton) ────────────────────
+// ── USG Studio — worklist sync state (v6, one row per clinic) ───────────
 model UsgSyncState {
   id            String    @id @default("singleton")
+  clinicId      String    @default("default")
   lastSyncAt    DateTime?
   lastCareOk    Boolean   @default(false)
   lastOrthancOk Boolean   @default(false)
   lastError     String?
   updatedAt     DateTime  @updatedAt
+
+  @@unique([clinicId])
 }
 
 // ── USG Studio — critical findings communication log (v6.9) ─────────────

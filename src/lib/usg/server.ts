@@ -7,13 +7,16 @@ import { USG_PATHOLOGIES_ALL } from "./pathologies";
 import type { UsgPathologyDef } from "./types";
 import { makeLookup, normaliseState, resolve } from "./composer";
 import { normalOverrideKey, type NormalOverrides } from "./studies";
+import { getActiveClinicId } from "@/lib/auth";
 
 export const CUSTOM_KEY_PREFIX = "custom:";
 
-/** The doctor's normal-wording overrides as a lookup map. */
+/** The doctor's normal-wording overrides as a lookup map.
+ *  v6.10 — scoped by clinicId. */
 export async function loadNormalOverrides(): Promise<NormalOverrides> {
   try {
-    const rows = await db.usgNormalOverride.findMany();
+    const clinicId = await getActiveClinicId().catch(() => "default");
+    const rows = await db.usgNormalOverride.findMany({ where: { clinicId } });
     const out: NormalOverrides = {};
     for (const r of rows) {
       if (r.text.trim()) out[normalOverrideKey(r.studyKey, r.organKey)] = r.text.trim();
@@ -27,7 +30,8 @@ export async function loadNormalOverrides(): Promise<NormalOverrides> {
 export async function loadAllPathologies(): Promise<UsgPathologyDef[]> {
   let customs: UsgPathologyDef[] = [];
   try {
-    const rows = await db.usgPathology.findMany({ orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] });
+    const clinicId = await getActiveClinicId().catch(() => "default");
+    const rows = await db.usgPathology.findMany({ where: { clinicId }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] });
     customs = rows.map((r) => ({
       key: CUSTOM_KEY_PREFIX + r.id,
       organ: r.organKey,

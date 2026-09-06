@@ -43,7 +43,13 @@ function daysUntil(iso: string): number {
   return Math.round((target.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
 }
 
-export function UsgFollowUpWidget() {
+export type UsgFollowUpWidgetProps = {
+  /** v6.10 — when false (the per-clinic toggle is off), the widget renders
+   *  nothing. Default true. */
+  enabled?: boolean;
+};
+
+export function UsgFollowUpWidget({ enabled = true }: UsgFollowUpWidgetProps) {
   const [due, setDue] = useState<FollowUpRow[]>([]);
   const [upcoming, setUpcoming] = useState<FollowUpRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,8 +78,12 @@ export function UsgFollowUpWidget() {
   };
 
   useEffect(() => {
-    void load();
-  }, []);
+    if (enabled) void load();
+    else setLoading(false);
+  }, [enabled]);
+
+  // v6.10 — when the toggle is off, render nothing.
+  if (enabled === false) return null;
 
   if (loading) {
     return (

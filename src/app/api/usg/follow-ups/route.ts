@@ -1,4 +1,4 @@
-import { requireSession } from "@/lib/auth";
+import { requireSession, getActiveClinicId } from "@/lib/auth";
 import { db } from "@/lib/db";
 
 /**
@@ -14,10 +14,13 @@ import { db } from "@/lib/db";
  * Sorted by followUpDate ascending. Returns the minimal projection the
  * studio home / Insights widget needs — no patient contact info leaked
  * beyond what's already in /api/usg/reports.
+ *
+ * v6.10 — scoped by clinicId.
  */
 export async function GET(req: Request) {
   const guard = await requireSession();
   if (guard) return guard;
+  const clinicId = await getActiveClinicId();
   const url = new URL(req.url);
   const statusParam = url.searchParams.get("status") ?? "due";
   const daysWindow = 14;
@@ -28,10 +31,11 @@ export async function GET(req: Request) {
   horizon.setDate(horizon.getDate() + daysWindow);
 
   const where: {
+    clinicId: string;
     status: string;
     followUpDate?: { not: null };
     AND?: Array<{ followUpDate?: { lte?: Date; gt?: Date; gte?: Date } }>;
-  } = { status: "FINALIZED", followUpDate: { not: null } };
+  } = { clinicId, status: "FINALIZED", followUpDate: { not: null } };
 
   if (statusParam === "due") {
     where.AND = [{ followUpDate: { lte: today } }];

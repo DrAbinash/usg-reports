@@ -199,7 +199,7 @@ type CareOrderRow = {
  * REPORTED rows are frozen (their demographics and links are the day's
  * record) — resync can never reset a finalized/reporting state.
  */
-export async function importCareRows(rows: CareWorklistItem[]): Promise<SyncStats> {
+export async function importCareRows(rows: CareWorklistItem[], clinicId: string = "default"): Promise<SyncStats> {
   const stats = emptySyncStats();
   stats.careRowsReceived = rows.length;
 
@@ -207,7 +207,10 @@ export async function importCareRows(rows: CareWorklistItem[]): Promise<SyncStat
   stats.ultrasoundRowsReceived = usRows.length;
 
   // Bulk-load existing orders once; single-clinic scale (hundreds).
+  // v6.10 — scoped by clinicId so a multi-clinic install never imports
+  // another clinic's orders into the active clinic.
   const existingOrders = (await db.usgCareOrder.findMany({
+    where: { clinicId },
     orderBy: { createdAt: "asc" },
   })) as CareOrderRow[];
 
@@ -275,6 +278,7 @@ export async function importCareRows(rows: CareWorklistItem[]): Promise<SyncStat
       } else {
         const created = (await db.usgCareOrder.create({
           data: {
+            clinicId,
             accessionNumber: n.acc,
             careWorklistId: n.wlId,
             patientName: n.name,
@@ -316,12 +320,13 @@ export async function importCareRows(rows: CareWorklistItem[]): Promise<SyncStat
  * AccessionNumber (second): exactly ONE Orthanc study may match; two or
  * more is ambiguous and skipped (no "first match", no names, ever).
  */
-export async function attachOrthancStudies(studies: OrthancStudy[]): Promise<AttachStats> {
+export async function attachOrthancStudies(studies: OrthancStudy[], clinicId: string = "default"): Promise<AttachStats> {
   const stats = emptyAttachStats();
   stats.orthancStudies = studies.length;
 
   const { byUid, byAcc } = indexOrthancStudies(studies);
-  const orders = (await db.usgCareOrder.findMany()) as CareOrderRow[];
+  // v6.10 — scope by clinicId so we only attach studies to this clinic's orders.
+  const orders = (await db.usgCareOrder.findMany({ where: { clinicId } })) as CareOrderRow[];
   const matchedStudyIds = new Set<string>();
 
   for (const order of orders) {

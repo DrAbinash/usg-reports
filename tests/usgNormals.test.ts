@@ -114,16 +114,16 @@ describe("override persistence + backup", () => {
 
   it("db rows upsert by (studyKey, organKey) — idempotent", async () => {
     await db.usgNormalOverride.upsert({
-      where: { studyKey_organKey: { studyKey: "wa-female", organKey: "liver" } },
+      where: { clinicId_studyKey_organKey: { clinicId: "default", studyKey: "wa-female", organKey: "liver" } },
       create: { studyKey: "wa-female", organKey: "liver", text: "v1" },
       update: { text: "v1" },
     });
     await db.usgNormalOverride.upsert({
-      where: { studyKey_organKey: { studyKey: "wa-female", organKey: "liver" } },
+      where: { clinicId_studyKey_organKey: { clinicId: "default", studyKey: "wa-female", organKey: "liver" } },
       create: { studyKey: "wa-female", organKey: "liver", text: "v2" },
       update: { text: "v2" },
     });
     expect(await db.usgNormalOverride.count()).toBe(1);
-    expect((await db.usgNormalOverride.findUnique({ where: { studyKey_organKey: { studyKey: "wa-female", organKey: "liver" } } }))?.text).toBe("v2");
+    expect((await db.usgNormalOverride.findUnique({ where: { clinicId_studyKey_organKey: { clinicId: "default", studyKey: "wa-female", organKey: "liver" } } }))?.text).toBe("v2");
   });
 });

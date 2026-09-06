@@ -9,6 +9,7 @@ import { UsgWorklistView } from "./usg/UsgWorklistView";
 import { UsgDailySummary } from "./usg/UsgDailySummary";
 import { UsgDarkModeToggle } from "./usg/UsgDarkModeToggle";
 import { UsgCommandPalette } from "./usg/UsgCommandPalette";
+import { UsgClinicSwitcher } from "./usg/UsgClinicSwitcher";
 import { UsgBirthdayGreeting, BirthdayHeaderButton, birthdayDismissed, rememberBirthdayDismissed, useBirthdayFlag } from "./usg/UsgBirthdayGreeting";
 import { Waves, Settings2, LogOut, Stethoscope, BarChart3, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -67,6 +68,7 @@ export function AppShell() {
         </div>
 
         <div className="ml-auto flex items-center gap-3">
+          <UsgClinicSwitcher />
           {bday?.today ? <BirthdayHeaderButton onClick={() => setBdayCard(true)} /> : null}
           <button
             onClick={() => {

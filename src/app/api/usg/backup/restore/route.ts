@@ -1,4 +1,4 @@
-import { requireSession } from "@/lib/auth";
+import { requireSession, getActiveClinicId } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { updateSettings } from "@/lib/settings";
 import { parseBackup } from "@/lib/usg/backup";
@@ -18,10 +18,11 @@ import { audit } from "@/lib/usg/audit";
 export async function POST(req: Request) {
   const guard = await requireSession();
   if (guard) return guard;
+  const clinicId = await getActiveClinicId();
 
   const body = await req.json().catch(() => null);
   if (body && typeof body === "object" && (body as Record<string, unknown>).format === "usg-clinic-backup") {
-    const result = await applyFullRestore(body);
+    const result = await applyFullRestore(body, clinicId);
     await audit({
       action: "backup.restore",
       detail: `full clinic restore — ${result.reportsRestored} reports, ${result.patientsRestored} patients, ${result.imagesRestored} stills${result.reportsSkipped ? `, ${result.reportsSkipped} skipped (serial clash)` : ""}`,
@@ -47,23 +48,24 @@ export async function POST(req: Request) {
   }
   if (Object.keys(patch).length) await updateSettings(patch);
 
-  // Normal-wording overrides — upsert on (studyKey, organKey).
+  // Normal-wording overrides — upsert on (clinicId, studyKey, organKey).
   let overridesRestored = 0;
   for (const n of backup.normalOverrides ?? []) {
     await db.usgNormalOverride.upsert({
-      where: { studyKey_organKey: { studyKey: n.studyKey, organKey: n.organKey } },
-      create: { studyKey: n.studyKey, organKey: n.organKey, text: n.text },
+      where: { clinicId_studyKey_organKey: { clinicId, studyKey: n.studyKey, organKey: n.organKey } },
+      create: { clinicId, studyKey: n.studyKey, organKey: n.organKey, text: n.text },
       update: { text: n.text },
     }).catch(() => undefined);
     overridesRestored++;
   }
 
-  // Custom pathologies — upsert on the (organKey, label) unique key.
+  // Custom pathologies — upsert on the (clinicId, organKey, label) unique key.
   let restored = 0;
   for (const c of backup.customPathologies) {
     await db.usgPathology.upsert({
-      where: { organKey_label: { organKey: c.organKey, label: c.label } },
+      where: { clinicId_organKey_label: { clinicId, organKey: c.organKey, label: c.label } },
       create: {
+        clinicId,
         organKey: c.organKey,
         label: c.label,
         findingText: c.findingText,

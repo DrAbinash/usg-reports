@@ -1,16 +1,19 @@
-import { requireSession } from "@/lib/auth";
+import { requireSession, getActiveClinicId } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { USG_STUDIES } from "@/lib/usg/studies";
 import { USG_PATHOLOGIES_ALL } from "@/lib/usg/pathologies";
 import { computeAnalytics } from "@/lib/usg/analytics";
 
-/** Practice analytics — monthly volume, study mix, pathology frequency, referrers. */
+/** Practice analytics — monthly volume, study mix, pathology frequency, referrers.
+ *  v6.10 — scoped by clinicId. */
 export async function GET(req: Request) {
   const guard = await requireSession();
   if (guard) return guard;
+  const clinicId = await getActiveClinicId();
 
   const months = Math.min(Math.max(Number(new URL(req.url).searchParams.get("months") ?? 12) || 12, 1), 60);
   const reports = await db.usgReport.findMany({
+    where: { clinicId },
     select: {
       studyKey: true,
       status: true,
@@ -20,7 +23,7 @@ export async function GET(req: Request) {
       stateJson: true,
     },
   });
-  const patientCount = await db.usgPatient.count();
+  const patientCount = await db.usgPatient.count({ where: { clinicId } });
 
   const labels: Record<string, string> = {};
   for (const s of USG_STUDIES) labels[s.key] = s.label;

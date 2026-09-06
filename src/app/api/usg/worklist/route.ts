@@ -1,4 +1,4 @@
-import { requireSession } from "@/lib/auth";
+import { requireSession, getActiveClinicId } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
 
@@ -30,8 +30,10 @@ export type WorklistOrderDto = {
 export async function GET() {
   const guard = await requireSession();
   if (guard) return guard;
+  const clinicId = await getActiveClinicId();
 
   const orders = await db.usgCareOrder.findMany({
+    where: { clinicId },
     orderBy: { studyDate: "desc" },
     take: 500,
   });
@@ -59,7 +61,7 @@ export async function GET() {
     careSyncedAt: o.careSyncedAt ? o.careSyncedAt.toISOString() : null,
   }));
 
-  const sync = await db.usgSyncState.findUnique({ where: { id: "singleton" } });
+  const sync = await db.usgSyncState.findUnique({ where: { clinicId } });
   const s = await getSettings();
 
   return Response.json({

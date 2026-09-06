@@ -1,4 +1,4 @@
-import { requireSession } from "@/lib/auth";
+import { requireSession, getActiveClinicId } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getStudy } from "@/lib/usg/studies";
 import { normaliseState } from "@/lib/usg/composer";
@@ -9,14 +9,25 @@ import { audit } from "@/lib/usg/audit";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-export async function GET(_req: Request, ctx: Ctx) {
-  const guard = await requireSession();
-  if (guard) return guard;
-  const { id } = await ctx.params;
+/** v6.10 — guard that the report belongs to the active clinic. Returns
+ *  the report row on success, or a 404 Response when not found / wrong
+ *  clinic (we never tell the caller "wrong clinic" — that leaks the id
+ *  exists in another clinic; 404 is the safe answer). */
+async function getReportForActiveClinic(id: string) {
+  const clinicId = await getActiveClinicId();
   const report = await db.usgReport.findUnique({
     where: { id },
     include: { patient: true, images: { orderBy: { sortOrder: "asc" } } },
   });
+  if (!report || report.clinicId !== clinicId) return null;
+  return report;
+}
+
+export async function GET(_req: Request, ctx: Ctx) {
+  const guard = await requireSession();
+  if (guard) return guard;
+  const { id } = await ctx.params;
+  const report = await getReportForActiveClinic(id);
   if (!report) return Response.json({ error: "Not found" }, { status: 404 });
 
   // v6: the bill-desk order this report came from (banner, PACS pull, Form F).
@@ -48,7 +59,7 @@ export async function PUT(req: Request, ctx: Ctx) {
   const guard = await requireSession();
   if (guard) return guard;
   const { id } = await ctx.params;
-  const existing = await db.usgReport.findUnique({ where: { id }, include: { patient: true } });
+  const existing = await getReportForActiveClinic(id);
   if (!existing) return Response.json({ error: "Not found" }, { status: 404 });
   if (existing.status === "FINALIZED") {
     return Response.json({ error: "Report is finalized and locked" }, { status: 409 });
@@ -68,7 +79,8 @@ export async function PUT(req: Request, ctx: Ctx) {
       ? body.patientPhone.trim()
       : existing.patient?.phone ?? "";
   if (typeof body.patientPhone === "string" || data.patientName) {
-    data.patientId = await linkPatient(nextName, nextPhone);
+    const clinicId = await getActiveClinicId();
+    data.patientId = await linkPatient(nextName, nextPhone, clinicId);
   }
   // Scan date: back-dating is the doctor's register discipline — an explicit
   // "" clears it (falls back to finalizedAt/createdAt when printing), a
@@ -104,7 +116,7 @@ export async function DELETE(_req: Request, ctx: Ctx) {
   const guard = await requireSession();
   if (guard) return guard;
   const { id } = await ctx.params;
-  const existing = await db.usgReport.findUnique({ where: { id } });
+  const existing = await getReportForActiveClinic(id);
   if (!existing) return Response.json({ error: "Not found" }, { status: 404 });
   await db.usgReport.delete({ where: { id } });
   await audit({

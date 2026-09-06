@@ -1,6 +1,8 @@
 import { db } from "@/lib/db";
 import { normalizeBirthday } from "@/lib/usg/birthday";
 import { decryptSecret, encryptSecret, isEncryptedSecret } from "@/lib/secretCrypto";
+import { getActiveClinicId } from "@/lib/auth";
+import { ensureDefaultClinic } from "@/lib/clinic";
 
 export type HospitalSettingsRow = Awaited<ReturnType<typeof getSettings>>;
 
@@ -82,9 +84,21 @@ function effective(saved: string, envName: string, fallback = "", isUrl = false)
  *  plaintext — careApiKey is env-only (never written from the client),
  *  pinHash is already a bcrypt digest (one-way). */
 export async function getSettings() {
-  let row = await db.hospitalSettings.findUnique({ where: { id: "singleton" } });
+  // v6.10 — settings are per-clinic. The active clinic comes from the
+  // clinic-switcher cookie (defaults to "default"). The original install's
+  // "singleton" row stays as the default clinic's settings (id="default"
+  // would also work — but we keep "singleton" as the id for backward
+  // compat with existing DB rows; the clinicId column carries the link).
+  const clinicId = await getActiveClinicId();
+  // For the default clinic, use the legacy "singleton" row id (so
+  // existing installs keep working without a data migration). For new
+  // clinics, the row id = clinicId.
+  const settingsId = clinicId === "default" ? "singleton" : clinicId;
+  // Ensure the default clinic row exists (first boot).
+  if (clinicId === "default") await ensureDefaultClinic().catch(() => {});
+  let row = await db.hospitalSettings.findUnique({ where: { id: settingsId } });
   if (!row) {
-    row = await db.hospitalSettings.create({ data: { id: "singleton" } });
+    row = await db.hospitalSettings.create({ data: { id: settingsId, clinicId } });
   }
   // Transparent migration: if either secret is still legacy plaintext,
   // re-encrypt it now so the row is at-rest-encrypted within one read.
@@ -157,6 +171,8 @@ export async function updateSettings(patch: SettingsUpdate) {
     "careApiBase", "orthancUrl", "orthancUsername",
     // v6 PC-PNDT Form F fixed details
     "pcpndtCentreName", "pcpndtRegistrationNo", "pcpndtPlace",
+    // v6.10 feature toggles (per-clinic) — handled as string-checkboxes below.
+    "enableCriticalComm", "enableFollowUps", "enableAiDraft", "enableBirads", "enableDicomSr",
   ];
   const data: Record<string, string | number | boolean> = {};
   // URL-valued integration fields are normalized on save so "172.16.1.139:8888"
@@ -248,6 +264,16 @@ export async function updateSettings(patch: SettingsUpdate) {
   } else if (typeof patch.usgAutoBackup === "boolean") {
     data.usgAutoBackup = patch.usgAutoBackup;
   }
+  // v6.10 feature toggles — per-clinic, all default to true (opt-out).
+  // Same string-checkbox contract as the other toggles.
+  for (const k of ["enableCriticalComm", "enableFollowUps", "enableAiDraft", "enableBirads", "enableDicomSr"] as const) {
+    const v = patch[k];
+    if (typeof v === "string") {
+      data[k] = !/^(0|false|off|no)$/i.test(v.trim());
+    } else if (typeof v === "boolean") {
+      data[k] = v;
+    }
+  }
   // v6 integration secrets — write-only from the client. An empty string is
   // IGNORED (never clears an existing key by accident); the literal "__clear__"
   // marker removes it so Settings can offer a reset.
@@ -267,11 +293,15 @@ export async function updateSettings(patch: SettingsUpdate) {
       data[k] = trimmed;
     }
   }
-  await getSettings(); // ensure row exists
-  await db.hospitalSettings.update({ where: { id: "singleton" }, data });
+  await getSettings(); // ensure row exists (creates if missing)
+  const clinicId = await getActiveClinicId();
+  const settingsId = clinicId === "default" ? "singleton" : clinicId;
+  await db.hospitalSettings.update({ where: { id: settingsId }, data });
 }
 
 export async function setPinHash(hash: string) {
   await getSettings();
-  await db.hospitalSettings.update({ where: { id: "singleton" }, data: { pinHash: hash } });
+  const clinicId = await getActiveClinicId();
+  const settingsId = clinicId === "default" ? "singleton" : clinicId;
+  await db.hospitalSettings.update({ where: { id: settingsId }, data: { pinHash: hash } });
 }

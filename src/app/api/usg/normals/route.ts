@@ -1,4 +1,4 @@
-import { requireSession } from "@/lib/auth";
+import { requireSession, getActiveClinicId } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getStudy } from "@/lib/usg/studies";
 import { audit } from "@/lib/usg/audit";
@@ -7,17 +7,25 @@ import { audit } from "@/lib/usg/audit";
  * Normal-wording overrides (v5) — the doctor retunes any builtin organ
  * normal to her own phrasing. GET lists them, POST upserts one
  * (validated against the study/organ table), DELETE resets it to builtin.
+ *
+ * v6.10 — scoped by clinicId. The unique key is now (clinicId, studyKey,
+ * organKey) so different clinics can have different wording.
  */
 export async function GET() {
   const guard = await requireSession();
   if (guard) return guard;
-  const rows = await db.usgNormalOverride.findMany({ orderBy: { updatedAt: "desc" } });
+  const clinicId = await getActiveClinicId();
+  const rows = await db.usgNormalOverride.findMany({
+    where: { clinicId },
+    orderBy: { updatedAt: "desc" },
+  });
   return Response.json({ overrides: rows });
 }
 
 export async function POST(req: Request) {
   const guard = await requireSession();
   if (guard) return guard;
+  const clinicId = await getActiveClinicId();
   const body = await req.json().catch(() => ({}));
 
   const studyKey = String(body.studyKey ?? "").trim();
@@ -34,8 +42,8 @@ export async function POST(req: Request) {
   }
 
   const row = await db.usgNormalOverride.upsert({
-    where: { studyKey_organKey: { studyKey, organKey } },
-    create: { studyKey, organKey, text },
+    where: { clinicId_studyKey_organKey: { clinicId, studyKey, organKey } },
+    create: { clinicId, studyKey, organKey, text },
     update: { text },
   });
   await audit({
@@ -48,6 +56,7 @@ export async function POST(req: Request) {
 export async function DELETE(req: Request) {
   const guard = await requireSession();
   if (guard) return guard;
+  const clinicId = await getActiveClinicId();
   const url = new URL(req.url);
   const studyKey = url.searchParams.get("studyKey") ?? "";
   const organKey = url.searchParams.get("organKey") ?? "";
@@ -59,7 +68,7 @@ export async function DELETE(req: Request) {
   }
 
   const existing = await db.usgNormalOverride.findUnique({
-    where: { studyKey_organKey: { studyKey, organKey } },
+    where: { clinicId_studyKey_organKey: { clinicId, studyKey, organKey } },
   });
   if (existing) {
     await db.usgNormalOverride.delete({ where: { id: existing.id } });

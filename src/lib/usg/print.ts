@@ -79,6 +79,13 @@ export type UsgPrintSettings = {
   usgAddressPosition?: string;
   /** v6.7 — font family: "sans-serif" (default) | "serif" | "system". */
   usgPrintFontFamily?: string;
+  // ── v6.10 feature toggles (per-clinic) ──────────────────────────
+  // Optional — when undefined, the feature is treated as enabled.
+  enableCriticalComm?: boolean;
+  enableFollowUps?: boolean;
+  enableAiDraft?: boolean;
+  enableBirads?: boolean;
+  enableDicomSr?: boolean;
 };
 
 export type UsgPrintPatient = {

@@ -145,7 +145,7 @@ export type FullRestoreResult = {
 };
 
 /** Apply a full-clinic backup (idempotent disaster recovery). */
-export async function applyFullRestore(raw: unknown): Promise<FullRestoreResult> {
+export async function applyFullRestore(raw: unknown, clinicId: string = "default"): Promise<FullRestoreResult> {
   const backup = parseFullBackup(raw);
   const result: FullRestoreResult = {
     settingsRestored: 0,
@@ -175,16 +175,17 @@ export async function applyFullRestore(raw: unknown): Promise<FullRestoreResult>
   }
   for (const n of asPersonalisation.normalOverrides ?? []) {
     await db.usgNormalOverride.upsert({
-      where: { studyKey_organKey: { studyKey: n.studyKey, organKey: n.organKey } },
-      create: { studyKey: n.studyKey, organKey: n.organKey, text: n.text },
+      where: { clinicId_studyKey_organKey: { clinicId, studyKey: n.studyKey, organKey: n.organKey } },
+      create: { clinicId, studyKey: n.studyKey, organKey: n.organKey, text: n.text },
       update: { text: n.text },
     }).catch(() => undefined);
   }
 
   for (const c of asPersonalisation.customPathologies) {
     await db.usgPathology.upsert({
-      where: { organKey_label: { organKey: c.organKey, label: c.label } },
+      where: { clinicId_organKey_label: { clinicId, organKey: c.organKey, label: c.label } },
       create: {
+        clinicId,
         organKey: c.organKey,
         label: c.label,
         findingText: c.findingText,

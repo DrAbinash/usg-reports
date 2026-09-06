@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import { requireSession } from "@/lib/auth";
+import { requireSession, getActiveClinicId } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getStudy } from "@/lib/usg/studies";
 import { normaliseState } from "@/lib/usg/composer";
@@ -18,6 +18,7 @@ function escapeLike(token: string): string {
 export async function GET(req: Request) {
   const guard = await requireSession();
   if (guard) return guard;
+  const clinicId = await getActiveClinicId();
   const url = new URL(req.url);
   const q = (url.searchParams.get("q") ?? "").trim();
   const status = url.searchParams.get("status") ?? "";
@@ -29,11 +30,14 @@ export async function GET(req: Request) {
     // is case-insensitive for ASCII by default. The search fields
     // (patientName, studyTitle, referredBy, impression) are denormalized
     // onto UsgReport itself — no JOIN, no `include: { patient: true }`.
+    // v6.10 — scoped by clinicId so a multi-clinic install never leaks
+    // cross-clinic patient names in search.
     const token = `%${escapeLike(q)}%`;
     const rows = await db.$queryRaw<Array<Record<string, unknown>>>(
       statusFilter
         ? Prisma.sql`SELECT * FROM UsgReport
-            WHERE (patientName LIKE ${token} ESCAPE '\\'
+            WHERE clinicId = ${clinicId}
+              AND (patientName LIKE ${token} ESCAPE '\\'
                 OR studyTitle LIKE ${token} ESCAPE '\\'
                 OR referredBy LIKE ${token} ESCAPE '\\'
                 OR impression LIKE ${token} ESCAPE '\\')
@@ -41,17 +45,18 @@ export async function GET(req: Request) {
             ORDER BY createdAt DESC
             LIMIT 500`
         : Prisma.sql`SELECT * FROM UsgReport
-            WHERE patientName LIKE ${token} ESCAPE '\\'
-               OR studyTitle LIKE ${token} ESCAPE '\\'
-               OR referredBy LIKE ${token} ESCAPE '\\'
-               OR impression LIKE ${token} ESCAPE '\\'
+            WHERE clinicId = ${clinicId}
+              AND (patientName LIKE ${token} ESCAPE '\\'
+                OR studyTitle LIKE ${token} ESCAPE '\\'
+                OR referredBy LIKE ${token} ESCAPE '\\'
+                OR impression LIKE ${token} ESCAPE '\\')
             ORDER BY createdAt DESC
             LIMIT 500`,
     );
     return Response.json({ reports: rows });
   }
 
-  const where: Prisma.UsgReportWhereInput = {};
+  const where: Prisma.UsgReportWhereInput = { clinicId };
   if (statusFilter) where.status = statusFilter;
   const reports = await db.usgReport.findMany({
     where,
@@ -65,6 +70,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const guard = await requireSession();
   if (guard) return guard;
+  const clinicId = await getActiveClinicId();
   const body = await req.json().catch(() => ({}));
 
   const patientName = String(body.patientName ?? "").trim();
@@ -79,11 +85,13 @@ export async function POST(req: Request) {
   const cols = await resolveColumns(JSON.stringify(state), technique);
 
   // Registry: link (or create) the patient row so history connects.
+  // v6.10 — linkPatient now scopes by clinicId (see patients.ts).
   const patientPhone = String(body.patientPhone ?? "").trim();
-  const patientId = await linkPatient(patientName, patientPhone);
+  const patientId = await linkPatient(patientName, patientPhone, clinicId);
 
   const report = await db.usgReport.create({
     data: {
+      clinicId,
       patientName,
       patientAge: String(body.patientAge ?? "").trim(),
       patientSex: body.patientSex === "M" || body.patientSex === "CHILD" || body.patientSex === "F" ? body.patientSex : "F",

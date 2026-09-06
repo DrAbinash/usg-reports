@@ -1,4 +1,4 @@
-import { requireSession } from "@/lib/auth";
+import { requireSession, getActiveClinicId } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/usg/audit";
 import { loadAllPathologies } from "@/lib/usg/server";
@@ -13,6 +13,7 @@ export async function GET() {
 export async function POST(req: Request) {
   const guard = await requireSession();
   if (guard) return guard;
+  const clinicId = await getActiveClinicId();
   const body = await req.json().catch(() => ({}));
   const organKey = String(body.organKey ?? "").trim();
   const label = String(body.label ?? "").trim();
@@ -44,7 +45,7 @@ export async function POST(req: Request) {
   }
 
   const existing = await db.usgPathology.findFirst({
-    where: { organKey, label },
+    where: { clinicId, organKey, label },
   });
   if (existing) {
     return Response.json({ error: "A custom pathology with this label already exists" }, { status: 409 });
@@ -52,6 +53,7 @@ export async function POST(req: Request) {
 
   const row = await db.usgPathology.create({
     data: {
+      clinicId,
       organKey,
       label,
       findingText,

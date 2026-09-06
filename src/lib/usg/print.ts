@@ -102,7 +102,7 @@ export function formatUsgSerial(n: number): string {
 function esc(s: string): string {
   return String(s ?? "")
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 /** A measurement line "Label : value ( Normal ... )" → table row HTML. */

@@ -1063,6 +1063,198 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         )}
       </div>
 
+      {/* ══ BODY: organ cards + impression + preview ════════════════════ */}
+      <div className="grid min-h-0 flex-1 gap-4 overflow-hidden p-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,460px)]">
+        {/* Left column: organ cards + images */}
+        <div className="studio-scroll min-h-0 space-y-3 overflow-y-auto pr-1">
+          {study.organs.map((def) => {
+            const st = state.organs.find((o) => o.organ === def.key);
+            if (!st) return null;
+            const overrideKey = normalOverrideKey(studyKey, def.key);
+            const override = normalOverrides?.[overrideKey] ?? null;
+            return (
+              <UsgOrganCard
+                key={def.key}
+                def={def}
+                state={st}
+                pathologies={pathologiesForOrgan(pathologies, def.key)}
+                normalOverride={override}
+                onSaveNormal={(text) => saveNormalOverride(def.key, text)}
+                onResetNormal={() => resetNormalOverride(def.key)}
+                onToggle={(k) => setState((s) => applyPathologies(s, def.key, k ? [k] : [], lookup, normalOverrides))}
+                onVar={(k, v) => setState((s) => setOrganVar(s, def.key, k, v))}
+                onText={(t) => setState((s) => setOrganText(s, def.key, t))}
+                onAddCustom={(organ) => setDialogOrgan(organ)}
+              />
+            );
+          })}
+
+          <UsgImagesCard
+            images={images}
+            pending={pendingImages}
+            readOnly={isFinal}
+            onAdd={addImage}
+            onCaption={setCaption}
+            onRemove={removeImage}
+            onMove={moveImage}
+            onPickDicom={orderUid ? () => setDicomOpen(true) : undefined}
+            pacsLinked={!!orderUid}
+            onOcrMeasurements={(vars) => {
+              let applied = 0;
+              setState((s) => {
+                let next = s;
+                for (const [organ, kv] of Object.entries(vars)) {
+                  for (const [k, v] of Object.entries(kv)) {
+                    if (!v) continue;
+                    next = setOrganVar(next, organ, k, v);
+                    applied++;
+                  }
+                }
+                return next;
+              });
+              if (applied > 0) {
+                toast.success(`OCR filled ${applied} measurement slot(s) — verify values`);
+              }
+            }}
+          />
+        </div>
+
+        {/* Right rail: impression + live preview */}
+        <div className="studio-scroll min-h-0 space-y-3 overflow-y-auto lg:sticky lg:top-0 lg:self-start">
+          <div className="rounded-xl border border-border bg-card p-3.5 shadow-sm">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-[12px] font-bold tracking-wide">IMPRESSION</span>
+              {impressionManual ? (
+                <button
+                  className="text-[10px] font-bold text-rose-500 underline"
+                  onClick={() => {
+                    setImpressionManual(false);
+                    setState((s) => ({ ...s, impressionOverride: null }));
+                  }}
+                >
+                  auto
+                </button>
+              ) : null}
+            </div>
+            <Textarea
+              value={impressionManual ? (state.impressionOverride ?? "") : resolved.impression.join("\n")}
+              onChange={(e) => {
+                setImpressionManual(true);
+                setState((s) => ({ ...s, impressionOverride: e.target.value }));
+              }}
+              disabled={isFinal}
+              rows={4}
+              placeholder="Impression auto-generates from findings — type to override"
+              className="resize-y text-[12px] leading-relaxed"
+            />
+            {resolved.suggestions?.length ? (
+              <div className="mt-2 space-y-0.5">
+                <span className="text-[9px] font-bold uppercase text-faint">Suggestions</span>
+                {resolved.suggestions.map((s, i) => (
+                  <p key={i} className="text-[10.5px] text-muted-foreground">• {s}</p>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          {/* Declaration line (if set in settings) */}
+          {settings.usgDeclarationLine?.trim() && !isFinal ? (
+            <div className="rounded-lg border border-rose-200 bg-rose-50/50 p-2.5 text-[10px] text-rose-800">
+              {settings.usgDeclarationLine}
+            </div>
+          ) : null}
+
+          {/* Live preview */}
+          <div className="rounded-xl border border-border bg-card p-3.5 shadow-sm">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-[12px] font-bold tracking-wide">Live preview — {paperLabel}</span>
+              {!isFinal ? <span className="text-[9px] font-bold text-rose-500">PROVISIONAL</span> : null}
+            </div>
+            <iframe
+              title="USG report preview"
+              srcDoc={previewHtml}
+              className="h-[400px] w-full rounded-lg border border-border bg-white"
+              sandbox="allow-same-origin"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Print iframe — hidden, used for printing drafts */}
+      <iframe ref={printRef} title="print" className="hidden" />
+
+      {/* ══ DIALOGS ═════════════════════════════════════════════════════ */}
+      <UsgDicomPicker
+        open={dicomOpen}
+        reportId={savedIdRef.current ?? report?.id ?? null}
+        studyInstanceUid={orderUid ?? null}
+        onClose={() => setDicomOpen(false)}
+        onAdded={() => { /* refresh images */ }}
+      />
+
+      {formFDefaults ? (
+        <UsgFormFDialog
+          open={formFOpen}
+          onClose={() => setFormFOpen(false)}
+          defaults={formFDefaults}
+          order={order as FormFOrderLite | undefined}
+          report={report ?? undefined}
+          onSaved={onSaved}
+        />
+      ) : null}
+
+      <UsgPathologyDialog
+        open={dialogOrgan !== null}
+        organKey={dialogOrgan ?? ""}
+        organLabel={study.organs.find((o) => o.key === dialogOrgan)?.label ?? ""}
+        editing={null}
+        onClose={() => setDialogOrgan(null)}
+        onSaved={onSaved}
+      />
+
+      <UsgStudyPicker
+        open={pickerOpen}
+        currentKey={studyKey}
+        onPick={pickStudy}
+        onClose={() => setPickerOpen(false)}
+      />
+
+      {/* Pre-finalize quality checklist */}
+      <UsgQualityChecklist
+        open={qualityOpen}
+        onOpenChange={setQualityOpen}
+        state={state}
+        resolved={resolved}
+        onForceFinalize={() => void persist("finalize")}
+      />
+
+      {/* Measurement review dialog (Pull from machine) */}
+      {reviewSrResult && (
+        <UsgMeasurementReviewDialog
+          open={reviewOpen}
+          onOpenChange={setReviewOpen}
+          srResult={reviewSrResult}
+          srMeasurements={reviewSrMeasurements}
+          onAccept={(vars) => {
+            let applied = 0;
+            setState((s) => {
+              let next = s;
+              for (const [organ, kv] of Object.entries(vars)) {
+                for (const [k, v] of Object.entries(kv)) {
+                  if (!v) continue;
+                  next = setOrganVar(next, organ, k, v);
+                  applied++;
+                }
+              }
+              return next;
+            });
+            if (applied > 0) {
+              toast.success(`${applied} measurement(s) filled from machine SR`);
+            }
+          }}
+        />
+      )}
+
     </div>
   );
 }

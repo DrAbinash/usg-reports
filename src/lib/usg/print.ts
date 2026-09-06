@@ -105,6 +105,24 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
+/** Defense-in-depth URL sanitizer for <img src=...> attributes.
+ *  The esc() helper already neutralizes attribute-breakout characters,
+ *  so a `javascript:` URL stored as `src="javascript:alert(1)"` would
+ *  render as inert text in modern browsers — but if the value ever
+ *  leaks into an <a href>, an inline style, or a non-escaped context,
+ *  the scheme could execute. Reject anything that isn't http(s):, data:
+ *  (for embedded images), or a relative URL. Returns "" for unsafe. */
+function safeImgUrl(raw: string | undefined | null): string {
+  const v = (raw ?? "").trim();
+  if (!v) return "";
+  // Relative URL — always fine.
+  if (/^\/[^/].*$/.test(v) || v.startsWith("./") || v.startsWith("../")) return v;
+  // Allow only http(s): and data:image/...;base64,...
+  if (/^https?:\/\//i.test(v)) return v;
+  if (/^data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/i.test(v)) return v;
+  return "";
+}
+
 /** A measurement line "Label : value ( Normal ... )" → table row HTML. */
 function measurementRow(line: string): string {
   const idx = line.indexOf(":");
@@ -511,8 +529,9 @@ export function buildUsgReportHtml(
     tuningCss(settings, a5) +
     (provisional ? (classic ? PROVISIONAL_CSS_CLASSIC : PROVISIONAL_CSS) : "");
 
-  const logo = settings.logoUrl
-    ? `<img src="${esc(settings.logoUrl)}" alt="logo" class="logo" />`
+  const safeLogo = safeImgUrl(settings.logoUrl);
+  const logo = safeLogo
+    ? `<img src="${esc(safeLogo)}" alt="logo" class="logo" />`
     : `<div class="logo logo-fallback">USG</div>`;
 
   const machineLine =
@@ -528,8 +547,9 @@ export function buildUsgReportHtml(
 
   // Scanned signature replaces the empty signature line; the name prints
   // under the image exactly as before.
-  const sigVisual = settings.usgSignatureUrl?.trim()
-    ? `<img class="sig-img" src="${esc(settings.usgSignatureUrl.trim())}" alt="signature" />`
+  const safeSig = safeImgUrl(settings.usgSignatureUrl);
+  const sigVisual = safeSig
+    ? `<img class="sig-img" src="${esc(safeSig)}" alt="signature" />`
     : `<div class="line"></div>`;
 
   const sectionsHtml = renderSections(resolved);
@@ -908,8 +928,9 @@ function buildSidebarReportHtml(
   const showTechnique = settings.usgPrintShowTechnique !== false && !!resolved.technique?.trim();
   const showThanks = settings.usgPrintShowThanks !== false;
 
-  const logo = settings.logoUrl
-    ? `<img src="${esc(settings.logoUrl)}" alt="logo" />`
+  const safeLogo = safeImgUrl(settings.logoUrl);
+  const logo = safeLogo
+    ? `<img src="${esc(safeLogo)}" alt="logo" />`
     : `<div class="logo-fallback">USG</div>`;
 
   const contactLines = [
@@ -958,8 +979,9 @@ function buildSidebarReportHtml(
     : "";
 
   // Signature
-  const sigVisual = settings.usgSignatureUrl?.trim()
-    ? `<img class="sig-img" src="${esc(settings.usgSignatureUrl.trim())}" alt="signature" />`
+  const safeSig = safeImgUrl(settings.usgSignatureUrl);
+  const sigVisual = safeSig
+    ? `<img class="sig-img" src="${esc(safeSig)}" alt="signature" />`
     : "";
 
   // Footer

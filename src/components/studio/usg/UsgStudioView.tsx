@@ -11,6 +11,16 @@ import { useStudio } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { BookOpen, Download, FileText, Loader2, MessageCircle, Phone, Plus, Printer, RotateCcw, Search, Stethoscope, Trash2, Users, Waves, Repeat, History } from "lucide-react";
@@ -24,31 +34,12 @@ import type { DiffSource } from "./UsgDiffPanel";
 import { shareReportPdf } from "./sharePdf";
 import { UsgPacsReturnButton } from "./UsgPacsReturnButton";
 
-const EMPTY_SETTINGS: UsgPrintSettings = {
-  appTitle: "CARE Reporting Studio",
-  hospitalName: "",
-  addressLine: "",
-  phone: "",
-  email: "",
-  logoUrl: "",
-  footerMessage: "",
-  usgDoctorName: "",
-  usgDoctorQual: "",
-  usgDoctorRegNo: "",
-  usgMachineLine: "This Scan has been proudly done on GE Voluson Pro 4-D USG Machine",
-  usgShowMachine: true,
-  usgFooterLine: "Kindly co-relate with clinico-pathological findings.",
-  usgDeclarationLine: "",
-  usgPrintStyle: "premium",
-  usgPrintCompact: false,
-  usgPrintPaper: "a4",
-  usgSignatureUrl: "",
-  usgPrintFontSize: 10,
-  usgPrintLineHeight: 1.4,
-  usgPrintSpacing: "tight",
-  usgPrintShowTechnique: true,
-  usgPrintShowThanks: true,
-};
+// Audit #15 — the prior `EMPTY_SETTINGS` constant duplicated the Prisma
+// schema defaults in two places (DB + frontend), and a divergence would
+// silently corrupt the first paint. The studio now waits for the
+// /api/settings fetch to resolve before rendering the composer; null
+// means "not yet loaded", and the loader below renders until then.
+// All defaults live in exactly one place: prisma/schema.prisma.
 
 type PatientRow = {
   id: string;
@@ -68,7 +59,7 @@ type ComposerPrefill = {
 
 export function UsgStudioView() {
   const [pathologies, setPathologies] = useState<UsgPathologyDef[]>([]);
-  const [settings, setSettings] = useState<UsgPrintSettings>(EMPTY_SETTINGS);
+  const [settings, setSettings] = useState<UsgPrintSettings | null>(null);
   const [normalOverrides, setNormalOverrides] = useState<NormalOverrides>({});
   const [reports, setReports] = useState<UsgReportRow[]>([]);
   const [query, setQuery] = useState("");
@@ -93,6 +84,12 @@ export function UsgStudioView() {
   const [patientDetail, setPatientDetail] = useState<
     (PatientRow & { reports: UsgReportRow[] }) | null
   >(null);
+
+  // Audit #14 — replace the synchronous window.confirm() in del() with a
+  // proper AlertDialog that supports a loading state. The old path blocked
+  // the main thread and gave no feedback during the network round-trip.
+  const [deleteTarget, setDeleteTarget] = useState<UsgReportRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const loadAll = useCallback(async () => {
     const [pRes, sRes, rRes, nRes] = await Promise.all([
@@ -227,15 +224,32 @@ export function UsgStudioView() {
     }
   };
 
-  const del = async (row: UsgReportRow) => {
-    if (!confirm(`Delete ${row.patientName}'s USG report? This cannot be undone.`)) return;
-    const res = await fetch(`/api/usg/reports/${row.id}`, { method: "DELETE" });
-    if (res.ok) {
-      toast.success("Report deleted");
-      refreshReports();
-      if (patientDetail) void openPatient(patientDetail.id, true);
-    } else {
-      toast.error("Delete failed");
+  const del = (row: UsgReportRow) => {
+    // Open the AlertDialog (see render below) — actual deletion runs in
+    // confirmDelete() so we can show a loading spinner on the action button
+    // and keep the dialog dismissable until the network call completes.
+    setDeleteTarget(row);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/usg/reports/${deleteTarget.id}`, { method: "DELETE" });
+      if (res.ok) {
+        toast.success("Report deleted");
+        refreshReports();
+        if (patientDetail) void openPatient(patientDetail.id, true);
+      } else if (res.status === 409) {
+        toast.error("Finalized reports cannot be deleted via this action.");
+      } else {
+        toast.error(`Delete failed (${res.status})`);
+      }
+    } catch (err) {
+      toast.error(`Delete failed — ${(err as Error)?.message ?? "network error"}`);
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
     }
   };
 
@@ -361,6 +375,17 @@ export function UsgStudioView() {
   }
 
   if (composerMode) {
+    if (!settings) {
+      // Audit #15 — the studio cannot render the composer without settings
+      // (the live preview needs the letterhead for first paint). Show a
+      // minimal loader instead of a flash of unstyled/empty preview.
+      return (
+        <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          Loading studio…
+        </div>
+      );
+    }
     return (
       <div className="h-full">
         <UsgComposer
@@ -513,8 +538,17 @@ export function UsgStudioView() {
               filteredPatients.map((p) => (
                 <div
                   key={p.id}
-                  className="group flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-card p-3 shadow-sm transition-colors hover:border-rose-200 hover:shadow"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Open patient ${p.name}${p.phone ? `, phone ${p.phone}` : ""}`}
+                  className="group flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-card p-3 shadow-sm transition-colors hover:border-rose-200 hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:ring-offset-2"
                   onClick={() => openPatient(p.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      openPatient(p.id);
+                    }
+                  }}
                 >
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-rose-50 text-[11px] font-bold text-rose-700">
                     {p.name.slice(0, 2).toUpperCase()}
@@ -619,6 +653,41 @@ export function UsgStudioView() {
       )}
 
       {registerHtml ? <RegisterOverlay html={registerHtml} onClose={() => setRegisterHtml(null)} /> : null}
+
+      {/* Audit #14 — proper delete confirmation with loading state.
+          Replaces the synchronous window.confirm() that blocked the
+          main thread and gave no feedback during the network round-trip. */}
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!deleting) setDeleteTarget(open ? deleteTarget : null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this USG report?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget
+                ? `${deleteTarget.patientName} — ${deleteTarget.studyTitle || "USG study"}${deleteTarget.status === "FINALIZED" ? " (FINALIZED)" : ""}. This cannot be undone.`
+                : "This cannot be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void confirmDelete();
+              }}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+              {deleting ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -637,8 +706,17 @@ function ReportCard({
 }) {
   return (
     <div
-      className="group flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-card p-3 shadow-sm transition-colors hover:border-rose-200 hover:shadow"
+      role="button"
+      tabIndex={0}
+      aria-label={`Open ${r.patientName}'s USG report${r.studyTitle ? ` — ${r.studyTitle}` : ""}`}
+      className="group flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-card p-3 shadow-sm transition-colors hover:border-rose-200 hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:ring-offset-2"
       onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
     >
       <div
         className={cn(

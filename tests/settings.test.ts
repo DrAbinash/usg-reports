@@ -174,3 +174,48 @@ describe("untrusted / legacy fields can never be written (v4 USG-only guard)", (
     expect((await getSettings()).pinHash).toBe("hash-2");
   });
 });
+
+describe("v6.8 audit #5 — at-rest secret encryption", () => {
+  it("encrypts orthancPassword and geminiApiKey at rest (round-trip transparent)", async () => {
+    await updateSettings({
+      orthancPassword: "super-secret-pw",
+      geminiApiKey: "AIzaSy-test-key",
+    });
+    // Read the row directly from the DB (bypassing the decrypt layer) —
+    // the value MUST be encrypted (start with v1:) and NOT plaintext.
+    const row = await db.hospitalSettings.findUnique({ where: { id: "singleton" } });
+    expect(row?.orthancPassword).toMatch(/^v1:/);
+    expect(row?.orthancPassword).not.toContain("super-secret-pw");
+    expect(row?.geminiApiKey).toMatch(/^v1:/);
+    expect(row?.geminiApiKey).not.toContain("AIzaSy-test-key");
+
+    // The public getSettings() path decrypts transparently.
+    const s = await getSettings();
+    expect(s.orthancPassword).toBe("super-secret-pw");
+    expect(s.geminiApiKey).toBe("AIzaSy-test-key");
+  });
+
+  it("reads legacy plaintext rows without breaking (transparent migration)", async () => {
+    // Simulate a pre-v6.8 row that stored the secret in plaintext.
+    await db.hospitalSettings.upsert({
+      where: { id: "singleton" },
+      update: { orthancPassword: "legacy-plaintext-pw", geminiApiKey: "legacy-key" },
+      create: { id: "singleton", orthancPassword: "legacy-plaintext-pw", geminiApiKey: "legacy-key" },
+    });
+    const s = await getSettings();
+    expect(s.orthancPassword).toBe("legacy-plaintext-pw");
+    expect(s.geminiApiKey).toBe("legacy-key");
+    // The read should have transparently re-encrypted at rest.
+    const row = await db.hospitalSettings.findUnique({ where: { id: "singleton" } });
+    expect(row?.orthancPassword).toMatch(/^v1:/);
+    expect(row?.geminiApiKey).toMatch(/^v1:/);
+  });
+
+  it("__clear__ marker removes the secret", async () => {
+    await updateSettings({ orthancPassword: "to-be-cleared" });
+    expect((await getSettings()).orthancPassword).toBe("to-be-cleared");
+    await updateSettings({ orthancPassword: "__clear__" });
+    // null vs "" — both mean "absent". Use ?? to normalize.
+    expect((await getSettings()).orthancPassword ?? "").toBe("");
+  });
+});

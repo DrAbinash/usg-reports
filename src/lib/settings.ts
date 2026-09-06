@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { normalizeBirthday } from "@/lib/usg/birthday";
+import { decryptSecret, encryptSecret, isEncryptedSecret } from "@/lib/secretCrypto";
 
 export type HospitalSettingsRow = Awaited<ReturnType<typeof getSettings>>;
 
@@ -25,10 +26,20 @@ export type HospitalSettingsRow = Awaited<ReturnType<typeof getSettings>>;
  *
  * Secrets are NEVER hardcoded — the API key arrives via CARE_API_KEY only.
  * Set INTEGRATION_DEFAULTS=off in .env to keep blanks blank.
+ *
+ * v6.8: the LAN host (was hardcoded `172.16.1.139`) is now read from
+ * CLINIC_LAN_HOST so a redeploy to a different clinic doesn't silently
+ * point at the wrong server. The default keeps the original clinic's IP
+ * so existing deploys stay working.
  */
+const CLINIC_LAN_HOST = (() => {
+  const v = (process.env.CLINIC_LAN_HOST ?? "").trim();
+  return v || "172.16.1.139";
+})();
+
 const LAN_DEFAULTS = {
-  careApiBase: "http://172.16.1.139:8888", // CARE ERP  (care-api container)
-  orthancUrl: "http://172.16.1.139:8042",  // Orthanc   (care-pacs compose)
+  careApiBase: `http://${CLINIC_LAN_HOST}:8888`, // CARE ERP  (care-api container)
+  orthancUrl: `http://${CLINIC_LAN_HOST}:8042`,  // Orthanc   (care-pacs compose)
 } as const;
 
 /** Bare LAN addresses like 172.16.1.139:8888 are how humans type — make
@@ -62,22 +73,50 @@ function effective(saved: string, envName: string, fallback = "", isUrl = false)
   return fix(envOverride(envName) || fallback);
 }
 
-/** Get (or lazily create) the singleton settings row, defaults applied. */
+/** Get (or lazily create) the singleton settings row, defaults applied.
+ *
+ *  v6.8 — `orthancPassword` and `geminiApiKey` are now AES-256-GCM
+ *  encrypted at rest (audit #5). On read we decrypt transparently; rows
+ *  written before this code shipped (plaintext) are read verbatim and
+ *  get re-encrypted on the next save. careApiKey and pinHash stay
+ *  plaintext — careApiKey is env-only (never written from the client),
+ *  pinHash is already a bcrypt digest (one-way). */
 export async function getSettings() {
   let row = await db.hospitalSettings.findUnique({ where: { id: "singleton" } });
   if (!row) {
     row = await db.hospitalSettings.create({ data: { id: "singleton" } });
   }
+  // Transparent migration: if either secret is still legacy plaintext,
+  // re-encrypt it now so the row is at-rest-encrypted within one read.
+  // The decrypt below still returns the plaintext value either way.
+  await migrateLegacySecrets(row).catch(() => {
+    // Migration failure must NEVER break a read — the doctor still needs
+    // to use the studio. The next save will retry.
+  });
   return {
     ...row,
     careApiBase: effective(row.careApiBase, "CARE_API_BASE", LAN_DEFAULTS.careApiBase, true),
     careApiKey: effective(row.careApiKey ?? "", "CARE_API_KEY"), // secret: env only, never a code default, NEVER normalized
     orthancUrl: effective(row.orthancUrl, "ORTHANC_URL", LAN_DEFAULTS.orthancUrl, true),
     orthancUsername: effective(row.orthancUsername, "ORTHANC_USERNAME"),
-    // Passwords are stored verbatim — never trimmed.
-    orthancPassword: row.orthancPassword || (defaultsOff() ? "" : envOverride("ORTHANC_PASSWORD")) || null,
-    geminiApiKey: row.geminiApiKey || (defaultsOff() ? "" : envOverride("GEMINI_API_KEY")) || null,
+    // Passwords decrypt on read; legacy plaintext falls through transparently.
+    orthancPassword: decryptSecret(row.orthancPassword) || (defaultsOff() ? "" : envOverride("ORTHANC_PASSWORD")) || null,
+    geminiApiKey: decryptSecret(row.geminiApiKey) || (defaultsOff() ? "" : envOverride("GEMINI_API_KEY")) || null,
   };
+}
+
+/** Re-encrypt the two at-rest secrets if they are still stored as legacy
+ *  plaintext. Idempotent — already-encrypted rows are left alone. */
+async function migrateLegacySecrets(row: { id: string; orthancPassword: string | null; geminiApiKey: string | null }) {
+  const data: Record<string, string | null> = {};
+  if (row.orthancPassword && !isEncryptedSecret(row.orthancPassword)) {
+    data.orthancPassword = encryptSecret(row.orthancPassword);
+  }
+  if (row.geminiApiKey && !isEncryptedSecret(row.geminiApiKey)) {
+    data.geminiApiKey = encryptSecret(row.geminiApiKey);
+  }
+  if (Object.keys(data).length === 0) return;
+  await db.hospitalSettings.update({ where: { id: row.id }, data });
 }
 
 const SECRET_FIELDS = ["pinHash", "careApiKey", "orthancPassword", "geminiApiKey"] as const;
@@ -212,6 +251,9 @@ export async function updateSettings(patch: SettingsUpdate) {
   // v6 integration secrets — write-only from the client. An empty string is
   // IGNORED (never clears an existing key by accident); the literal "__clear__"
   // marker removes it so Settings can offer a reset.
+  // careApiKey + pinHash: stored verbatim (careApiKey is env-only, pinHash is a
+  //   one-way bcrypt digest). orthancPassword + geminiApiKey: AES-256-GCM
+  //   encrypted at rest (audit #5).
   for (const k of SECRET_FIELDS) {
     if (k === "pinHash") continue; // PIN has its own dedicated flow
     const v = patch[k];
@@ -219,7 +261,11 @@ export async function updateSettings(patch: SettingsUpdate) {
     const trimmed = v.trim();
     if (trimmed === "") continue;
     if (trimmed === "__clear__") { data[k] = ""; continue; }
-    data[k] = trimmed;
+    if (k === "orthancPassword" || k === "geminiApiKey") {
+      data[k] = encryptSecret(trimmed);
+    } else {
+      data[k] = trimmed;
+    }
   }
   await getSettings(); // ensure row exists
   await db.hospitalSettings.update({ where: { id: "singleton" }, data });

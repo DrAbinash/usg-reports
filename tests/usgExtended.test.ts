@@ -6,7 +6,7 @@
  */
 import { describe, expect, test } from "vitest";
 import { initialState, getStudy, USG_STUDIES } from "@/lib/usg/studies";
-import { USG_PATHOLOGIES, USG_PATHOLOGIES_ALL } from "@/lib/usg/pathologies";
+import { USG_PATHOLOGIES, USG_PATHOLOGIES_ALL, getPathology, getPathologyAny } from "@/lib/usg/pathologies";
 import { USG_PATHOLOGIES_EXTRA } from "@/lib/usg/pathologies-extra";
 import { ORGAN_SIDE } from "@/lib/usg/composer";
 import {
@@ -51,6 +51,27 @@ describe("Extended pathology catalog integrity", () => {
     const keys = USG_PATHOLOGIES_ALL.map((p) => p.key);
     expect(new Set(keys).size).toBe(keys.length);
     expect(USG_PATHOLOGIES_ALL.length).toBe(USG_PATHOLOGIES.length + USG_PATHOLOGIES_EXTRA.length);
+  });
+
+  // Audit #10 — Map-based lookups must return the same value as the prior
+  // .find() scan, including for keys that exist only in one catalog half.
+  test("getPathology / getPathologyAny / getStudy are O(1) and correct", () => {
+    for (const p of USG_PATHOLOGIES) {
+      expect(getPathology(p.key)?.key).toBe(p.key);
+      expect(getPathologyAny(p.key)?.key).toBe(p.key);
+    }
+    for (const p of USG_PATHOLOGIES_EXTRA) {
+      expect(getPathologyAny(p.key)?.key).toBe(p.key);
+      // Part-2 keys are NOT in getPathology (part-1 only).
+      expect(getPathology(p.key)).toBeUndefined();
+    }
+    for (const s of USG_STUDIES) {
+      expect(getStudy(s.key)?.key).toBe(s.key);
+    }
+    // Unknown keys return undefined — no exceptions.
+    expect(getPathology("__missing__")).toBeUndefined();
+    expect(getPathologyAny("__missing__")).toBeUndefined();
+    expect(getStudy("__missing__")).toBeUndefined();
   });
 
   test("every extra pathology's organ maps onto a real organ card (direct or side-shared)", () => {

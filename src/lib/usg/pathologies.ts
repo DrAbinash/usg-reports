@@ -672,11 +672,6 @@ export const USG_PATHOLOGIES: UsgPathologyDef[] = [
   }),
 ];
 
-/** Quick lookup by key. */
-export function getPathology(key: string): UsgPathologyDef | undefined {
-  return USG_PATHOLOGIES.find((p) => p.key === key);
-}
-
 // Part 2 catalog (thyroid, breast, scrotum, echo, doppler, chest, cranium,
 // orbit, swelling, TVS/TRUS extras) — merged so every consumer sees one set.
 import { USG_PATHOLOGIES_EXTRA } from "./pathologies-extra";
@@ -684,7 +679,22 @@ import { USG_PATHOLOGIES_EXTRA } from "./pathologies-extra";
 /** The complete builtin catalog: abdomen/obstetric + extended studies. */
 export const USG_PATHOLOGIES_ALL: UsgPathologyDef[] = [...USG_PATHOLOGIES, ...USG_PATHOLOGIES_EXTRA];
 
+/** Quick lookup by key. O(1) via a Map built once at module load — every
+ *  call site that does getPathology(key) was a linear scan over ~80
+ *  entries before. */
+const PATHOLOGY_MAP: ReadonlyMap<string, UsgPathologyDef> = new Map(
+  USG_PATHOLOGIES.map((p) => [p.key, p]),
+);
+const PATHOLOGY_MAP_ALL: ReadonlyMap<string, UsgPathologyDef> = new Map(
+  USG_PATHOLOGIES_ALL.map((p) => [p.key, p]),
+);
+
+/** Quick lookup by key. */
+export function getPathology(key: string): UsgPathologyDef | undefined {
+  return PATHOLOGY_MAP.get(key);
+}
+
 /** Quick lookup by key across both parts. */
 export function getPathologyAny(key: string): UsgPathologyDef | undefined {
-  return USG_PATHOLOGIES_ALL.find((p) => p.key === key);
+  return PATHOLOGY_MAP_ALL.get(key);
 }

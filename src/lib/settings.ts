@@ -141,7 +141,7 @@ export async function getMaskedSettings(): Promise<MaskedSettings> {
   };
 }
 
-type SettingsUpdate = Partial<Record<string, string | boolean>>;
+type SettingsUpdate = Partial<Record<string, string | boolean | number>>;
 
 /** Apply a settings update. */
 export async function updateSettings(patch: SettingsUpdate) {

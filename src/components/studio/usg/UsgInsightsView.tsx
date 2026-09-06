@@ -3,6 +3,10 @@
  * Insights — the practice at a glance (v5 phase 8): monthly scan volume,
  * study mix, most frequent pathologies and top referral sources. Counts
  * only — no patient names anywhere on this screen.
+ *
+ * v6.9 — the previously-orphaned UsgDailySummary card now mounts at the
+ * top of this view, showing today's finalized count, study mix, top
+ * findings, and (when pricing is configured) revenue estimate.
  */
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -10,6 +14,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { BarChart3, Loader2, RefreshCw, Stethoscope, TrendingUp, UserRound, Activity } from "lucide-react";
 import type { UsgAnalytics } from "@/lib/usg/analytics";
+import { UsgDailySummary } from "./UsgDailySummary";
 
 export function UsgInsightsView() {
   const [analytics, setAnalytics] = useState<UsgAnalytics | null>(null);
@@ -51,6 +56,9 @@ export function UsgInsightsView() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4 md:p-6">
+      {/* Today-at-a-glance (v6.9 — wired up the orphaned component) */}
+      <UsgDailySummary />
+
       {/* KPI strip */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-rose-500 p-5 text-white shadow-lg">
         <div className="flex items-center gap-3">

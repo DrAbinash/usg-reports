@@ -6,6 +6,9 @@ import { SettingsView } from "./SettingsView";
 import { UsgStudioView } from "./usg/UsgStudioView";
 import { UsgInsightsView } from "./usg/UsgInsightsView";
 import { UsgWorklistView } from "./usg/UsgWorklistView";
+import { UsgDailySummary } from "./usg/UsgDailySummary";
+import { UsgDarkModeToggle } from "./usg/UsgDarkModeToggle";
+import { UsgCommandPalette } from "./usg/UsgCommandPalette";
 import { UsgBirthdayGreeting, BirthdayHeaderButton, birthdayDismissed, rememberBirthdayDismissed, useBirthdayFlag } from "./usg/UsgBirthdayGreeting";
 import { Waves, Settings2, LogOut, Stethoscope, BarChart3, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -66,6 +69,17 @@ export function AppShell() {
         <div className="ml-auto flex items-center gap-3">
           {bday?.today ? <BirthdayHeaderButton onClick={() => setBdayCard(true)} /> : null}
           <button
+            onClick={() => {
+              // Open the command palette by simulating Ctrl+K
+              window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, metaKey: true }));
+            }}
+            className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            title="Open command palette (Ctrl+K)"
+          >
+            <kbd className="font-mono text-[10px] font-bold">⌘K</kbd>
+          </button>
+          <UsgDarkModeToggle />
+          <button
             onClick={logout}
             className="flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
           >
@@ -113,6 +127,9 @@ export function AppShell() {
       {bday?.today ? (
         <UsgBirthdayGreeting open={bdayCard} onClose={closeBirthdayCard} name={bday.name} birthday={bday.birthday} />
       ) : null}
+
+      {/* v6.9 — Global command palette (Ctrl/Cmd+K) */}
+      <UsgCommandPalette />
     </div>
   );
 }

@@ -44,6 +44,9 @@ import { UsgFormFDialog, type FormFDefaults, type FormFOrderLite } from "./UsgFo
 import { DictationButton } from "./DictationButton";
 import { UsgStudyPicker } from "./UsgStudyPicker";
 import { UsgShortcutOverlay } from "./UsgShortcutOverlay";
+import { UsgGrowthChart } from "./UsgGrowthChart";
+import { UsgCriticalCommDialog } from "./UsgCriticalCommDialog";
+import { scanForCriticalFindings } from "@/lib/usg/criticalFindings";
 import { UsgCriticalBanner } from "./UsgCriticalBanner";
 import { UsgQualityChecklist } from "./UsgQualityChecklist";
 import { UsgMeasurementReviewDialog } from "./UsgMeasurementReviewDialog";
@@ -187,6 +190,9 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const [formFOpen, setFormFOpen] = useState(false);
   const [pulling, setPulling] = useState(false);
   const [pullSummary, setPullSummary] = useState<{ source: string; matchedCount: number; extras: Record<string, string> } | null>(null);
+
+  // v6.9 — Critical findings communication log dialog.
+  const [commOpen, setCommOpen] = useState(false);
 
   const orderUid = order?.studyInstanceUid ?? null;
   const reportIdForPacs = savedIdRef.current ?? report?.id ?? null;
@@ -843,6 +849,26 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
               className="h-7 border-rose-200 bg-rose-50 px-2 text-rose-700 hover:bg-rose-100">
               {busy === "print" ? <Loader2 className="h-3.5 w-3.5" /> : <Printer className="h-3.5 w-3.5" />}
             </Button>
+            {(() => {
+              // v6.9 — show "Log communication" button when a critical
+              // finding is active on this report. Lets the radiologist
+              // document PCPNDT/NMC-required referring-physician contact.
+              const sel = state.organs.flatMap((o) =>
+                (o.pathologies ?? (o.pathology ? [o.pathology] : [])).map((k) => ({
+                  key: k, label: k, organ: o.organ,
+                })),
+              );
+              const criticalAlerts = scanForCriticalFindings(sel);
+              const hasCritical = criticalAlerts.length > 0;
+              if (!hasCritical && !isFinal) return null;
+              return (
+                <Button size="sm" variant="outline" onClick={() => setCommOpen(true)}
+                  title="Critical finding communication log (PCPNDT/NMC legal record)"
+                  className="h-7 border-rose-300 bg-rose-100 px-2 text-rose-700 hover:bg-rose-200">
+                  <Phone className="h-3.5 w-3.5" />
+                </Button>
+              );
+            })()}
             {isFinal ? (
               <Button size="sm" variant="outline" onClick={() => downloadReportPdf({ reportId: savedIdRef.current ?? report?.id ?? "", patientName, serial, date: fmtPrintDate(scanDate) })}
                 title="Download PDF" className="h-7 border-sky-200 bg-sky-50 px-2 text-sky-700 hover:bg-sky-100">
@@ -1075,8 +1101,25 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
 
         {/* Pregnancy timeline */}
         {state.studyKey.startsWith("ob-") && patientReports.length > 0 && (
-          <div className="px-3 py-1">
+          <div className="px-3 py-1 space-y-2">
             <UsgPregnancyTimeline timeline={buildPregnancyTimeline(patientReports)} />
+            {/* v6.9 — wired up the orphaned UsgGrowthChart. Plot EFW/BPD/HC/AC/FL
+                across this pregnancy's visits on Hadlock percentile curves so the
+                radiologist can spot IUGR / macrosomia at a glance. */}
+            {(() => {
+              const tl = buildPregnancyTimeline(patientReports);
+              const pts = tl.points
+                .map((p) => ({
+                  gaWeeks: p.gaWeeks ?? 0,
+                  efw: p.efw ?? undefined,
+                  bpd: p.bpd ?? undefined,
+                  hc: p.hc ?? undefined,
+                  ac: p.ac ?? undefined,
+                  fl: p.fl ?? undefined,
+                }))
+                .filter((p) => p.gaWeeks > 0);
+              return pts.length > 0 ? <UsgGrowthChart points={pts} /> : null;
+            })()}
           </div>
         )}
       </div>
@@ -1277,6 +1320,16 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
           so the advertised "?" shortcut silently did nothing. Mount it
           here so the overlay opens when the doctor presses "?". */}
       <UsgShortcutOverlay />
+
+      {/* v6.9 — Critical findings communication log (PCPNDT/NMC legal record) */}
+      <UsgCriticalCommDialog
+        open={commOpen}
+        onOpenChange={setCommOpen}
+        reportId={savedIdRef.current ?? report?.id ?? null}
+        patientName={patientName}
+        initialFinding={(impressionManual ? state.impressionOverride ?? "" : resolved.impression.join("\n")).split("\n")[0] ?? ""}
+        initialRecipient={referredBy}
+      />
 
     </div>
   );

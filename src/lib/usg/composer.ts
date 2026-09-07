@@ -8,6 +8,7 @@
  * doctor's trailing normal-summary lines.
  */
 import type { UsgComposerState, UsgOrganDef, UsgOrganState, UsgPathologyDef, UsgResolved, UsgStudyDef } from "./types";
+import { getTokenType } from "./tokenTypes";
 import { getStudy, getStudyWithOverrides, initialState, USG_STUDIES, type NormalOverrides } from "./studies";
 
 /** Tokens auto-derived from an organ key (kidney_rt → right/Right). */
@@ -267,10 +268,33 @@ export function resolve(
   const mergedVars: Record<string, string> = {};
   for (const o of state.organs) Object.assign(mergedVars, o.vars);
 
+  // v6.12: apply select-token defaults. When a select token (like {lie}) has
+  // no value (either the key is missing or the value is empty), use its first
+  // option as the default. This means the antenatal scan prints "cephalic" by
+  // default until the doctor picks a different lie from the dropdown.
+  // We check BOTH the merged vars AND the declared organ vars — a var slot
+  // declared on the organ but never filled by the doctor still needs its
+  // default applied.
+  const declaredVarKeys = new Set<string>();
+  for (const o of study.organs) for (const v of o.vars ?? []) declaredVarKeys.add(v.key);
+  for (const tokenKey of declaredVarKeys) {
+    const val = mergedVars[tokenKey];
+    if (!val || !val.trim()) {
+      const tokenDef = getTokenType(tokenKey);
+      if (tokenDef?.type === "select" && tokenDef.options && tokenDef.options.length > 0) {
+        mergedVars[tokenKey] = tokenDef.options[0].value;
+      }
+    }
+  }
+
   for (const o of state.organs) {
     const def = organDef(study, o.organ);
     if (!def) continue;
-    const text = substitute(o.text, o.vars, o.organ);
+    // v6.12: merge declared select-token defaults into the organ's vars too,
+    // so the organ text renders the default (e.g. "cephalic") even when the
+    // doctor hasn't picked a lie yet.
+    const organVars = { ...mergedVars, ...o.vars };
+    const text = substitute(o.text, organVars, o.organ);
     sections.push({ organ: o.organ, label: def.label, text, kind: def.kind });
 
     // Combined findings: every selected pathology contributes its impression

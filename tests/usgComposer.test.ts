@@ -22,11 +22,13 @@ import { buildUsgReportHtml } from "@/lib/usg/print";
 const lookup = makeLookup(USG_PATHOLOGIES);
 
 describe("USG studies", () => {
-  test("22 study types exist with unique organ lists", () => {
+  test("25 study types exist with unique organ lists (22 base + 3 combined)", () => {
     expect(USG_STUDIES.map((s) => s.key)).toEqual([
       "wa-female", "wa-male", "ua", "la-female", "la-male", "wa-child", "ob", "ep",
       "kub", "thyroid", "breast", "scrotum", "tvs", "trus", "echo",
       "doppler-lower", "doppler-upper", "carotid", "chest", "cranium", "orbit", "swelling",
+      // v6.12: combined studies
+      "wa-ob", "tvs-ob", "wa-tvs",
     ]);
     for (const s of USG_STUDIES) {
       expect(s.organs.length).toBeGreaterThanOrEqual(2); // TRUS = prostate + seminal vesicles
@@ -327,6 +329,27 @@ describe("USG pregnancy — antenatal (ob)", () => {
     expect(r.impression[0]).toBe(
       "A single live intrauterine fetus at ___ wk ___ days of average gestational age in cephalic presentation.",
     );
+  });
+
+  // v6.12: fetal lie is now a select-token — default is "cephalic" but the
+  // doctor can pick breech, oblique, transverse, or variable.
+  test("fetal lie dropdown — breech presentation substitutes into finding + impression", () => {
+    let state = initialState("ob");
+    state = setOrganVar(state, "biometry", "gaw", "32");
+    state = setOrganVar(state, "biometry", "gad", "02");
+    state = setOrganVar(state, "fetus", "lie", "breech");
+    const r = resolve(state, lookup, "T");
+    expect(r.impression[0]).toBe(
+      "A single live intrauterine fetus at 32 wk 02 days of average gestational age in breech presentation.",
+    );
+    expect(r.sections.find((s) => s.organ === "fetus")!.text).toContain("breech presentation");
+  });
+
+  test("fetal lie dropdown — default is cephalic when no value set", () => {
+    const state = initialState("ob");
+    const r = resolve(state, lookup, "T");
+    expect(r.impression[0]).toContain("cephalic presentation");
+    expect(r.sections.find((s) => s.organ === "fetus")!.text).toContain("cephalic presentation");
   });
 
   test("breech swaps ONLY the presentation line and the impression follows", () => {

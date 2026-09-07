@@ -245,6 +245,20 @@ const TOKEN_TYPE_REGISTRY: Record<string, TokenTypeDef> = {
       { value: "hemorrhagic", label: "Hemorrhagic" },
     ],
   },
+  // ── Fetal lie / presentation (obstetric) ──────────────────────────────────
+  // v6.12: the antenatal scan's FETUS & PRESENTATION organ card has a {lie}
+  // variable. The doctor picks from this dropdown instead of the old
+  // hardcoded "cephalic".
+  lie: {
+    type: "select",
+    options: [
+      { value: "cephalic", label: "Cephalic (vertex)" },
+      { value: "breech", label: "Breech" },
+      { value: "oblique", label: "Oblique" },
+      { value: "transverse", label: "Transverse" },
+      { value: "variable", label: "Variable / unstable" },
+    ],
+  },
 };
 
 /** Get the type definition for a token. Returns null if untyped (free-text). */

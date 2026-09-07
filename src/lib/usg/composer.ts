@@ -333,9 +333,12 @@ export function resolve(
 
   const finalSuggestions = anyPathology ? suggestions : study.defaultSuggestions ?? [];
 
-  const title = fragments.length
-    ? `${study.title} WITH ${fragments.map((f) => f.toUpperCase()).join(" AND ")}`
-    : study.title;
+  // The study heading on the printed report stays as the study's own title
+  // (e.g. "USG Whole Abdomen") — pathology findings (fatty changes,
+  // pancreatitis, etc.) appear ONLY in the impression, never in the heading.
+  // The fragments array is still collected (used for the report list subtitle
+  // and search) but is NOT appended to the title.
+  const title = study.title;
 
   return { study, title, sections, impression, suggestions: finalSuggestions, technique };
 }

@@ -89,7 +89,8 @@ describe("Combined findings — several pathologies on one organ", () => {
       "Bilateral adenexa normal in morphology.",
       "No POD collection.",
     ]);
-    expect(r.title).toBe(`USG WHOLE ABDOMEN WITH ${[fatty.titleFragment, haem.titleFragment].map((f) => f!.toUpperCase()).join(" AND ")}`);
+    // Title stays as the study name — findings appear in impression only
+    expect(r.title).toBe("USG WHOLE ABDOMEN");
   });
 
   test("chips toggle — removing one returns to a clean single-pathology organ", () => {

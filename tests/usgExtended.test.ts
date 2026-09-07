@@ -191,9 +191,8 @@ describe("TVS study", () => {
   test("inherits the gyn library: fibroid chip applies to the TVS uterus card", () => {
     const state = withPathology("tvs", "uterus", "uterus-fibroid-intramural");
     const r = resolve(state, lookupAll, "t");
-    // The fibroid chip composes the study title the same way as whole abdomen.
+    // The study title stays as the study name — findings appear in impression only
     expect(r.title).toContain("TRANSVAGINAL SONOGRAPHY");
-    expect(r.title).toContain("FIBROID");
     expect(r.impression.length).toBeGreaterThanOrEqual(1);
     expect(r.impression.join(" ")).toMatch(/fibroid/i);
   });

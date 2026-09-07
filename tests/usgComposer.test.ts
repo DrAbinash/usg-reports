@@ -156,8 +156,8 @@ describe("USG composer — the fatty liver rule", () => {
       "No POD collection.",
     ]);
 
-    // study title gains the fragment
-    expect(r.title).toBe("USG WHOLE ABDOMEN WITH GRADE I FATTY CHANGES");
+    // study title stays as the study name — findings appear in impression only
+    expect(r.title).toBe("USG WHOLE ABDOMEN");
   });
 
   test("filled measurements substitute into finding and impression", () => {
@@ -182,7 +182,8 @@ describe("USG composer — the fatty liver rule", () => {
     expect(rt.text).toContain("Right kidney is normal in shape");
     expect(rt.text).toContain("right kidney");
     expect(r.impression[0]).toBe("Right nephrolithiasis (1.2 cm calculus at the lower pole).");
-    expect(r.title).toContain("RIGHT RENAL CALCULUS");
+    // title is just the study name — the finding is in the impression
+    expect(r.title).toBe("USG WHOLE ABDOMEN");
   });
 
   test("two pathologies compose in organ order with suggestions deduped", () => {
@@ -298,7 +299,7 @@ describe("USG child study", () => {
     const r = resolve(state, lookup, "T");
     expect(r.sections.find((s) => s.organ === "others")!.text).toContain("to and fro");
     expect(r.impression[0]).toContain("S/O Intestinal Obstruction");
-    expect(r.title).toBe("USG WHOLE ABDOMEN WITH INTESTINAL OBSTRUCTION");
+    expect(r.title).toBe("USG WHOLE ABDOMEN");
   });
 });
 
@@ -354,7 +355,7 @@ describe("USG pregnancy — antenatal (ob)", () => {
       "A single live intrauterine fetus at 27 wk 06 days of average gestational age in cephalic presentation.",
       "Oligohydramnios ( AFI- 5.2 cm).",
     ]);
-    expect(r.title).toBe("ANTENATAL SCAN WITH OLIGOHYDRAMNIOS");
+    expect(r.title).toBe("ANTENATAL SCAN");
   });
 
   test("placenta previa composes with the capitalised position twin", () => {
@@ -365,7 +366,7 @@ describe("USG pregnancy — antenatal (ob)", () => {
     const r = resolve(state, lookup, "T");
     expect(r.sections.find((s) => s.organ === "placenta")!.text).toContain("completely covering internal Os");
     expect(r.impression).toContain("Posteriorly placenta previa, lower margin completely covering the internal Os.");
-    expect(r.title).toBe("ANTENATAL SCAN WITH PLACENTA PREVIA");
+    expect(r.title).toBe("ANTENATAL SCAN");
   });
 
   test("cosmetic 'no gross anomalies' variant keeps the report normal", () => {
@@ -457,7 +458,9 @@ describe("USG print document", () => {
     );
     expect(html).toContain("ULTRASOUND REPORT");
     expect(html).toContain("CARE Diagnostics");
-    expect(html).toContain("USG WHOLE ABDOMEN WITH GRADE I FATTY CHANGES");
+    expect(html).toContain("USG WHOLE ABDOMEN");
+    // The finding (fatty changes) appears in the impression, NOT in the heading
+    expect(html).toContain("Grade I Fatty Changes");
     expect(html).toContain("GE Voluson Pro 4-D USG Machine");
     expect(html).toContain("LIVER");
     expect(html).toContain("mid-clavicular line 14.8 cm");

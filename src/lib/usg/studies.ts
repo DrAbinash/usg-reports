@@ -89,10 +89,13 @@ export const OTHERS_CHILD_N =
   "No enlarged mesenteric lymph nodes or intraperitoneal collection.";
 
 // ── Obstetric normals (her ANTENATAL SCAN formats, verbatim) ───────────────
+// v6.12: {lie} is a select-token (cephalic/breech/oblique/transverse/variable)
+// registered in tokenTypes.ts. The composer substitutes it at render time;
+// the doctor picks from a dropdown in the FETUS organ card.
 export const FETUS_N =
-  "There is a Single live intrauterine fetus in cephalic presentation at the time of examination.";
+  "There is a Single live intrauterine fetus in {lie} presentation at the time of examination.";
 export const FETUS_IMPRESSION_N =
-  "A single live intrauterine fetus at {gaw} wk {gad} days of average gestational age in cephalic presentation.";
+  "A single live intrauterine fetus at {gaw} wk {gad} days of average gestational age in {lie} presentation.";
 export const BIOMETRY_N =
   "Fetal parameters-\nB.P.D {bpd} mm    {bpdw} Weeks  {bpdd} Days\nH.C {hc} mm    {hcw} Weeks  {hcd} Days\nA.C {ac} mm    {acw} Weeks  {acd} Days\nF.L. {fl} mm.   {flw} Weeks  {fld} Days\n\nParameters corresponding to mean GA : {gaw} weeks {gad} days ( ± 2 weeks)\n\nE.D.D. as per scan : {edd}\n\nFetal weight in grams : {ewt} ( ± {ewtd} ) g\n\nFHR : {fhr} B/Min & Regular.";
 export const ANATOMY_N =
@@ -389,6 +392,10 @@ export const USG_STUDIES: UsgStudyDef[] = [
         label: "FETUS & PRESENTATION",
         normal: FETUS_N,
         normalImpression: FETUS_IMPRESSION_N,
+        // v6.12: {lie} is a select-token — the organ card renders a dropdown
+        // (cephalic/breech/oblique/transverse/variable). Default value is set
+        // at first render via the tokenTypes registry default.
+        vars: [V("lie", "Fetal lie", "")],
       },
       { key: "biometry", label: "FETAL BIOMETRY", normal: BIOMETRY_N },
       { key: "anatomy", label: "FETAL SURVEY", normal: ANATOMY_N },
@@ -664,6 +671,97 @@ export const USG_STUDIES: UsgStudyDef[] = [
     ],
   },
 ];
+
+// ── v6.12: Combined studies (Whole Abdomen + Pregnancy, TVS + Pregnancy,
+// Whole + TVS) ────────────────────────────────────────────────────────────
+// Common in practice: a patient may need both a whole abdomen scan AND a
+// pregnancy scan in one sitting. These combined studies merge the organs
+// from both, so the doctor reports everything in one composer session.
+//
+// We build them at module load by concatenating organs from the source
+// studies. This means no changes to the composer, print, or any other
+// code — the combined study is just a regular study with more organs.
+
+function combineStudies(
+  key: string,
+  label: string,
+  title: string,
+  sex: "F" | "M",
+  group: string,
+  technique: string,
+  sourceKeys: string[],
+  allNormalImpression: string[],
+): UsgStudyDef {
+  const organs: UsgStudyDef["organs"] = [];
+  const seen = new Set<string>();
+  for (const srcKey of sourceKeys) {
+    const src = USG_STUDIES.find((s) => s.key === srcKey);
+    if (!src) continue;
+    for (const o of src.organs) {
+      if (!seen.has(o.key)) {
+        seen.add(o.key);
+        organs.push(o);
+      }
+    }
+  }
+  return {
+    key,
+    label,
+    title,
+    sex,
+    group,
+    technique,
+    allNormalImpression,
+    organs,
+  };
+}
+
+// Add the combination studies after USG_STUDIES is fully defined.
+const _waFemale = USG_STUDIES.find((s) => s.key === "wa-female")!;
+const _ob = USG_STUDIES.find((s) => s.key === "ob")!;
+const _tvs = USG_STUDIES.find((s) => s.key === "tvs")!;
+
+USG_STUDIES.push(
+  combineStudies(
+    "wa-ob",
+    "Whole Abdomen + Pregnancy",
+    "USG WHOLE ABDOMEN + ANTENATAL SCAN",
+    "F",
+    "obg",
+    T_WA + " / " + T_OB,
+    ["wa-female", "ob"],
+    [
+      ...(_waFemale.allNormalImpression ?? []),
+      ...(_ob.allNormalImpression ?? []),
+    ],
+  ),
+  combineStudies(
+    "tvs-ob",
+    "TVS + Pregnancy",
+    "TRANSVAGINAL SONOGRAPHY + ANTENATAL SCAN",
+    "F",
+    "obg",
+    T_TVS + " / " + T_OB,
+    ["tvs", "ob"],
+    [
+      ...(_tvs.allNormalImpression ?? []),
+      ...(_ob.allNormalImpression ?? []),
+    ],
+  ),
+  combineStudies(
+    "wa-tvs",
+    "Whole Abdomen + TVS",
+    "USG WHOLE ABDOMEN + TRANSVAGINAL SONOGRAPHY",
+    "F",
+    "obg",
+    T_WA + " / " + T_TVS,
+    ["wa-female", "tvs"],
+    [
+      ...(_waFemale.allNormalImpression ?? []),
+      ...(_tvs.allNormalImpression ?? []),
+    ],
+  ),
+);
 
 /** Study groups shown in the composer dropdown and the studio filter chips. */
 export const STUDY_GROUPS: { key: string; label: string }[] = [

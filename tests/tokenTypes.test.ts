@@ -46,6 +46,18 @@ describe("tokenTypes", () => {
     expect(isSelectToken("unknown_token")).toBe(false);
   });
 
+  // v6.12: fetal lie token
+  it("identifies 'lie' as a select token with 5 options", () => {
+    expect(isSelectToken("lie")).toBe(true);
+    const options = getTokenOptions("lie");
+    expect(options).toHaveLength(5);
+    expect(options!.find((o) => o.value === "cephalic")).toBeDefined();
+    expect(options!.find((o) => o.value === "breech")).toBeDefined();
+    expect(options!.find((o) => o.value === "oblique")).toBeDefined();
+    expect(options!.find((o) => o.value === "transverse")).toBeDefined();
+    expect(options!.find((o) => o.value === "variable")).toBeDefined();
+  });
+
   it("returns null options for unregistered tokens", () => {
     expect(getTokenOptions("size")).toBeNull();
     expect(getTokenOptions("l1")).toBeNull();

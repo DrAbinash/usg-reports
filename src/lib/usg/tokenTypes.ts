@@ -100,16 +100,43 @@ const TOKEN_TYPE_REGISTRY: Record<string, TokenTypeDef> = {
   },
 
   // ── Placenta position (obstetric) ─────────────────────────────────────
+  // v6.13: The study's PLACENTA_N uses {position} (not {placenta}).
+  // Register both names pointing to the same options so either works.
+  // The duplicate "lateral" value is fixed — now "lateral (right)" and
+  // "lateral (left)" are distinct values.
   placenta: {
     type: "select",
     options: [
       { value: "anterior", label: "Anterior" },
       { value: "posterior", label: "Posterior" },
       { value: "fundal", label: "Fundal" },
-      { value: "lateral", label: "Lateral (right)" },
-      { value: "lateral", label: "Lateral (left)" },
+      { value: "lateral (right)", label: "Lateral (right)" },
+      { value: "lateral (left)", label: "Lateral (left)" },
       { value: "low-lying", label: "Low-lying" },
       { value: "praevia", label: "Praevia" },
+    ],
+  },
+  // v6.13: This is the token name actually used in PLACENTA_N.
+  position: {
+    type: "select",
+    options: [
+      { value: "anterior", label: "Anterior" },
+      { value: "posterior", label: "Posterior" },
+      { value: "fundal", label: "Fundal" },
+      { value: "lateral (right)", label: "Lateral (right)" },
+      { value: "lateral (left)", label: "Lateral (left)" },
+      { value: "low-lying", label: "Low-lying" },
+      { value: "praevia", label: "Praevia" },
+    ],
+  },
+  // v6.13: Placenta maturity grade — used in PLACENTA_N as {grade}.
+  grade: {
+    type: "select",
+    options: [
+      { value: "0", label: "Grade 0" },
+      { value: "I", label: "Grade I" },
+      { value: "II", label: "Grade II" },
+      { value: "III", label: "Grade III" },
     ],
   },
 
@@ -245,7 +272,7 @@ const TOKEN_TYPE_REGISTRY: Record<string, TokenTypeDef> = {
       { value: "hemorrhagic", label: "Hemorrhagic" },
     ],
   },
-  // ── Fetal lie / presentation (obstetric) ──────────────────────────────────
+  // v6.13: Fetal lie / presentation (obstetric) ──────────────────────────
   // v6.12: the antenatal scan's FETUS & PRESENTATION organ card has a {lie}
   // variable. The doctor picks from this dropdown instead of the old
   // hardcoded "cephalic".
@@ -257,6 +284,20 @@ const TOKEN_TYPE_REGISTRY: Record<string, TokenTypeDef> = {
       { value: "oblique", label: "Oblique" },
       { value: "transverse", label: "Transverse" },
       { value: "variable", label: "Variable / unstable" },
+    ],
+  },
+  // v6.13: Uterine fibroid wall location — separate from kidney {loc}
+  // to fix the token collision where fibroid pathologies showed kidney
+  // calyx options instead of uterine wall options.
+  wall_loc: {
+    type: "select",
+    options: [
+      { value: "anterior wall", label: "Anterior wall" },
+      { value: "posterior wall", label: "Posterior wall" },
+      { value: "fundal", label: "Fundal" },
+      { value: "lateral wall", label: "Lateral wall" },
+      { value: "anterior lip of cervix", label: "Anterior lip of cervix" },
+      { value: "posterior lip of cervix", label: "Posterior lip of cervix" },
     ],
   },
 };

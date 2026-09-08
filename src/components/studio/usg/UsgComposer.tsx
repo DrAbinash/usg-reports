@@ -19,6 +19,7 @@ import { ArrowLeft, CalendarDays, ChevronDown, Command, FileCheck2, Loader2, Max
 import type { UsgComposerState, UsgPathologyDef } from "@/lib/usg/types";
 import { USG_SEX_CHILD } from "@/lib/usg/types";
 import { USG_STUDIES, STUDY_GROUPS, applyNormalOverrides, getStudy, normalOverrideKey, type NormalOverrides } from "@/lib/usg/studies";
+import { isObStudyKey } from "@/lib/usg/orderStudy";
 import {
   applyPathologies,
   makeLookup,
@@ -338,7 +339,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
 
   // Load patient's prior reports for the pregnancy timeline (obstetric only)
   useEffect(() => {
-    if (!patientName.trim() || !state.studyKey.startsWith("ob-")) {
+    if (!patientName.trim() || !isObStudyKey(state.studyKey)) {
       setPatientReports([]);
       return;
     }
@@ -1108,7 +1109,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         ) : null}
 
         {/* Pregnancy timeline */}
-        {state.studyKey.startsWith("ob-") && patientReports.length > 0 && (
+        {isObStudyKey(state.studyKey) && patientReports.length > 0 && (
           <div className="px-3 py-1 space-y-2">
             <UsgPregnancyTimeline timeline={buildPregnancyTimeline(patientReports)} />
             {/* v6.9 — wired up the orphaned UsgGrowthChart. Plot EFW/BPD/HC/AC/FL

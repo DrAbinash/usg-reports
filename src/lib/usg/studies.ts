@@ -397,7 +397,21 @@ export const USG_STUDIES: UsgStudyDef[] = [
         // at first render via the tokenTypes registry default.
         vars: [V("lie", "Fetal lie", "")],
       },
-      { key: "biometry", label: "FETAL BIOMETRY", normal: BIOMETRY_N },
+      {
+        key: "biometry",
+        label: "FETAL BIOMETRY",
+        normal: BIOMETRY_N,
+        // v6.13: label every biometry slot so the UI shows "BPD mm" instead of "bpd"
+        vars: [
+          V("bpd", "BPD", "mm"), V("bpdw", "BPD GA wk"), V("bpdd", "BPD GA d"),
+          V("hc", "HC", "mm"), V("hcw", "HC GA wk"), V("hcd", "HC GA d"),
+          V("ac", "AC", "mm"), V("acw", "AC GA wk"), V("acd", "AC GA d"),
+          V("fl", "FL", "mm"), V("flw", "FL GA wk"), V("fld", "FL GA d"),
+          V("gaw", "Mean GA wk"), V("gad", "Mean GA d"),
+          V("edd", "EDD"), V("ewt", "EFW", "g"), V("ewtd", "EFW ±", "g"),
+          V("fhr", "FHR", "bpm"),
+        ],
+      },
       { key: "anatomy", label: "FETAL SURVEY", normal: ANATOMY_N },
       {
         key: "placenta",

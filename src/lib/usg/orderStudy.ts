@@ -14,11 +14,13 @@ import { USG_STUDIES } from "./studies";
 
 export const STUDY_KEYS = USG_STUDIES.map((s) => s.key) as string[];
 
-/** Obstetric families — these carry the statutory PC-PNDT Form F duty. */
-export const OB_STUDY_KEYS = new Set(["ob", "ep"]);
+/** Obstetric families — these carry the statutory PC-PNDT Form F duty.
+ *  v6.13: includes combined studies (wa-ob, tvs-ob) and also matches
+ *  any key starting with "ob-" (for future study types like ob-anomaly). */
+export const OB_STUDY_KEYS = new Set(["ob", "ep", "wa-ob", "tvs-ob"]);
 
 export function isObStudyKey(key: string): boolean {
-  return OB_STUDY_KEYS.has(key);
+  return OB_STUDY_KEYS.has(key) || key.startsWith("ob-");
 }
 
 function wholeAbdomen(sex: "F" | "M" | ""): string {

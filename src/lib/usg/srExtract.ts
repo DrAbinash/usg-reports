@@ -127,10 +127,28 @@ const VAR_MAP: VarMap[] = [
   // Scrotum
   { re: /(right|rt\.?) test/i, organ: "testis_rt", varKey: "t1", unit: "mm" },
   { re: /(left|lt\.?) test/i, organ: "testis_lt", varKey: "t1", unit: "mm" },
+
+  // v6.13: Obstetric qualitative values — placenta position/grade, fetal lie
+  // These are coded text values in DICOM SR (not numeric measurements).
+  { re: /placenta.*location|placental.*site|site of placenta/i, organ: "placenta", varKey: "position", unit: "raw" },
+  { re: /placenta.*grade|placental.*maturity/i, organ: "placenta", varKey: "grade", unit: "raw" },
+  { re: /fetal (presentation|lie)|fetal.*position/i, organ: "fetus", varKey: "lie", unit: "raw" },
+
+  // v6.13: Machine-computed GA and EDD — some machines send these as
+  // text/code values in the SR. If present, they override the Hadlock
+  // derivation (the machine may have used a different formula or LMP).
+  { re: /gestational age|menstrual age|mean gestational age/i, organ: "biometry", varKey: "gaw", unit: "raw" },
+  { re: /EDD|expected date of (confinement|delivery)/i, organ: "biometry", varKey: "edd", unit: "raw" },
 ];
 
 /** Normalise a SR value to the slot's unit kind. */
 export function normaliseUnit(value: string, unit: string, kind: VarMap["unit"]): string {
+  if (kind === "raw") {
+    // v6.13: normalise DICOM SR coded text values to the select-token values.
+    // DICOM CID 7454 placenta location uses capitalised text; our select-tokens
+    // use lowercase. Also map common synonyms.
+    return normaliseRawValue(value.trim().toLowerCase());
+  }
   const n = Number(value);
   if (!Number.isFinite(n)) return value.trim();
   const u = (unit ?? "").toLowerCase();
@@ -149,6 +167,34 @@ export function normaliseUnit(value: string, unit: string, kind: VarMap["unit"])
     default:
       return value.trim();
   }
+}
+
+/** v6.13: Normalise DICOM SR coded text values to the select-token values
+ *  the composer expects. Handles common synonyms and capitalisations. */
+function normaliseRawValue(v: string): string {
+  // Placenta position
+  if (/anterior/.test(v)) return "anterior";
+  if (/posterior/.test(v)) return "posterior";
+  if (/fundal|fundus/.test(v)) return "fundal";
+  if (/lateral.*right|right.*lateral/.test(v)) return "lateral (right)";
+  if (/lateral.*left|left.*lateral/.test(v)) return "lateral (left)";
+  if (/low.?lying/.test(v)) return "low-lying";
+  if (/praevia|previa/.test(v)) return "praevia";
+  // Placenta grade
+  if (/grade\s*0|grade\s*zero|^0$/.test(v)) return "0";
+  if (/grade\s*i\b|^i$/.test(v)) return "I";
+  if (/grade\s*ii\b|^ii$/.test(v)) return "II";
+  if (/grade\s*iii\b|^iii$/.test(v)) return "III";
+  // Fetal lie / presentation
+  if (/cephalic|vertex|head (down|presentation)/.test(v)) return "cephalic";
+  if (/breech/.test(v)) return "breech";
+  if (/transverse/.test(v)) return "transverse";
+  if (/oblique/.test(v)) return "oblique";
+  if (/variable|unstable|longitudinal/.test(v)) return "variable";
+  // GA — extract weeks number from "32 weeks 5 days" or "32w5d" patterns
+  const gaMatch = v.match(/(\d+)\s*(?:weeks?\s*)?(?:and\s*)?(\d+)?\s*(?:days?|d)\b/i);
+  if (gaMatch) return gaMatch[1]; // just the weeks part — days come separately
+  return v;
 }
 
 export type SrExtractResult = {

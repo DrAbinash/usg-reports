@@ -10,6 +10,8 @@
 import type { UsgComposerState, UsgOrganDef, UsgOrganState, UsgPathologyDef, UsgResolved, UsgStudyDef } from "./types";
 import { getTokenType } from "./tokenTypes";
 import { getStudy, getStudyWithOverrides, initialState, USG_STUDIES, type NormalOverrides } from "./studies";
+import { perParameterGa, meanGa, hadlockEfw, efwTolerance, eddFromGa } from "./biometry";
+import { formatEdd } from "./lmp";
 
 /** Tokens auto-derived from an organ key (kidney_rt → right/Right). */
 export const ORGAN_SIDE: Record<string, { side: string; Side: string }> = {
@@ -231,6 +233,72 @@ export function setOrganVar(state: UsgComposerState, organKey: string, key: stri
   const organs = state.organs.map((o) =>
     o.organ === organKey ? { ...o, vars: { ...o.vars, [key]: value } } : o,
   );
+  let next = { ...state, organs };
+  // v6.13: auto-derive GA/EFW/EDD from BPD/HC/AC/FL when the biometry
+  // organ's measurements change. This runs Hadlock automatically so the
+  // doctor never has to use the separate calculator — just type the 4
+  // measurements and the weeks/days/EDD/EFW fill themselves.
+  if (organKey === "biometry" && ["bpd", "hc", "ac", "fl"].includes(key)) {
+    next = deriveBiometry(next);
+  }
+  return next;
+}
+
+/** v6.13: Auto-derive GA weeks/days, EDD, and EFW from BPD/HC/AC/FL via
+ *  Hadlock (1984/1985). Called automatically by setOrganVar when any of
+ *  the 4 primary biometry measurements change. Also safe to call after
+ *  Pull-from-machine applies SR vars. */
+export function deriveBiometry(state: UsgComposerState, scanDate?: string): UsgComposerState {
+  const bio = state.organs.find((o) => o.organ === "biometry");
+  if (!bio || !bio.vars) return state;
+
+  const mm = (v: string | undefined): number | undefined => {
+    if (!v) return undefined;
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  };
+
+  const bpd = mm(bio.vars.bpd);
+  const hc = mm(bio.vars.hc);
+  const ac = mm(bio.vars.ac);
+  const fl = mm(bio.vars.fl);
+  if (!bpd && !hc && !ac && !fl) return state;
+
+  const cm = { bpd: bpd ?? 0, hc: hc ?? 0, ac: ac ?? 0, fl: fl ?? 0 };
+  const vars = { ...bio.vars };
+  const anyFilled = [bpd, hc, ac, fl].filter((v) => v != null).length;
+
+  // Per-parameter GA (weeks + days for each filled measurement)
+  if (anyFilled >= 1) {
+    const per = perParameterGa(cm);
+    if (bpd && per.bpd) { vars.bpdw = String(per.bpd.weeks); vars.bpdd = String(per.bpd.days); }
+    if (hc && per.hc) { vars.hcw = String(per.hc.weeks); vars.hcd = String(per.hc.days); }
+    if (ac && per.ac) { vars.acw = String(per.ac.weeks); vars.acd = String(per.ac.days); }
+    if (fl && per.fl) { vars.flw = String(per.fl.weeks); vars.fld = String(per.fl.days); }
+
+    // Mean GA (needs at least 2 of the 4 for a meaningful average)
+    if (anyFilled >= 2) {
+      const ga = meanGa(cm);
+      if (ga) {
+        vars.gaw = String(ga.weeks);
+        vars.gad = String(ga.days);
+        // EDD from mean GA
+        const edd = eddFromGa(ga.weeks, ga.days, scanDate ? new Date(scanDate) : new Date());
+        vars.edd = formatEdd(edd);
+      }
+    }
+  }
+
+  // EFW via Hadlock (needs at least BPD + AC, or all 4 for best accuracy)
+  if (bpd && ac) {
+    const efwResult = hadlockEfw(cm);
+    if (efwResult.best) {
+      vars.ewt = String(Math.round(efwResult.best.efw));
+      vars.ewtd = String(efwTolerance(efwResult.best.efw));
+    }
+  }
+
+  const organs = state.organs.map((o) => o.organ === "biometry" ? { ...o, vars } : o);
   return { ...state, organs };
 }
 

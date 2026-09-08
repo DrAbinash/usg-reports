@@ -13,6 +13,7 @@
 import type { UsgComposerState } from "./types";
 import type { UsgResolved } from "./types";
 import { getStudy } from "./studies";
+import { isObStudyKey } from "./orderStudy";
 
 export type QualityCheckKind = "missing_measurement" | "missing_impression" | "missing_technique" | "incomplete_ob" | "incomplete_biometry" | "warning";
 
@@ -81,7 +82,8 @@ export function runQualityCheck(
 
   // 4. Obstetric-specific checks
   const study = getStudy(state.studyKey);
-  if (study && state.studyKey.startsWith("ob-")) {
+  // v6.13: use isObStudyKey (covers ob, ep, wa-ob, tvs-ob)
+  if (study && isObStudyKey(state.studyKey)) {
     const obChecks = runObstetricChecks(state, resolved);
     items.push(...obChecks);
   }
@@ -103,7 +105,8 @@ export function runQualityCheck(
   }
 
   // 6. Early pregnancy: check for FH (fetal heart)
-  if (state.studyKey.startsWith("ob-ep") || state.studyKey.startsWith("ob-nt")) {
+  // v6.13: early pregnancy check — ep is in OB_STUDY_KEYS
+  if (state.studyKey === "ep") {
     const hasFh = state.organs.some(
       (o) => o.pathologies && o.pathologies.length > 0 && o.text.toLowerCase().includes("cardiac activity"),
     );

@@ -9,6 +9,7 @@
  * Ported from CARE ERP's usgPrior pregnancy timeline, simplified for the
  * standalone studio's SQLite data model.
  */
+import { isObStudyKey } from "./orderStudy";
 
 export type TimelinePoint = {
   reportId: number;
@@ -69,8 +70,8 @@ export function buildPregnancyTimeline(
         }>;
       };
 
-      // Only obstetric study profiles
-      if (!state.studyKey || !state.studyKey.startsWith("ob-")) continue;
+      // v6.13: use isObStudyKey (covers ob, ep, wa-ob, tvs-ob)
+      if (!state.studyKey || !isObStudyKey(state.studyKey)) continue;
 
       const point = extractTimelinePoint(r, state);
       if (point) points.push(point);

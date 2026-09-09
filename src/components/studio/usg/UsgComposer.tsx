@@ -1134,7 +1134,11 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
       </div>
 
       {/* ══ BODY: organ cards + impression + preview ════════════════════ */}
-      <div className="grid min-h-0 flex-1 gap-4 overflow-hidden p-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,460px)]">
+      {/* v6.15: responsive grid — the right column grows with display width.
+          Was fixed at 460px max; now starts at 460px but grows to 55% on wide
+          screens. On narrow screens (< lg), stacks vertically (organ cards
+          on top, impression + preview below). */}
+      <div className="grid min-h-0 flex-1 gap-4 overflow-hidden p-4 lg:grid-cols-[minmax(0,1fr)_minmax(460px,55%)] xl:grid-cols-[minmax(0,1fr)_minmax(520px,60%)]">
         {/* Left column: organ cards + images */}
         <div className="studio-scroll min-h-0 space-y-3 overflow-y-auto pr-1">
           {study.organs.map((def) => {
@@ -1189,8 +1193,11 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
           />
         </div>
 
-        {/* Right rail: impression + live preview */}
-        <div className="studio-scroll min-h-0 space-y-3 overflow-y-auto lg:sticky lg:top-0 lg:self-start">
+        {/* Right rail: impression + live preview
+            v6.15: flex column (not overflow-y-auto) so the preview iframe
+            can grow to fill available vertical space. The impression box
+            stays fixed at its natural height; the preview gets flex-1. */}
+        <div className="flex min-h-0 flex-col gap-3">
           {/* v6.10 — BI-RADS picker for breast studies, gated by the enableBirads toggle */}
           {state.studyKey === "breast" && settings.enableBirads !== false && !isFinal ? (
             <UsgBiradsPicker
@@ -1277,8 +1284,12 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
             </div>
           ) : null}
 
-          {/* Live preview */}
-          <div className="rounded-xl border border-border bg-card p-3.5 shadow-sm">
+          {/* Live preview
+              v6.15: flex-1 so the preview grows to fill available vertical
+              space. The iframe itself uses h-full to fill the container.
+              On small screens the container gets a min-height so it's
+              always visible even when the impression is tall. */}
+          <div className="flex min-h-[300px] flex-1 flex-col rounded-xl border border-border bg-card p-3.5 shadow-sm">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-[12px] font-bold tracking-wide">Live preview — {paperLabel}</span>
               {!isFinal ? <span className="text-[9px] font-bold text-rose-500">PROVISIONAL</span> : null}
@@ -1286,7 +1297,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
             <iframe
               title="USG report preview"
               srcDoc={previewHtml}
-              className="h-[400px] w-full rounded-lg border border-border bg-white"
+              className="h-full w-full flex-1 rounded-lg border border-border bg-white"
               sandbox="allow-same-origin"
             />
           </div>

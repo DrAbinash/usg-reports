@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { SectionLabel } from "../bits";
 import { UsgFormFDialog, type FormFDefaults, type FormFOrderLite } from "./UsgFormFDialog";
-import { Search, RefreshCw, ChevronRight, Hourglass, CheckCircle2, EyeOff, ScanLine, FileCheck2, CloudOff, Link2 } from "lucide-react";
+import { Search, RefreshCw, ChevronRight, Hourglass, CheckCircle2, EyeOff, ScanLine, FileCheck2, CloudOff, Link2, CalendarDays } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -154,15 +154,46 @@ export function UsgWorklistView() {
   const [formFOrder, setFormFOrder] = useState<Order | null>(null);
   const [defaults, setDefaults] = useState<FormFDefaults | null>(null);
 
+  // v6.14: date range filter state
+  type DatePreset = "all" | "today" | "yesterday" | "week" | "custom";
+  const [datePreset, setDatePreset] = useState<DatePreset>("all");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+
+  /** Compute the from/to query params from the preset. */
+  const dateParams = useCallback((): string => {
+    const now = new Date();
+    const pad = (d: Date) => d.toISOString().slice(0, 10);
+    const today = pad(now);
+    const yesterday = (() => { const d = new Date(now); d.setDate(d.getDate() - 1); return pad(d); })();
+    const weekAgo = (() => { const d = new Date(now); d.setDate(d.getDate() - 7); return pad(d); })();
+
+    switch (datePreset) {
+      case "today": return `&from=${today}&to=${today}`;
+      case "yesterday": return `&from=${yesterday}&to=${yesterday}`;
+      case "week": return `&from=${weekAgo}&to=${today}`;
+      case "custom":
+        if (customFrom || customTo) {
+          const params: string[] = [];
+          if (customFrom) params.push(`from=${customFrom}`);
+          if (customTo) params.push(`to=${customTo}`);
+          return `&${params.join("&")}`;
+        }
+        return "";
+      default: return "";
+    }
+  }, [datePreset, customFrom, customTo]);
+
   const load = useCallback(() => {
-    fetch("/api/usg/worklist")
+    const params = dateParams();
+    fetch(`/api/usg/worklist${params ? `?${params.slice(1)}` : ""}`)
       .then((r) => r.json())
       .then((r: (WorklistResponse & { error?: string }) | null) => {
         if (!r || r.error) return;
         setData(r);
       })
       .catch(() => {});
-  }, []);
+  }, [dateParams]);
 
   useEffect(() => {
     load();
@@ -289,6 +320,44 @@ export function UsgWorklistView() {
           <RefreshCw className={cn("mr-2 h-3.5 w-3.5", syncing && "animate-spin")} />
           {syncing ? "Syncing…" : "Sync now"}
         </Button>
+      </div>
+
+      {/* v6.14: Date range filter — quick presets + custom from-to */}
+      <div className="flex flex-wrap items-center gap-2">
+        <CalendarDays className="h-4 w-4 text-muted-foreground" />
+        {(["all", "today", "yesterday", "week", "custom"] as const).map((preset) => (
+          <button
+            key={preset}
+            onClick={() => setDatePreset(preset)}
+            className={cn(
+              "rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors",
+              datePreset === preset
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-card text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {preset === "all" ? "All dates" : preset === "today" ? "Today" : preset === "yesterday" ? "Yesterday" : preset === "week" ? "Last 7 days" : "Custom"}
+          </button>
+        ))}
+        {datePreset === "custom" ? (
+          <div className="flex items-center gap-2">
+            <Input
+              type="date"
+              value={customFrom}
+              onChange={(e) => setCustomFrom(e.target.value)}
+              className="h-8 w-[140px] border-border bg-card text-[12px]"
+              placeholder="From"
+            />
+            <span className="text-[11px] text-faint">→</span>
+            <Input
+              type="date"
+              value={customTo}
+              onChange={(e) => setCustomTo(e.target.value)}
+              className="h-8 w-[140px] border-border bg-card text-[12px]"
+              placeholder="To"
+            />
+          </div>
+        ) : null}
       </div>
 
       {banner ? (

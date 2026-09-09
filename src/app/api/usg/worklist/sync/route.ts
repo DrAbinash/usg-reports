@@ -27,7 +27,7 @@ export async function POST() {
   const clinicId = await getActiveClinicId();
 
   const s = await getSettings();
-  const careConfigured = !!(s.careApiBase && s.careApiKey);
+  const careConfigured = !!s.careApiBase; // v6.14: only base URL required for trial
   const orthancConfigured = !!s.orthancUrl;
   let careOk = false;
   let orthancOk = false;

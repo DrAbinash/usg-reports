@@ -8,7 +8,11 @@
  *   GET  {base}/api/internal/reporting-studio/billing-status?accessions=A,B
  *   POST {base}/api/internal/reporting-studio/finalize
  *
- * One static API key (`x-api-key` = the ERP's REPORTING_STUDIO_API_KEY).
+ * v6.14: trial-mode relaxation — when careApiBase is set but careApiKey is
+ * NOT set, the bridge still connects, but WITHOUT the x-api-key header.
+ * The ERP can be configured to accept requests without a key during
+ * trial (REPORTING_STUDIO_API_KEY="" on the ERP side). This lets trial
+ * clinics sync without configuring an API key.
  * Never throws to the UI — every failure is { ok: false, error }.
  */
 import { getSettings } from "@/lib/settings";
@@ -19,7 +23,8 @@ const TIMEOUT_MS = 10_000;
 
 async function careFetch<T>(path: string, init?: RequestInit): Promise<CareResult<T>> {
   const s = await getSettings();
-  if (!s.careApiBase || !s.careApiKey) {
+  // v6.14: only the base URL is required — the API key is optional during trial.
+  if (!s.careApiBase) {
     return { ok: false, error: "CARE integration not configured (Settings → Integrations)" };
   }
   const base = s.careApiBase.trim().replace(/\/+$/, "");
@@ -29,13 +34,18 @@ async function careFetch<T>(path: string, init?: RequestInit): Promise<CareResul
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
+    const headers: Record<string, string> = {
+      "content-type": "application/json",
+      ...(init?.headers as Record<string, string> ?? {}),
+    };
+    // v6.14: only add the API key header when one is configured.
+    // During trial, the ERP may accept requests without it.
+    if (s.careApiKey) {
+      headers["x-api-key"] = s.careApiKey;
+    }
     const res = await fetch(`${base}${path}`, {
       ...init,
-      headers: {
-        "x-api-key": s.careApiKey,
-        "content-type": "application/json",
-        ...(init?.headers ?? {}),
-      },
+      headers,
       signal: controller.signal,
       cache: "no-store",
     });

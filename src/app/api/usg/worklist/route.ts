@@ -1,6 +1,7 @@
 import { requireSession, getActiveClinicId } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
+import type { Prisma } from "@prisma/client";
 
 export type WorklistOrderDto = {
   id: string;
@@ -27,13 +28,47 @@ export type WorklistOrderDto = {
   careSyncedAt: string | null;
 };
 
-export async function GET() {
+/** Parse a yyyy-mm-dd string to a Date at midnight local time. */
+function parseDate(s: string | null): Date | null {
+  if (!s) return null;
+  const d = new Date(s + "T00:00:00");
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** End of day (23:59:59) for the "to" date filter. */
+function endOfDay(s: string | null): Date | null {
+  if (!s) return null;
+  const d = new Date(s + "T23:59:59");
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+export async function GET(req: Request) {
   const guard = await requireSession();
   if (guard) return guard;
   const clinicId = await getActiveClinicId();
+  const url = new URL(req.url);
+
+  // v6.14: date range filter — ?from=YYYY-MM-DD&to=YYYY-MM-DD
+  const fromParam = url.searchParams.get("from");
+  const toParam = url.searchParams.get("to");
+
+  const where: Prisma.UsgCareOrderWhereInput = { clinicId };
+
+  if (fromParam || toParam) {
+    const studyDateFilter: Prisma.DateTimeFilter = {};
+    if (fromParam) {
+      const from = parseDate(fromParam);
+      if (from) studyDateFilter.gte = from;
+    }
+    if (toParam) {
+      const to = endOfDay(toParam);
+      if (to) studyDateFilter.lte = to;
+    }
+    where.studyDate = studyDateFilter;
+  }
 
   const orders = await db.usgCareOrder.findMany({
-    where: { clinicId },
+    where,
     orderBy: { studyDate: "desc" },
     take: 500,
   });
@@ -70,7 +105,9 @@ export async function GET() {
     careOk: sync?.lastCareOk ?? false,
     orthancOk: sync?.lastOrthancOk ?? false,
     lastError: sync?.lastError ?? null,
-    careConfigured: !!(s.careApiBase && s.careApiKey),
+    careConfigured: !!s.careApiBase, // v6.14: only base URL required,
     orthancConfigured: !!s.orthancUrl,
+    // v6.14: echo the applied date range so the UI can show it
+    dateRange: { from: fromParam, to: toParam },
   });
 }

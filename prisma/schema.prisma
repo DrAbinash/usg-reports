@@ -478,3 +478,24 @@ model UsgCriticalCommunication {
 // as a "Follow-ups due" widget so the doctor can call patients back.
 // Backed by two new columns on UsgReport (see that model).
 
+// ── USG Studio — quick report templates (v6.15) ────────────────────────
+// The doctor saves pre-filled report states ("Normal Whole Abdomen Male",
+// "Normal Whole Abdomen Female", etc.) for emergency/crowd situations.
+// One click creates a new report with the template's state applied.
+// Templates are clinic-specific.
+model UsgReportTemplate {
+  id          String   @id @default(cuid())
+  clinicId    String   @default("default")
+  name        String   // "Normal Whole Abdomen Male"
+  studyKey    String   // "wa-male"
+  stateJson   String   // the full composer state (organs, pathologies, vars)
+  // Optional: pin to top of the list (for the doctor's most-used templates)
+  pinned      Boolean  @default(false)
+  sortOrder   Int      @default(100)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([clinicId, name])
+  @@index([clinicId])
+}
+

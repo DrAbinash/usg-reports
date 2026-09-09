@@ -72,16 +72,24 @@ describe("guessStudyKey — bill-desk test names route to the right study", () =
 // ── careClient pure helpers ─────────────────────────────────────────────────
 
 describe("careClient — ultrasound filter + age/sex split", () => {
-  test("ultrasound modalities (ERP substring rule)", () => {
+  test("ultrasound modalities (ERP substring rule + v6.14 expansion)", () => {
     expect(isUltrasoundModality("US")).toBe(true);
     expect(isUltrasoundModality("USG")).toBe(true);
     expect(isUltrasoundModality("Ultrasound")).toBe(true);
     expect(isUltrasoundModality("Doppler")).toBe(true);
     expect(isUltrasoundModality("OB US")).toBe(true);
+    // v6.14: expanded to catch more modalities
+    expect(isUltrasoundModality("Echo")).toBe(true);
+    expect(isUltrasoundModality("Fetal Echo")).toBe(true);
+    expect(isUltrasoundModality("Color Doppler")).toBe(true);
+    expect(isUltrasoundModality("Obstetric")).toBe(true);
+    // v6.14: null/empty modality accepted (testName checked as fallback)
+    expect(isUltrasoundModality(null)).toBe(true);
+    expect(isUltrasoundModality("")).toBe(true);
+    // Non-ultrasound still rejected
     expect(isUltrasoundModality("MR")).toBe(false);
     expect(isUltrasoundModality("CT")).toBe(false);
-    expect(isUltrasoundModality(null)).toBe(false);
-    expect(isUltrasoundModality("")).toBe(false);
+    expect(isUltrasoundModality("X-Ray")).toBe(false);
   });
 
   test("age strings like 54/F split", () => {

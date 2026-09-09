@@ -46,6 +46,7 @@ import { DictationButton } from "./DictationButton";
 import { UsgStudyPicker } from "./UsgStudyPicker";
 import { UsgShortcutOverlay } from "./UsgShortcutOverlay";
 import { UsgGrowthChart } from "./UsgGrowthChart";
+import { UsgTemplateBar } from "./UsgTemplateBar";
 import { UsgCriticalCommDialog } from "./UsgCriticalCommDialog";
 import { UsgAiDraftPanel } from "./UsgAiDraftPanel";
 import { UsgBiradsPicker } from "./UsgBiradsPicker";
@@ -1132,6 +1133,23 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
           </div>
         )}
       </div>
+
+      {/* v6.15: Quick report templates bar — one-click pre-filled reports */}
+      {!isFinal && (
+        <UsgTemplateBar
+          onApply={(template) => {
+            try {
+              const savedState = JSON.parse(template.stateJson) as UsgComposerState;
+              setState(savedState);
+              toast.success(`Template applied: ${template.name}`);
+            } catch {
+              toast.error("Could not apply template — corrupted state");
+            }
+          }}
+          currentStateJson={JSON.stringify(state)}
+          currentStudyKey={state.studyKey}
+        />
+      )}
 
       {/* ══ BODY: organ cards + impression + preview ════════════════════ */}
       {/* v6.15: responsive grid — the right column grows with display width.

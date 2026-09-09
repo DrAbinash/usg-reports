@@ -499,3 +499,26 @@ model UsgReportTemplate {
   @@index([clinicId])
 }
 
+// ── USG Studio — referring doctor directory (v6.16) ────────────────────
+// Imported from CARE ERP CSV or entered manually. Provides autocomplete
+// in the composer's "Referred By" field so the doctor doesn't have to
+// type the full name every time. Clinic-specific.
+model UsgDoctor {
+  id              String   @id @default(cuid())
+  clinicId        String   @default("default")
+  name            String   // "DR SANJAY KUMAR KUNDA"
+  specialization  String   @default("") // "NEUROSURGEON"
+  degree          String   @default("") // "MBBS, MS"
+  phone           String   @default("")
+  hospital        String   @default("") // hospitalAffiliation
+  area            String   @default("")
+  // Normalised match key (lowercase, trimmed) for dedup on import
+  normName        String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([clinicId, normName])
+  @@index([clinicId])
+  @@index([normName])
+}
+

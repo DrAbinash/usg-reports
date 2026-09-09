@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SectionLabel } from "./bits";
 import { LOGIN_THEMES, type LoginThemeName } from "./LockScreen";
-import { Building2, ShieldCheck, Check, Palette, Upload, Trash2, Waves, Download, ArchiveRestore, Database, History, RefreshCw, Link2, Loader2 } from "lucide-react";
+import { Building2, ShieldCheck, Check, Palette, Upload, Trash2, Waves, Download, ArchiveRestore, Database, History, RefreshCw, Link2, Loader2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { auditLabel } from "@/lib/usg/auditShared";
@@ -902,6 +902,18 @@ export function SettingsView() {
         </TabsContent>
 
         <TabsContent value="data" className="mt-4 space-y-5 rounded-xl border border-border bg-card p-5">
+          {/* v6.16: Doctor directory CSV import */}
+          <div className="space-y-2.5 rounded-xl border border-violet-200 bg-violet-50/40 p-3.5">
+            <div className="flex items-center gap-2 text-[12px] font-bold text-violet-800">
+              <Users className="h-4 w-4" /> Referring doctor directory
+            </div>
+            <p className="text-[11px] leading-relaxed text-violet-700/90">
+              Import referring doctors from a CARE ERP CSV export, or add them manually.
+              Doctors appear as autocomplete suggestions in the composer's "Referred By" field.
+            </p>
+            <DoctorImportSection />
+          </div>
+
           {/* Full-clinic backup */}
           <div className="space-y-2.5 rounded-xl border border-sky-200 bg-sky-50/40 p-3.5">
             <div className="flex items-center gap-2 text-[12px] font-bold text-sky-800">
@@ -1098,5 +1110,100 @@ function FeatureToggle({
       </div>
       <input type="hidden" name={field} value={value ? "1" : "0"} />
     </label>
+  );
+}
+
+/** v6.16: Doctor import section — CSV upload + list + delete */
+function DoctorImportSection() {
+  const [doctors, setDoctors] = useState<Array<{ id: string; name: string; specialization: string; hospital: string }>>([]);
+  const [importing, setImporting] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const loadDoctors = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/usg/doctors");
+      if (res.ok) {
+        const d = (await res.json()) as { doctors: typeof doctors };
+        setDoctors(d.doctors);
+      }
+    } catch { /* silent */ } finally { setLoading(false); }
+  };
+
+  useEffect(() => { void loadDoctors(); }, []);
+
+  const handleImport = async (file: File) => {
+    setImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/usg/doctors/import", { method: "POST", body: formData });
+      const r = await res.json();
+      if (r.imported !== undefined) {
+        toast.success(`Imported ${r.imported} doctors (${r.skipped} skipped)`);
+        await loadDoctors();
+      } else {
+        toast.error(r.error ?? "Import failed");
+      }
+    } catch (err) {
+      toast.error(`Import failed — ${(err as Error)?.message ?? "network error"}`);
+    } finally {
+      setImporting(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await fetch(`/api/usg/doctors/${id}`, { method: "DELETE" });
+      await loadDoctors();
+      toast.success("Doctor removed");
+    } catch {
+      toast.error("Delete failed");
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".csv,text/csv"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void handleImport(f);
+          }}
+        />
+        <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()} disabled={importing} className="h-7 text-[11px]">
+          {importing ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : <Upload className="mr-1.5 h-3 w-3" />}
+          {importing ? "Importing…" : "Import CSV"}
+        </Button>
+        <span className="text-[10px] text-muted-foreground">
+          CSV columns: name, specialization, degree, phone, hospital, area
+        </span>
+      </div>
+      {loading ? (
+        <p className="text-[10px] text-muted-foreground">Loading…</p>
+      ) : doctors.length === 0 ? (
+        <p className="text-[10px] text-faint">No doctors imported yet.</p>
+      ) : (
+        <div className="max-h-32 space-y-0.5 overflow-y-auto rounded-lg border border-border bg-white p-1.5">
+          {doctors.map((d) => (
+            <div key={d.id} className="flex items-center gap-2 rounded px-1.5 py-0.5 text-[11px] hover:bg-muted/30">
+              <span className="truncate font-medium">{d.name}</span>
+              {d.specialization ? <span className="shrink-0 text-[9px] text-muted-foreground">{d.specialization}</span> : null}
+              {d.hospital ? <span className="shrink-0 text-[9px] text-faint">· {d.hospital}</span> : null}
+              <button onClick={() => void handleDelete(d.id)} className="ml-auto text-faint hover:text-destructive" title="Delete">
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="text-[9px] text-faint">{doctors.length} doctor(s) in directory</p>
+    </div>
   );
 }

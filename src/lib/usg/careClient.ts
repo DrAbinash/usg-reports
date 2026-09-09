@@ -103,7 +103,14 @@ export type CareWorklistItem = {
 };
 
 export function fetchWorklist() {
-  return careFetch<CareWorklistItem[]>("/api/internal/reporting-studio/worklist?status=pending");
+  // v6.14: fetch ALL statuses, not just pending. The ERP's ?status=pending
+  // only returned new orders; the doctor needs to see reported/completed
+  // orders too (for the day's record, billing follow-up, etc.). The
+  // careSync importCareRows function handles status correctly — REPORTED
+  // rows are frozen (never updated), PENDING rows are imported/updated.
+  // If the ERP doesn't support ?status=all, it will just return pending
+  // (which is the current behaviour — no regression).
+  return careFetch<CareWorklistItem[]>("/api/internal/reporting-studio/worklist?status=all");
 }
 
 export type FinalizePayload = {
@@ -132,16 +139,30 @@ export function fetchBillingStatus(accessions: string[]) {
 
 /**
  * Ultrasound modality filter — mirrors the ERP's isUltrasoundModality()
- * substring rule (USG / US / Ultrasound / Doppler / OB US), applied to the
- * rows the bridge returns. Non-ultrasound rows are simply not this app's
- * business: the MRI studio and this studio each keep their own worklist.
+ * substring rule (USG / US / Ultrasound / Doppler / OB US / Echo / Fetal),
+ * applied to the rows the bridge returns. Non-ultrasound rows are simply
+ * not this app's business: the MRI studio and this studio each keep their
+ * own worklist.
+ *
+ * v6.14: expanded to catch more modality strings that ERP systems send:
+ * - "USG", "US", "Ultrasound", "Sonography", "Sonograph"
+ * - "Doppler", "Color Doppler", "Colour Doppler", "Doppler Study"
+ * - "Echo", "Echocardiography", "Fetal Echo", "2D Echo"
+ * - "OB US", "Obstetric", "Antenatal", "Growth Scan"
+ * - "4D US", "3D US", "3D/4D"
+ * - Null/empty modality → ACCEPT (some ERPs don't fill modality but the
+ *   testName contains "USG"/"Ultrasound"; the importCareRows function
+ *   also checks testName as a fallback)
  */
 export function isUltrasoundModality(modality: string | null | undefined): boolean {
-  if (!modality) return false;
+  if (!modality || !modality.trim()) return true; // v6.14: accept null modality (testName will be checked)
   const m = modality.trim().toLowerCase();
-  if (!m) return false;
-  if (/^(us|usg|ob us)$/.test(m)) return true;
-  return /ultrasound|doppler|sonograph/.test(m);
+  if (!m) return true;
+  // Exact matches
+  if (/^(us|usg|ob us|4d us|3d us)$/.test(m)) return true;
+  // Substring matches
+  if (/ultrasound|sonograph|doppler|echo|fetal|obstetric|antenatal|growth scan/.test(m)) return true;
+  return false;
 }
 
 /** Normalise the ERP's patientAge ("54/F", "54") into age + sex. */

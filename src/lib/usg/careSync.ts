@@ -37,6 +37,7 @@ export type NormalizedCareRow = {
   wlId: string | null;
   acc: string | null;
   uid: string | null;
+  bill: string | null; // v6.14: billNumber as fallback identity
 };
 
 const clean = (v: string | null | undefined): string | null => {
@@ -44,13 +45,14 @@ const clean = (v: string | null | undefined): string | null => {
   return t || null;
 };
 
-/** Trim the ERP payload into the three stable identities + the name. */
+/** Trim the ERP payload into the stable identities + the name. */
 export function normalizeCareRow(w: CareWorklistItem): NormalizedCareRow {
   return {
     name: (w.patientName ?? "").trim(),
     wlId: clean(w.worklistId),
     acc: clean(w.accessionNumber),
     uid: clean(w.studyInstanceUid),
+    bill: clean(w.billNumber), // v6.14
   };
 }
 
@@ -63,10 +65,14 @@ export type ImportDecision =
  * Blank-accession rows with a worklistId or StudyInstanceUID are the ERP's
  * normal output and MUST import; rows with no identity at all are skipped
  * with a counted reason (there is nothing safe to dedup them by).
+ *
+ * v6.14: also accept billNumber as a fallback identity — some ERPs don't
+ * send accession/worklistId but always send a bill number.
  */
 export function decideImport(n: NormalizedCareRow): ImportDecision {
   if (!n.name) return { kind: "skip", reason: "noName" };
-  if (!n.wlId && !n.acc && !n.uid) return { kind: "skip", reason: "missingIdentity" };
+  // v6.14: accept billNumber as a fallback identity
+  if (!n.wlId && !n.acc && !n.uid && !n.bill) return { kind: "skip", reason: "missingIdentity" };
   return { kind: "import" };
 }
 
@@ -203,7 +209,17 @@ export async function importCareRows(rows: CareWorklistItem[], clinicId: string 
   const stats = emptySyncStats();
   stats.careRowsReceived = rows.length;
 
-  const usRows = rows.filter((w) => isUltrasoundModality(w.modality));
+  const usRows = rows.filter((w) => {
+    // v6.14: check modality first; if null/empty, check testName as fallback.
+    // Some ERPs don't fill the modality field but the testName contains
+    // "USG"/"Ultrasound"/"Doppler"/"Echo" etc.
+    if (isUltrasoundModality(w.modality)) return true;
+    if (!w.modality || !w.modality.trim()) {
+      const tn = (w.testName ?? "").toLowerCase();
+      if (/usg|ultrasound|sonograph|doppler|echo|fetal|antenatal|obstetric|growth scan|whole abdomen|kub|thyroid|breast|scrotum|tvs|trus|prostate|renal/.test(tn)) return true;
+    }
+    return false;
+  });
   stats.ultrasoundRowsReceived = usRows.length;
 
   // Bulk-load existing orders once; single-clinic scale (hundreds).
@@ -232,7 +248,7 @@ export async function importCareRows(rows: CareWorklistItem[], clinicId: string 
         stats.skippedReasons.push(`WL ${n.wlId ?? n.acc ?? "?"}: no patient name`);
       } else {
         stats.skippedMissingIdentity++;
-        stats.skippedReasons.push(`WL ${n.wlId ?? "?"}: no stable identity (worklistId / accession / StudyInstanceUID all absent)`);
+        stats.skippedReasons.push(`WL ${n.wlId ?? n.bill ?? "?"}: no stable identity (worklistId / accession / StudyInstanceUID / billNumber all absent)`);
       }
       continue;
     }

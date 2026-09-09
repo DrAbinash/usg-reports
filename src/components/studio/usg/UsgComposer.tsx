@@ -47,6 +47,7 @@ import { UsgStudyPicker } from "./UsgStudyPicker";
 import { UsgShortcutOverlay } from "./UsgShortcutOverlay";
 import { UsgGrowthChart } from "./UsgGrowthChart";
 import { UsgTemplateBar } from "./UsgTemplateBar";
+import { UsgDoctorAutocomplete } from "./UsgDoctorAutocomplete";
 import { UsgCriticalCommDialog } from "./UsgCriticalCommDialog";
 import { UsgAiDraftPanel } from "./UsgAiDraftPanel";
 import { UsgBiradsPicker } from "./UsgBiradsPicker";
@@ -995,8 +996,8 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
               </div>
               <div className="grid flex-1 min-w-[140px] gap-0.5">
                 <Label className="text-[9px] font-semibold uppercase tracking-wide text-faint">Referred by</Label>
-                <Input value={referredBy} onChange={(e) => setReferredBy(e.target.value)} placeholder="Dr. —"
-                  className="h-8 border-border bg-panel text-[12px]" />
+                {/* v6.16: autocomplete from the doctor directory */}
+                <UsgDoctorAutocomplete value={referredBy} onChange={setReferredBy} disabled={isFinal} />
               </div>
               <div className="grid w-[130px] gap-0.5">
                 <Label className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-faint"><CalendarDays className="h-2.5 w-2.5" />Scan date</Label>

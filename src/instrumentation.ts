@@ -6,9 +6,23 @@
  * local date and (after 02:00) writes data/backups/usg-auto-YYYY-MM-DD.json
  * exactly once per day, keeping the newest 14. Everything is best-effort —
  * a backup failure must never take the clinical app down.
+ *
+ * v6.18: explicitly sets process.env.TZ to Asia/Kolkata (IST) if not already
+ * set, so all Date operations use Indian Standard Time regardless of the
+ * host OS timezone. Docker already sets TZ via docker-compose; this catches
+ * the Windows standalone build and any non-Docker deployment.
  */
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+
+  // v6.18: Force IST if TZ is not set. This ensures new Date(), getHours(),
+  // toLocaleDateString() etc. all use Asia/Kolkata. The Docker container
+  // already sets TZ=Asia/Kolkata; this is for the Windows standalone and
+  // any deployment that doesn't set TZ.
+  if (!process.env.TZ) {
+    process.env.TZ = "Asia/Kolkata";
+    console.log("[usg-studio] TZ not set — defaulting to Asia/Kolkata (IST)");
+  }
 
   const NIGHTLY_INTERVAL_MS = 10 * 60 * 1000;
   const timer = setInterval(() => {

@@ -1,4 +1,4 @@
-import { requireSession } from "@/lib/auth";
+import { requireSession, getActiveClinicId } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getStudy } from "@/lib/usg/studies";
 import { normaliseState } from "@/lib/usg/composer";
@@ -39,19 +39,20 @@ export async function POST(_req: Request, ctx: Ctx) {
   const state = normaliseState({}, studyKey);
   const cols = await resolveColumns(JSON.stringify(state), study.technique);
 
-  const patientId = await linkPatient(order.patientName, order.patientPhone);
-  // Blank at the bill desk (PACS columns empty)? Fall back to what the
-  // patient's last local report carried — age/referrer survive as history.
-  const fallback =
-    order.patientAge || order.referringDoctor
-      ? { age: order.patientAge, referredBy: order.referringDoctor }
-      : await latestKnownDemographics(patientId, order.patientName);
+  const clinicId = await getActiveClinicId();
+  const patientId = await linkPatient(order.patientName, order.patientPhone, clinicId);
+
+  // v6.17: Always try latestKnownDemographics as fallback — the CARE ERP
+  // may send age but not referringDoctor (or vice versa). We fill whatever
+  // is blank from the patient's last local report.
+  const prior = await latestKnownDemographics(patientId, order.patientName, clinicId);
   const report = await db.usgReport.create({
     data: {
+      clinicId,
       patientName: order.patientName,
-      patientAge: order.patientAge || fallback.age,
+      patientAge: order.patientAge || prior.age,
       patientSex: orderSex(order.patientSex, child) === "M" ? "M" : orderSex(order.patientSex, child) === "CHILD" ? "CHILD" : "F",
-      referredBy: order.referringDoctor || fallback.referredBy,
+      referredBy: order.referringDoctor || prior.referredBy,
       patientId,
       technique: study.technique,
       stateJson: JSON.stringify(state),
@@ -60,14 +61,13 @@ export async function POST(_req: Request, ctx: Ctx) {
     },
   });
 
-  // Keep the ORDER's demographics in step with what the report now carries —
-  // the worklist row and any future re-open show the same age/referrer.
-  if (fallback.age || fallback.referredBy) {
+  // Keep the ORDER's demographics in step — fill blanks from the fallback.
+  if (prior.age || prior.referredBy) {
     await db.usgCareOrder.update({
       where: { id: order.id },
       data: {
-        patientAge: order.patientAge || fallback.age,
-        referringDoctor: order.referringDoctor || fallback.referredBy,
+        patientAge: order.patientAge || prior.age,
+        referringDoctor: order.referringDoctor || prior.referredBy,
       },
     });
   }

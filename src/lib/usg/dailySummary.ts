@@ -7,6 +7,10 @@
  *   - Follow-ups due
  *   - Most common study types
  *   - Revenue estimate (if pricing is configured)
+ *
+ * v6.18: fixed timezone bug — was using toISOString().slice(0,10) which
+ * returns UTC date, not local IST date. At 11 PM IST (5:30 PM UTC), the
+ * "today" filter would match the wrong day. Now uses local date formatting.
  */
 
 export type DailySummary = {
@@ -33,6 +37,13 @@ export type ReportSummary = {
   serialNo: number | null;
 };
 
+/** Get today's date as yyyy-mm-dd in the LOCAL timezone (IST when TZ is set). */
+function todayLocalStr(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
 /**
  * Build a daily summary from the day's reports.
  */
@@ -40,7 +51,7 @@ export function buildDailySummary(
   reports: ReportSummary[],
   studyPricing?: Record<string, number>,
 ): DailySummary {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalStr();
 
   const todayReports = reports.filter(
     (r) => r.finalizedAt?.slice(0, 10) === today || r.scanDate?.slice(0, 10) === today,

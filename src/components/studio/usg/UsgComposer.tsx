@@ -105,7 +105,7 @@ export type UsgComposerProps = {
   settings: UsgPrintSettings;
   report: UsgReportRow | null; // existing draft to continue, or null = new
   /** "New scan for patient" prefill from the registry (report stays null). */
-  prefill?: { patientName?: string; patientPhone?: string; patientAge?: string; patientSex?: string } | null;
+  prefill?: { patientName?: string; patientPhone?: string; patientAge?: string; patientSex?: string; referredBy?: string } | null;
   /** Previous-scan snapshot for the follow-up diff panel (follow-up drafts). */
   diffSource?: DiffSource | null;
   /** The doctor's normal-wording overrides (v5) — builtin normals retuned. */
@@ -143,7 +143,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     (report?.patientSex ?? prefill?.patientSex ?? "F") as "F" | "M" | typeof USG_SEX_CHILD,
   );
   const [patients, setPatients] = useState<PatientSuggestion[]>([]);
-  const [referredBy, setReferredBy] = useState(report?.referredBy ?? "");
+  const [referredBy, setReferredBy] = useState(report?.referredBy ?? prefill?.referredBy ?? "");
   const [studyKey, setStudyKey] = useState(studyKey0);
   const study = useMemo(
     () => applyNormalOverrides(getStudy(studyKey) ?? USG_STUDIES[0], normalOverrides),
@@ -963,7 +963,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
             <div className="flex flex-wrap items-end gap-1.5 border-t border-border px-3 py-2">
               <div className="grid flex-1 min-w-[140px] gap-0.5">
                 <Label className="text-[9px] font-semibold uppercase tracking-wide text-faint">Patient</Label>
-                <Input value={patientName} onChange={(e) => onNameChange(e.target.value)} placeholder="Name"
+                <Input value={patientName} onChange={(e) => onNameChange(e.target.value)} placeholder="Type patient name…"
                   list="usg-patient-names" disabled={isFinal}
                   className="h-8 border-border bg-panel text-[12px] font-semibold" />
                 <datalist id="usg-patient-names">

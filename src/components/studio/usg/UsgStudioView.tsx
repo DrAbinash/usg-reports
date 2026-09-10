@@ -56,6 +56,7 @@ type ComposerPrefill = {
   patientPhone?: string;
   patientAge?: string;
   patientSex?: string;
+  referredBy?: string;
 };
 
 export function UsgStudioView() {
@@ -305,8 +306,8 @@ export function UsgStudioView() {
     if (force) setMode("patients");
   }, []);
 
-  /** New scan for a patient — prefill name/phone (age & sex from her last
-   *  report so the strip is one-glance ready) and jump into the composer. */
+  /** New scan for a patient — prefill name/phone (age, sex & referrer from her
+   *  last report so the strip is one-glance ready) and jump into the composer. */
   const newScanFor = (p: PatientRow & { reports?: UsgReportRow[] }) => {
     const last = p.reports?.[0];
     setPrefill({
@@ -314,6 +315,7 @@ export function UsgStudioView() {
       patientPhone: p.phone,
       patientAge: last?.patientAge ?? "",
       patientSex: last?.patientSex ?? "F",
+      referredBy: last?.referredBy ?? "",
     });
     setPatientDetail(null);
     setEditing(null);

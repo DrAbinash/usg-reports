@@ -141,10 +141,16 @@ export async function POST() {
   // the response. No patient data in the skip reasons, no secrets anywhere.
   const stats = { ...importStats, ...attachStats };
   const skippedTotal = stats.skippedNoName + stats.skippedMissingIdentity + stats.errors;
-  if (stats.imported > 0 || skippedTotal > 0 || stats.ambiguousMatches > 0) {
+  if (
+    stats.imported > 0 ||
+    skippedTotal > 0 ||
+    stats.ambiguousMatches > 0 ||
+    stats.erpFinalizedNotLocal > 0
+  ) {
     const bits: string[] = [];
     if (stats.imported) bits.push(`${stats.imported} new`);
     if (stats.updatedExisting) bits.push(`${stats.updatedExisting} refreshed`);
+    if (stats.erpFinalizedNotLocal) bits.push(`${stats.erpFinalizedNotLocal} already finalized in ERP`);
     if (stats.matchedByStudyUid) bits.push(`${stats.matchedByStudyUid} linked by StudyInstanceUID`);
     if (stats.matchedByAccession) bits.push(`${stats.matchedByAccession} linked by accession`);
     if (stats.awaitingImages) bits.push(`${stats.awaitingImages} awaiting images`);
@@ -163,6 +169,10 @@ export async function POST() {
     careConfigured,
     orthancConfigured,
     newOrders: stats.imported,
+    // v6.14.1 — surfaced to the studio UI toast so the doctor sees how many
+    // cases the ERP already considers finalized. The UI can render a banner
+    // like "5 cases already finalized in ERP — review them" when > 0.
+    erpFinalizedNotLocal: stats.erpFinalizedNotLocal,
     lastError,
     stats,
     syncedAt: new Date().toISOString(),

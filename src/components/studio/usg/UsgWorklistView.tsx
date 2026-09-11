@@ -36,6 +36,11 @@ type SyncStats = {
   ultrasoundRowsReceived?: number;
   imported?: number;
   updatedExisting?: number;
+  alreadyReported?: number;
+  /** v6.14.1 — ERP says REPORT_FINAL/DELIVERED but the studio hasn't
+   *  finalized locally. Surfaced as a separate toast line so the doctor
+   *  can spot ERP-side finalizes they didn't do in the studio. */
+  erpFinalizedNotLocal?: number;
   skippedNoName?: number;
   skippedMissingIdentity?: number;
   errors?: number;
@@ -235,6 +240,8 @@ export function UsgWorklistView() {
           `CARE ${r.careOk ? "✓" : "✗"}`,
           `Orthanc ${r.orthancOk ? "✓" : "✗"}`,
           r.newOrders ? `${r.newOrders} new` : "",
+          st?.updatedExisting ? `${st.updatedExisting} refreshed` : "",
+          st?.erpFinalizedNotLocal ? `${st.erpFinalizedNotLocal} ERP-finalized` : "",
           st?.matchedByStudyUid ? `${st.matchedByStudyUid} by UID` : "",
           st?.matchedByAccession ? `${st.matchedByAccession} by accession` : "",
           st?.awaitingImages ? `${st.awaitingImages} awaiting images` : "",

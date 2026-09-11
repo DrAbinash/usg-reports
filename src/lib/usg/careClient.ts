@@ -100,6 +100,12 @@ export type CareWorklistItem = {
   patientPhone?: string | null;
   patientAddress?: string | null;
   billNumber?: string | null;
+  // v6.14.1: ERP-side worklist status — STUDY_RECEIVED | AI_DRAFT_READY
+  // | REPORT_IN_PROGRESS | REPORT_FINAL | DELIVERED. Used by careSync to
+  // freeze ERP-finalized rows so a ?status=all re-sync can't overwrite a
+  // finalized report. Older ERP builds omit this; careSync treats undefined
+  // as "ERP didn't say, assume still pending".
+  status?: string | null;
 };
 
 export function fetchWorklist() {

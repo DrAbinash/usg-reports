@@ -38,6 +38,7 @@ export type NormalizedCareRow = {
   acc: string | null;
   uid: string | null;
   bill: string | null; // v6.14: billNumber as fallback identity
+  erpStatus: string | null; // v6.14.1: ERP-side worklist status (REPORT_FINAL / DELIVERED / ...)
 };
 
 const clean = (v: string | null | undefined): string | null => {
@@ -53,7 +54,17 @@ export function normalizeCareRow(w: CareWorklistItem): NormalizedCareRow {
     acc: clean(w.accessionNumber),
     uid: clean(w.studyInstanceUid),
     bill: clean(w.billNumber), // v6.14
+    erpStatus: clean(w.status), // v6.14.1
   };
+}
+
+/** v6.14.1 — ERP says it has already finalized this row.
+ *  Older ERP builds (or ?status=pending feeds) never send `status`,
+ *  so undefined → false (treat as still pending). Only the literal
+ *  REPORT_FINAL / DELIVERED values count as "ERP already done". */
+export function isErpFinalized(erpStatus: string | null | undefined): boolean {
+  const s = typeof erpStatus === "string" ? erpStatus.trim().toUpperCase() : "";
+  return s === "REPORT_FINAL" || s === "DELIVERED";
 }
 
 export type ImportDecision =
@@ -139,6 +150,11 @@ export type SyncStats = {
   imported: number;
   updatedExisting: number;
   alreadyReported: number;
+  /** v6.14.1 — ERP says REPORT_FINAL/DELIVERED but the studio hasn't
+   *  finalized locally. Counted so the operator can see how many cases
+   *  the studio missed (e.g. someone finalized directly in ERP). The
+   *  row is left untouched — the doctor should reconcile in the UI. */
+  erpFinalizedNotLocal: number;
   skippedNoName: number;
   skippedMissingIdentity: number;
   errors: number;
@@ -152,6 +168,7 @@ export const emptySyncStats = (): SyncStats => ({
   imported: 0,
   updatedExisting: 0,
   alreadyReported: 0,
+  erpFinalizedNotLocal: 0,
   skippedNoName: 0,
   skippedMissingIdentity: 0,
   errors: 0,
@@ -262,7 +279,21 @@ export async function importCareRows(rows: CareWorklistItem[], clinicId: string 
       if (target) {
         if (target.status === "REPORTED") {
           // The day's record stays frozen — resync never resets state.
+          // (Local freeze: applies whether the ERP sent ?status=pending
+          // or ?status=all. The doctor finalized here; nothing to do.)
           stats.alreadyReported++;
+        } else if (isErpFinalized(n.erpStatus)) {
+          // v6.14.1 ERP freeze: the ERP says REPORT_FINAL / DELIVERED for
+          // this worklistId, but the studio hasn't finalized locally.
+          // Don't overwrite local demographics OR bump the local status —
+          // the doctor needs to see this case in the worklist so they can
+          // reconcile (either finalize here too, or mark as "done elsewhere").
+          // Counted separately so the audit trail distinguishes the two
+          // "already done" paths (local vs ERP-side).
+          stats.erpFinalizedNotLocal++;
+          stats.skippedReasons.push(
+            `WL ${n.wlId ?? n.acc ?? "?"}: ERP already REPORT_FINAL — not overwriting local state`,
+          );
         } else {
           await db.usgCareOrder.update({
             where: { id: target.id },
@@ -292,6 +323,11 @@ export async function importCareRows(rows: CareWorklistItem[], clinicId: string 
           stats.updatedExisting++;
         }
       } else {
+        // v6.14.1: even for brand-new rows, if the ERP already considers
+        // this case REPORT_FINAL / DELIVERED, import it but freeze the
+        // local status at REPORTED so the studio doesn't try to finalize
+        // it again. The doctor can reopen if they want to amend.
+        const isErpDone = isErpFinalized(n.erpStatus);
         const created = (await db.usgCareOrder.create({
           data: {
             clinicId,
@@ -309,10 +345,19 @@ export async function importCareRows(rows: CareWorklistItem[], clinicId: string 
             studyInstanceUid: n.uid,
             billingStatus: w.billingStatus ?? null,
             studyDate: w.studyDate ? new Date(w.studyDate) : null,
-            status: "PENDING",
+            // v6.14.1: if the ERP already finalized, mirror that locally so
+            // the studio's finalize button is hidden. careSyncedAt is left
+            // null so the audit trail shows "imported as already-finalized".
+            status: isErpDone ? "REPORTED" : "PENDING",
           },
         })) as CareOrderRow;
         stats.imported++;
+        if (isErpDone) {
+          stats.erpFinalizedNotLocal++;
+          stats.skippedReasons.push(
+            `WL ${n.wlId ?? n.acc ?? "?"}: imported as REPORTED (ERP already REPORT_FINAL)`,
+          );
+        }
         if (created.careWorklistId) byWlId.set(created.careWorklistId, created);
         if (created.accessionNumber) byAcc.set(created.accessionNumber, created);
       }

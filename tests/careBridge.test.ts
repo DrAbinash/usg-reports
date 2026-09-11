@@ -39,6 +39,12 @@ import {
   checkEligibility,
   buildDicomSrDocument,
 } from "@/lib/usg/pacsReturn";
+import {
+  normalizeCareRow,
+  decideImport,
+  isErpFinalized,
+  type NormalizedCareRow,
+} from "@/lib/usg/careSync";
 
 // ── Measurement Review ────────────────────────────────────────────────────
 
@@ -482,5 +488,77 @@ describe("pacsReturn", () => {
     // SR content
     expect(doc["0040A040"]).toBeDefined();
     expect(doc["0040A730"]).toBeDefined();
+  });
+});
+
+// ── careSync v6.14.1 — ERP-side freeze guard ────────────────────────────────
+
+describe("careSync.isErpFinalized", () => {
+  it("returns true for REPORT_FINAL and DELIVERED (case-insensitive, trimmed)", () => {
+    expect(isErpFinalized("REPORT_FINAL")).toBe(true);
+    expect(isErpFinalized("report_final")).toBe(true);
+    expect(isErpFinalized("  REPORT_FINAL  ")).toBe(true);
+    expect(isErpFinalized("DELIVERED")).toBe(true);
+    expect(isErpFinalized("delivered")).toBe(true);
+  });
+
+  it("returns false for pending statuses, undefined and null", () => {
+    expect(isErpFinalized("STUDY_RECEIVED")).toBe(false);
+    expect(isErpFinalized("AI_DRAFT_READY")).toBe(false);
+    expect(isErpFinalized("REPORT_IN_PROGRESS")).toBe(false);
+    expect(isErpFinalized("PENDING")).toBe(false);
+    expect(isErpFinalized(undefined)).toBe(false);
+    expect(isErpFinalized(null)).toBe(false);
+    expect(isErpFinalized("")).toBe(false);
+  });
+});
+
+describe("careSync.normalizeCareRow + decideImport with ERP status", () => {
+  it("carries the ERP-side status through normalization", () => {
+    const n = normalizeCareRow({
+      worklistId: "W-1",
+      accessionNumber: "A-1",
+      patientName: "Test Patient",
+      modality: "USG",
+      status: "REPORT_FINAL",
+    });
+    expect(n.erpStatus).toBe("REPORT_FINAL");
+  });
+
+  it("treats missing ERP status as null (legacy ERP builds)", () => {
+    const n = normalizeCareRow({
+      worklistId: "W-1",
+      accessionNumber: "A-1",
+      patientName: "Test Patient",
+      modality: "USG",
+    });
+    expect(n.erpStatus).toBeNull();
+  });
+
+  it("decideImport still passes when ERP status is REPORT_FINAL (import gate is identity, not ERP status)", () => {
+    // The freeze happens INSIDE importCareRows, not at the import gate.
+    // A REPORT_FINAL row from ?status=all must still enter the loop so it
+    // can be counted as erpFinalizedNotLocal or marked REPORTED on import.
+    const n: NormalizedCareRow = {
+      name: "Test Patient",
+      wlId: "W-1",
+      acc: "A-1",
+      uid: null,
+      bill: null,
+      erpStatus: "REPORT_FINAL",
+    };
+    expect(decideImport(n)).toEqual({ kind: "import" });
+  });
+
+  it("decideImport still skips when no name (even if ERP status is REPORT_FINAL)", () => {
+    const n: NormalizedCareRow = {
+      name: "",
+      wlId: "W-1",
+      acc: "A-1",
+      uid: null,
+      bill: null,
+      erpStatus: "REPORT_FINAL",
+    };
+    expect(decideImport(n)).toEqual({ kind: "skip", reason: "noName" });
   });
 });

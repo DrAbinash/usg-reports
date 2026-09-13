@@ -108,15 +108,26 @@ export type CareWorklistItem = {
   status?: string | null;
 };
 
-export function fetchWorklist() {
+export type FetchWorklistOpts = {
+  /** ISO timestamp — return only rows updated after this (incremental sync). */
+  since?: string | null;
+  /** When true, ignore `since` and pull the full worklist. */
+  full?: boolean;
+};
+
+export function fetchWorklist(opts?: FetchWorklistOpts) {
   // v6.14: fetch ALL statuses, not just pending. The ERP's ?status=pending
   // only returned new orders; the doctor needs to see reported/completed
   // orders too (for the day's record, billing follow-up, etc.). The
   // careSync importCareRows function handles status correctly — REPORTED
   // rows are frozen (never updated), PENDING rows are imported/updated.
-  // If the ERP doesn't support ?status=all, it will just return pending
-  // (which is the current behaviour — no regression).
-  return careFetch<CareWorklistItem[]>("/api/internal/reporting-studio/worklist?status=all");
+  // v6.19: optional ?since= for incremental sync — first boot or ?full=1
+  // still does a full pull.
+  let path = "/api/internal/reporting-studio/worklist?status=all";
+  if (opts?.since && !opts?.full) {
+    path += `&since=${encodeURIComponent(opts.since)}`;
+  }
+  return careFetch<CareWorklistItem[]>(path);
 }
 
 export type FinalizePayload = {

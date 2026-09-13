@@ -7,7 +7,7 @@
  * chip. "Start report" opens the composer pre-filled; "Form F" opens the
  * statutory form pre-populated. Reported rows stay for the day's record.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStudio } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,7 @@ import { UsgFormFDialog, type FormFDefaults, type FormFOrderLite } from "./UsgFo
 import { Search, RefreshCw, ChevronRight, Hourglass, CheckCircle2, EyeOff, ScanLine, FileCheck2, CloudOff, Link2, CalendarDays } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { toLocalDateString } from "@/lib/usg/dates";
 
 type Order = FormFOrderLite & {
   id: string;
@@ -168,10 +169,9 @@ export function UsgWorklistView() {
   /** Compute the from/to query params from the preset. */
   const dateParams = useCallback((): string => {
     const now = new Date();
-    const pad = (d: Date) => d.toISOString().slice(0, 10);
-    const today = pad(now);
-    const yesterday = (() => { const d = new Date(now); d.setDate(d.getDate() - 1); return pad(d); })();
-    const weekAgo = (() => { const d = new Date(now); d.setDate(d.getDate() - 7); return pad(d); })();
+    const today = toLocalDateString(now);
+    const yesterday = (() => { const d = new Date(now); d.setDate(d.getDate() - 1); return toLocalDateString(d); })();
+    const weekAgo = (() => { const d = new Date(now); d.setDate(d.getDate() - 7); return toLocalDateString(d); })();
 
     switch (datePreset) {
       case "today": return `&from=${today}&to=${today}`;
@@ -225,16 +225,24 @@ export function UsgWorklistView() {
       .catch(() => {});
   }, [defaults]);
 
-  const sync = async () => {
+  const lastAutoSyncAt = useRef(0);
+  const AUTO_SYNC_INTERVAL_MS = 2 * 60 * 1000;
+  const AUTO_SYNC_MIN_GAP_MS = 90 * 1000;
+
+  const sync = useCallback(async (opts?: { silent?: boolean; full?: boolean }) => {
+    const silent = opts?.silent ?? false;
     setSyncing(true);
-    const r = await fetch("/api/usg/worklist/sync", { method: "POST" })
+    const url = opts?.full ? "/api/usg/worklist/sync?full=1" : "/api/usg/worklist/sync";
+    const r = await fetch(url, { method: "POST" })
       .then((x) => x.json() as Promise<(WorklistResponse & { ok?: boolean; newOrders?: number; stats?: SyncStats }) | null>)
       .catch(() => null);
     setSyncing(false);
+    lastAutoSyncAt.current = Date.now();
     if (r?.ok) {
+      const st = r.stats;
+      const hasNews = (r.newOrders ?? 0) > 0 || (st?.erpFinalizedNotLocal ?? 0) > 0;
       if (r.lastError) toast.warning(r.lastError);
-      else if (r.careConfigured || r.orthancConfigured) {
-        const st = r.stats;
+      else if (!silent && (r.careConfigured || r.orthancConfigured)) {
         const skipped = (st?.skippedNoName ?? 0) + (st?.skippedMissingIdentity ?? 0) + (st?.errors ?? 0);
         const bits = [
           `CARE ${r.careOk ? "✓" : "✗"}`,
@@ -249,19 +257,40 @@ export function UsgWorklistView() {
         ].filter(Boolean);
         const t = toast.success(`Synced · ${bits.join(" · ")}`);
         if (skipped && st?.skippedReasons?.length) {
-          // Safe diagnostics — ids + reasons only, never patient data.
           const reasons = (st.skippedReasons ?? []).slice(0, 3).join("\n");
           setTimeout(() => toast.info(reasons, { duration: 8000 }), 600);
         }
         void t;
-      } else {
+      } else if (!silent && !r.careConfigured && !r.orthancConfigured) {
         toast.info("Not configured — set CARE / Orthanc in Settings → Integrations");
+      } else if (silent && hasNews) {
+        const bits = [
+          r.newOrders ? `${r.newOrders} new from CARE` : "",
+          st?.erpFinalizedNotLocal ? `${st.erpFinalizedNotLocal} finalized in ERP` : "",
+        ].filter(Boolean);
+        toast.info(bits.join(" · "), { duration: 5000 });
       }
       load();
-    } else {
+    } else if (!silent) {
       toast.error("Sync failed");
     }
-  };
+  }, [load]);
+
+  // Auto-pull from CARE: on mount, every 2 min while this view is open, and on tab focus.
+  useEffect(() => {
+    void sync({ silent: true });
+    const timer = setInterval(() => { void sync({ silent: true }); }, AUTO_SYNC_INTERVAL_MS);
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - lastAutoSyncAt.current < AUTO_SYNC_MIN_GAP_MS) return;
+      void sync({ silent: true });
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [sync]);
 
   const startReport = async (order: Order) => {
     const r = await fetch(`/api/usg/worklist/${order.id}/start`, { method: "POST" })

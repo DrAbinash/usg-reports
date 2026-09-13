@@ -1,3 +1,4 @@
+import { NextRequest } from "next/server";
 import { requireSession, getActiveClinicId } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
@@ -5,6 +6,9 @@ import { fetchBillingStatus, fetchWorklist, finalizeReport } from "@/lib/usg/car
 import { listStudies } from "@/lib/usg/orthancClient";
 import { attachOrthancStudies, emptyAttachStats, emptySyncStats, importCareRows } from "@/lib/usg/careSync";
 import { audit } from "@/lib/usg/audit";
+
+/** Subtract a small buffer so clock skew between studio and ERP never misses a row. */
+const SINCE_BUFFER_MS = 2 * 60 * 1000;
 
 /**
  * Worklist sync — three fail-soft steps (v6.1 identity model):
@@ -21,10 +25,14 @@ import { audit } from "@/lib/usg/audit";
  * Every decision is counted in the response; skips carry a safe reason
  * (worklistId + reason — never patient data, never secrets).
  */
-export async function POST() {
+export async function POST(req: NextRequest) {
   const guard = await requireSession();
   if (guard) return guard;
   const clinicId = await getActiveClinicId();
+
+  const fullSync =
+    req.nextUrl.searchParams.get("full") === "1" ||
+    req.nextUrl.searchParams.get("full") === "true";
 
   const s = await getSettings();
   const careConfigured = !!s.careApiBase; // v6.14: only base URL required for trial
@@ -32,13 +40,20 @@ export async function POST() {
   let careOk = false;
   let orthancOk = false;
   let lastError: string | null = null;
+  let incremental = false;
 
   let importStats = emptySyncStats();
   let attachStats = emptyAttachStats();
 
   // 1. CARE worklist → import ultrasound orders by identity
   if (careConfigured) {
-    const r = await fetchWorklist();
+    const priorSync = await db.usgSyncState.findUnique({ where: { clinicId } });
+    let since: string | undefined;
+    if (!fullSync && priorSync?.lastSyncAt) {
+      since = new Date(priorSync.lastSyncAt.getTime() - SINCE_BUFFER_MS).toISOString();
+      incremental = true;
+    }
+    const r = await fetchWorklist({ since, full: fullSync });
     if (r.ok) {
       careOk = true;
       importStats = await importCareRows(r.data, clinicId);
@@ -175,6 +190,7 @@ export async function POST() {
     erpFinalizedNotLocal: stats.erpFinalizedNotLocal,
     lastError,
     stats,
+    incremental,
     syncedAt: new Date().toISOString(),
   });
 }

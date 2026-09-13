@@ -9,6 +9,7 @@
  * string this module builds through the studio's hidden print iframe.
  */
 import type { HospitalSettingsRow } from "@/lib/settings";
+import { toLocalDateString } from "./dates";
 import type { UsgComposerState } from "./types";
 
 export type UsgFormFData = {
@@ -60,7 +61,7 @@ export type UsgFormFData = {
 };
 
 function today(): string {
-  return new Date().toISOString().slice(0, 10);
+  return toLocalDateString();
 }
 
 /** The doctor's own fixed Form F details, resolved from Settings (ERP hard
@@ -147,8 +148,8 @@ export function prefillFormFFromOrder(
     referredBy: referred ? "Doctor" : "Self",
     referredByName: referred,
     procedurePurpose: order.testName || form.procedurePurpose,
-    procedureDate: order.studyDate ? order.studyDate.toISOString().slice(0, 10) : form.procedureDate,
-    date: order.studyDate ? order.studyDate.toISOString().slice(0, 10) : form.date,
+    procedureDate: order.studyDate ? toLocalDateString(order.studyDate) : form.procedureDate,
+    date: order.studyDate ? toLocalDateString(order.studyDate) : form.date,
   };
 }
 

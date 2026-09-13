@@ -21,3 +21,8 @@ export function toScanDateInput(d: Date | null | undefined): string {
   const p = (n: number) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`;
 }
+
+/** Local calendar date as yyyy-mm-dd — never UTC-shifted (use instead of toISOString().slice(0,10)). */
+export function toLocalDateString(d: Date = new Date()): string {
+  return toScanDateInput(d);
+}

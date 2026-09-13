@@ -5,6 +5,7 @@
  * Eligibility is checked server-side (fail-closed).
  */
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { resolve, makeLookup } from "@/lib/usg/composer";
 import { getStudy } from "@/lib/usg/studies";
@@ -16,6 +17,9 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const guard = await requireSession();
+  if (guard) return guard;
+
   const { id } = await params;
 
   const report = await db.usgReport.findUnique({
@@ -114,6 +118,9 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const guard = await requireSession();
+  if (guard) return guard;
+
   const { id } = await params;
 
   const report = await db.usgReport.findUnique({

@@ -171,7 +171,7 @@ function renderSections(resolved: UsgResolved): string {
 }
 
 const PREMIUM_CSS = `
-  @page { size: A4; margin: 12mm; }
+  @page { size: A4; margin: 10mm; }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body { font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; color: #16222E; font-size: 10.5pt; line-height: 1.5; }
   .sheet { max-width: 186mm; margin: 0 auto; }
@@ -604,7 +604,29 @@ export function buildUsgReportHtml(
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8" />
 <title>${esc(settings.hospitalName || settings.appTitle)} — ${esc(patient.name)} — ${esc(resolved.title)}</title>
-<style>${css}</style></head>
+<style>${css}
+/* v6.17 sig-pin — signature block anchored to page-1 bottom-right */
+.page { position: relative; }
+.tail { position: absolute !important; right: 8mm; bottom: 6mm; margin: 0 !important; padding: 0 !important; text-align: right; break-inside: avoid; page-break-inside: avoid; }}
+.page { min-height: 277mm; }
+
+/* v6.17 two-line demography strip */
+.patient-strip { display: flex; flex-direction: column; gap: 4px; margin: 4mm 0 3mm; }
+.strip-row { display: flex; justify-content: space-between; align-items: center; }
+.strip-row .field { flex: 1; display: flex; justify-content: space-between; align-items: baseline; }
+.strip-row .field:first-child { padding-right: 8mm; }
+.strip-row .label { font-size: 8.5pt; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
+.strip-row .value { font-size: 9.5pt; font-weight: 500; text-align: right; }
+.strip-row .field:first-child .value { text-align: left; }
+/* v6.17 signature pin to bottom-right of page 1 */
+.sig-block { position: absolute !important; right: 8mm; bottom: 6mm; margin: 0 !important; text-align: right; }
+.page { position: relative; min-height: 277mm; }
+
+/* v6.20 — honour size dials */
+.top-bar .logo-block img { height: var(--logo-h, 14mm); }
+.top-bar .logo-block .hospital-name { font-size: var(--name-fs, 15pt); }
+.top-bar .contact-block { font-size: var(--addr-fs, 8.5pt); }
+</style></head>
 <body>
 ${watermark}
 <div class="sheet">
@@ -945,6 +967,9 @@ function buildSidebarReportHtml(
     settings.phone?.trim() ? `📞 ${settings.phone}` : null,
     settings.email?.trim() ? `✉ ${settings.email}` : null,
   ].filter(Boolean).map((l) => `<div class="line">${esc(l!)}</div>`).join("");
+  // Multi-line address: split by newlines and render each
+  const addr = settings.addressLine?.trim();
+  const addrHtml = addr ? addr.split("\n").map(l => `<div class="line">${esc(l.trim())}</div>`).join("") : "";
 
   // Image sidebar items
   const sidebarImages = images.length > 0
@@ -1023,16 +1048,24 @@ ${SIDEBAR_CSS}
     <div class="logo-block">
       ${logo}
       <div>
-        <div class="hospital-name">${esc(settings.hospitalName || "CARE Diagnostics")}</div>
+        ${settings.hospitalName?.trim() ? `<div class="hospital-name">${esc(settings.hospitalName)}</div>` : ""}
         ${settings.appTitle && settings.appTitle !== "CARE USG Studio" ? `<div class="tagline">${esc(settings.appTitle)}</div>` : ""}
       </div>
     </div>
-    <div class="contact-block">${contactLines}</div>
+    <div class="contact-block">${addrHtml}${settings.phone ? `<div class="line">📞 ${esc(settings.phone)}</div>` : ""}${settings.email ? `<div class="line">✉ ${esc(settings.email)}</div>` : ""}</div>
   </div>
 
   <!-- Patient strip -->
   <div class="patient-strip">
-    <div class="field"><div class="label">Patient Name</div><div class="value">${esc(patient.name || "—")}</div></div>
+  <div class="strip-row">
+    <div class="field"><div class="label">NAME</div><div class="value" style="font-weight:700;">${esc(patient.name || "—")}</div></div>
+    <div class="field"><div class="label">AGE/SEX</div><div class="value">${esc(patient.age || "—")} / ${esc(patient.sex || "—")}</div></div>
+  </div>
+  <div class="strip-row">
+    <div class="field"><div class="label">REFERRED BY</div><div class="value">${esc(patient.referredBy || "—")}</div></div>
+    <div class="field"><div class="label">DATE</div><div class="value">${esc(patient.date || "—")}</div></div>
+  </div>
+</div></div>
     <div class="field"><div class="label">Study Date</div><div class="value">${esc(patient.date || "—")}</div></div>
     <div class="field"><div class="label">Age / Gender</div><div class="value">${esc(patient.age || "—")} / ${esc(patient.sex || "—")}</div></div>
     <div class="field"><div class="label">Ref. Doctor</div><div class="value">${esc(patient.referredBy || "—")}</div></div>

@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
-  Building2, Loader2, Plus, RefreshCw, AlertTriangle, CheckCircle2, Ban, Pencil,
+  Building2, Loader2, Plus, RefreshCw, AlertTriangle, CheckCircle2, Ban, Pencil, Link2,
 } from "lucide-react";
 import type { Clinic } from "@/lib/clinic";
 
@@ -147,6 +147,20 @@ export function UsgClinicsAdmin() {
                         <AlertTriangle className="mr-0.5 h-2.5 w-2.5" /> trial expired
                       </Badge>
                     ) : null}
+                  </div>
+                  <div className="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground font-mono">
+                    <span className="truncate">{window.location.origin}/?clinic={c.slug}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${window.location.origin}/?clinic=${c.slug}`);
+                        toast.success("Copied");
+                      }}
+                      className="shrink-0 text-muted-foreground hover:text-foreground"
+                      title="Copy bookmark URL"
+                    >
+                      <Link2 className="h-3 w-3" />
+                    </button>
                   </div>
                   {c.contactName || c.contactPhone || c.contactEmail ? (
                     <p className="mt-0.5 text-[11px] text-muted-foreground">

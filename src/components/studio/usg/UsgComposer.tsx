@@ -1157,7 +1157,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
           Was fixed at 460px max; now starts at 460px but grows to 55% on wide
           screens. On narrow screens (< lg), stacks vertically (organ cards
           on top, impression + preview below). */}
-      <div className="grid min-h-0 flex-1 gap-4 overflow-hidden p-4 lg:grid-cols-[minmax(0,1fr)_minmax(460px,55%)] xl:grid-cols-[minmax(0,1fr)_minmax(520px,60%)]">
+      <div onClick={(e) => { const g = e.currentTarget; const r = g.getBoundingClientRect(); const left = e.clientX < r.left + r.width / 2; g.classList.remove("usg-focus-edit", "usg-focus-preview"); g.classList.add(left ? "usg-focus-edit" : "usg-focus-preview"); }} onDoubleClick={(e) => { e.currentTarget.classList.remove("usg-focus-edit", "usg-focus-preview"); }} title="Click left: widen workspace · Click right: widen preview · Double-click: reset" className="grid min-h-0 flex-1 gap-4 overflow-hidden p-4 lg:grid-cols-[minmax(0,1fr)_minmax(460px,55%)] xl:grid-cols-[minmax(0,1fr)_minmax(520px,60%)]">
         {/* Left column: organ cards + images */}
         <div className="studio-scroll min-h-0 space-y-3 overflow-y-auto pr-1">
           {study.organs.map((def) => {

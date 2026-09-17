@@ -308,7 +308,8 @@ export function SettingsView() {
   const uploadPrintImage = async (which: "logo" | "sig", file: File) => {
     setImageBusy(which);
     try {
-      const dataUrl = await imageFileToDataUrl(file, which === "logo" ? 512 : 900);
+      const rawUrl = await imageFileToDataUrl(file, which === "logo" ? 512 : 900);
+      const dataUrl = which === "sig" ? await cropSig(rawUrl) : rawUrl;
       const key = which === "logo" ? "logoUrl" : "usgSignatureUrl";
       setS((prev) => (prev ? { ...prev, [key]: dataUrl } : prev));
       const body: Record<string, string> = { ...(s as unknown as Record<string, string>), [key]: dataUrl };
@@ -421,7 +422,7 @@ export function SettingsView() {
         <TabsContent value="hospital" className="mt-4 space-y-4 rounded-xl border border-border bg-card p-5">
           <Field label="App title"><Input value={s.appTitle} onChange={(e) => set("appTitle", e.target.value)} className="h-9 text-[13px]" /></Field>
           <Field label="Hospital name"><Input value={s.hospitalName} onChange={(e) => set("hospitalName", e.target.value)} className="h-9 text-[13px]" /></Field>
-          <Field label="Address"><Input value={s.addressLine} onChange={(e) => set("addressLine", e.target.value)} className="h-9 text-[13px]" /></Field>
+          <Field label="Address (one line per row — prints exactly as entered)"><textarea value={s.addressLine} onChange={(e) => set("addressLine", e.target.value)} rows={3} className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-[13px] shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" /></Field>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Phone"><Input value={s.phone} onChange={(e) => set("phone", e.target.value)} className="h-9 text-[13px]" /></Field>
             <Field label="Email"><Input value={s.email} onChange={(e) => set("email", e.target.value)} className="h-9 text-[13px]" /></Field>
@@ -603,6 +604,19 @@ export function SettingsView() {
             </div>
           </Field>
 
+          {/* v6.20 — Print Layout Studio: size dials */}
+          <Field label={`Logo size — ${(s.usgLogoSizeMm ?? 14).toFixed(0)} mm`}>
+            <input type="range" min={8} max={30} step={1} value={s.usgLogoSizeMm ?? 14} onChange={(e) => set("usgLogoSizeMm", Number(e.target.value))} className="w-full" />
+          </Field>
+          <Field label={`Hospital name size — ${(s.usgNameSizePt ?? 15).toFixed(0)} pt`}>
+            <input type="range" min={10} max={22} step={0.5} value={s.usgNameSizePt ?? 15} onChange={(e) => set("usgNameSizePt", Number(e.target.value))} className="w-full" />
+          </Field>
+          <Field label={`Address size — ${(s.usgAddressSizePt ?? 8.5).toFixed(1)} pt`}>
+            <input type="range" min={6} max={12} step={0.5} value={s.usgAddressSizePt ?? 8.5} onChange={(e) => set("usgAddressSizePt", Number(e.target.value))} className="w-full" />
+          </Field>
+          <Field label={`Signature size — ${(s.usgSignatureSizeMm ?? 26).toFixed(0)} mm`}>
+            <input type="range" min={12} max={40} step={1} value={s.usgSignatureSizeMm ?? 26} onChange={(e) => set("usgSignatureSizeMm", Number(e.target.value))} className="w-full" />
+          </Field>
           {/* v6.2 — Print layout fine-tuning: dials that size the letterhead to the clinic's paper */}
           <div className="space-y-3.5 rounded-xl border border-rose-200 bg-rose-50/40 p-3.5">
             <div className="flex items-center gap-2 text-[12px] font-bold text-rose-800">

@@ -15,7 +15,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Cake, Sparkles } from "lucide-react";
 import { birthdayLabel, dismissalKey, greetingName, isBirthdayToday } from "@/lib/usg/birthday";
 
-export type BirthdayFlag = { today: boolean; name: string; birthday: string } | null;
+export type BirthdayFlag = { today: boolean; name: string; birthday: string; message: string } | null;
 
 /** AppShell hook: resolves the masked settings once, decides if today is
  *  the day. Returns null while loading (nothing renders — no layout shift). */
@@ -32,6 +32,7 @@ export function useBirthdayFlag(): BirthdayFlag {
           today: isBirthdayToday(birthday),
           name: String(d.settings.usgDoctorName ?? ""),
           birthday,
+          message: String(d.settings.usgBirthdayMessage ?? ""),
         });
       })
       .catch(() => {});
@@ -154,8 +155,8 @@ function UltrasoundHeart() {
 }
 
 export function UsgBirthdayGreeting({
-  open, onClose, name, birthday,
-}: { open: boolean; onClose: () => void; name: string; birthday: string }) {
+  open, onClose, name, birthday, message,
+}: { open: boolean; onClose: () => void; name: string; birthday: string; message?: string }) {
   const stats = useBirthdayStats(open);
   const btnRef = useRef<HTMLButtonElement>(null);
 
@@ -224,8 +225,8 @@ export function UsgBirthdayGreeting({
             <Cake className="h-4 w-4" />
             Thank you — back to the probe
           </button>
-          <p className="mt-3 text-[11px] text-faint">
-            With love, from your CARE USG Studio 💜
+          <p className="mt-3 whitespace-pre-line text-[11.5px] italic text-faint">
+            {message || "With love, from your CARE USG Studio 💜"}
           </p>
         </div>
       </div>

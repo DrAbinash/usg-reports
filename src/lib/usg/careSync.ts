@@ -274,6 +274,13 @@ export async function importCareRows(rows: CareWorklistItem[], clinicId: string 
     const legacy = !existing && n.acc ? byAcc.get(n.acc) ?? null : null;
     const target = existing ?? legacy;
     const { age, sex } = splitAgeSex(w.patientAge);
+    // v6.15 — Age plausibility guard: reject garbage (e.g. 126) from ERP
+    const plausibleAge = (age: string | null): string | null => {
+      if (!age) return null;
+      const n = Number(age.replace(/[^0-9]/g, ""));
+      return Number.isFinite(n) && n >= 0 && n <= 110 ? String(Math.round(n)) : null;
+    };
+    const validAge = plausibleAge(age) ?? "";
 
     try {
       if (target) {
@@ -302,7 +309,7 @@ export async function importCareRows(rows: CareWorklistItem[], clinicId: string 
               // never fabricate one either — null stays null until CARE says.
               accessionNumber: n.acc ?? target.accessionNumber,
               patientName: n.name || target.patientName,
-              patientAge: age || target.patientAge,
+              patientAge: validAge || target.patientAge,
               patientSex: sex || target.patientSex,
               // v6.2 blanking guard: the ERP sends "" (empty STRING, not
               // null) for demographics it does not know — `??` would let a
@@ -334,7 +341,7 @@ export async function importCareRows(rows: CareWorklistItem[], clinicId: string 
             accessionNumber: n.acc,
             careWorklistId: n.wlId,
             patientName: n.name,
-            patientAge: age,
+            patientAge: validAge,
             patientSex: sex || "F",
             patientPhone: w.patientPhone ?? "",
             patientAddress: w.patientAddress ?? "",

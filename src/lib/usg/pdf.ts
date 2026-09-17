@@ -153,23 +153,42 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
 
   // ── Header ────────────────────────────────────────────────────────────
   const hospital = S(settings.hospitalName || settings.appTitle || "USG Studio");
-  const titleSize = a5 ? 15 : 19;
-  ensure(ctx, titleSize + 30);
+  const nameSize = clampNum(settings.usgNameSizePt, 10, 22, a5 ? 13 : 15);
+  const addrSize = clampNum(settings.usgAddressSizePt, 6, 12, a5 ? 6.5 : 8);
+  const logoSizeMm = clampNum(settings.usgLogoSizeMm, 8, 30, a5 ? 11 : 14);
+  ensure(ctx, nameSize + 30);
   let headerX = margin;
   let logo: PDFImage | null = null;
   if (settings.logoUrl) logo = await embedDataUrl(doc, settings.logoUrl);
   if (logo) {
-    const h = a5 ? 24 : 30;
+    const h = logoSizeMm * 2.83; // mm to pt
     const w = (logo.width / logo.height) * h;
     ctx.page.drawImage(logo, { x: margin, y: ctx.y - h, height: h, width: Math.min(w, contentW * 0.25) });
     headerX = margin + Math.min(w, contentW * 0.25) + 10;
   }
-  ctx.page.drawText(hospital, { x: headerX, y: ctx.y - titleSize, size: titleSize, font: fonts.bold, color: NAVY });
-  const contact = S(
-    [settings.addressLine, settings.phone, settings.email].filter((x) => x && x.trim()).join("  ·  "),
-  );
-  if (contact) {
-    ctx.page.drawText(contact, { x: headerX, y: ctx.y - titleSize - (a5 ? 10 : 12), size: a5 ? 6.5 : 8, font: fonts.reg, color: GREY });
+  ctx.page.drawText(hospital, { x: headerX, y: ctx.y - nameSize, size: nameSize, font: fonts.bold, color: NAVY });
+  
+  // Address pinned to right edge when usgAddressPosition = "right"
+  const addrPos = settings.usgAddressPosition ?? "right";
+  const addrLines = [settings.addressLine, settings.phone ? `📞 ${settings.phone}` : null, settings.email ? `✉ ${settings.email}` : null].filter(Boolean);
+  if (addrLines.length > 0) {
+    const addrY = ctx.y - nameSize - 4;
+    if (addrPos === "right") {
+      // Right-pinned: draw each line right-aligned
+      let lineY = addrY;
+      for (const line of addrLines) {
+        const txt = S(line);
+        const w = fonts.reg.widthOfTextAtSize(txt, addrSize);
+        ctx.page.drawText(txt, { x: pageW - margin - w, y: lineY, size: addrSize, font: fonts.reg, color: GREY });
+        lineY -= addrSize * 1.3;
+      }
+    } else {
+      // Left or center: join with ·
+      const contact = S(addrLines.join("  ·  "));
+      const w = fonts.reg.widthOfTextAtSize(contact, addrSize);
+      const x = addrPos === "center" ? (pageW - w) / 2 : headerX;
+      ctx.page.drawText(contact, { x, y: addrY, size: addrSize, font: fonts.reg, color: GREY });
+    }
   }
   ctx.y -= titleSize + (a5 ? 18 : 24);
   ctx.page.drawLine({
@@ -190,11 +209,10 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
 
   // ── Patient strip ─────────────────────────────────────────────────────
   const strip: [string, string][] = [
-    ["Patient", S(patient.name || "—")],
-    ["Age / Sex", S(`${patient.age || "—"} / ${patient.sex || "—"}`)],
-    ["USG No.", patient.serial ? S(patient.serial) : "—"],
-    ["Referred by", S(patient.referredBy || "—")],
-    ["Date", S(patient.date)],
+    ["NAME", S(patient.name || "—")],
+    ["AGE/SEX", S(`${patient.age || "—"} / ${patient.sex || "—"}`)],
+    ["REFERRED BY", S(patient.referredBy || "—")],
+    ["DATE", S(patient.date)],
   ];
   const rowH = a5 ? 11 : 14;
   const col1W = contentW * 0.42;

@@ -89,13 +89,27 @@ export async function POST(req: Request) {
   const patientPhone = String(body.patientPhone ?? "").trim();
   const patientId = await linkPatient(patientName, patientPhone, clinicId);
 
+  // v6.15 — demographics guard + fallback chain (body -> order -> patient's last report)
+  const saneAge = (raw: string): string => {
+    const n = Number((raw || "").replace(/[^0-9]/g, ""));
+    return Number.isFinite(n) && n > 0 && n <= 110 ? String(n) : "";
+  };
+  const bodyAge = saneAge(String(body.patientAge ?? "").trim());
+  const bodyRef = String(body.referredBy ?? "").trim();
+  const orderRow = body.careOrderId ? await db.usgCareOrder.findUnique({ where: { id: String(body.careOrderId) } }) : null;
+  const lastRep = (!bodyAge || !bodyRef)
+    ? await db.usgReport.findFirst({ where: { clinicId, patient: { phone: patientPhone || undefined } }, orderBy: { createdAt: "desc" } })
+    : null;
+  const patientAge = bodyAge || saneAge(orderRow?.patientAge ?? "") || saneAge(lastRep?.patientAge ?? "");
+  const referredBy = bodyRef || String(orderRow?.referringDoctor ?? "").trim() || String(lastRep?.referredBy ?? "").trim();
+
   const report = await db.usgReport.create({
     data: {
       clinicId,
       patientName,
-      patientAge: String(body.patientAge ?? "").trim(),
+      patientAge,
       patientSex: body.patientSex === "M" || body.patientSex === "CHILD" || body.patientSex === "F" ? body.patientSex : "F",
-      referredBy: String(body.referredBy ?? "").trim(),
+      referredBy,
       patientId,
       technique,
       stateJson: JSON.stringify(state),

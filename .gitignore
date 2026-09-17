@@ -45,3 +45,4 @@ prisma/dev.db-journal
 
 # vitest scratch databases
 tests/.tmp
+@eaDir/

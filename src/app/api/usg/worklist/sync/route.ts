@@ -95,6 +95,34 @@ export async function POST(req: NextRequest) {
       // Billing failure is never the worklist's problem — no lastError.
     }
 
+    // v6.15 — refresh DRAFT report demographics from the bill-desk order when
+    // the order learned a better age/referrer AFTER the draft was created.
+    {
+      const sane = (raw: string | null): string => {
+        const n = Number((raw ?? "").replace(/[^0-9]/g, ""));
+        return Number.isFinite(n) && n > 0 && n <= 110 ? String(n) : "";
+      };
+      const draftOrders = await db.usgCareOrder.findMany({
+        where: { status: { in: ["PENDING", "REPORTING"] }, reportId: { not: null } },
+        select: { id: true, reportId: true, patientAge: true, referringDoctor: true },
+        take: 50,
+      });
+      for (const o of draftOrders) {
+        if (!o.reportId) continue;
+        const rep = await db.usgReport.findUnique({ where: { id: o.reportId } });
+        if (!rep || rep.status !== "DRAFT") continue;
+        const newAge = !sane(rep.patientAge) && sane(o.patientAge) ? sane(o.patientAge) : null;
+        const orderRef = String(o.referringDoctor ?? "").trim();
+        const newRef = !String(rep.referredBy ?? "").trim() && orderRef ? orderRef : null;
+        if (newAge || newRef) {
+          await db.usgReport.update({
+            where: { id: rep.id },
+            data: { ...(newAge ? { patientAge: newAge } : {}), ...(newRef ? { referredBy: newRef } : {}) },
+          });
+        }
+      }
+    }
+
     // 3b. Retry pending CARE finalizes. The ERP resolves the order by
     // worklistId first (accession second), so blank-accession orders
     // finalize correctly; we always send both when we have them.

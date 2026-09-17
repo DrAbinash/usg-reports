@@ -268,3 +268,8 @@
     animation: none !important;
   }
 }
+
+@media (min-width: 1024px) {
+  .usg-focus-edit { grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr) !important; }
+  .usg-focus-preview { grid-template-columns: minmax(0, 1fr) minmax(320px, 2fr) !important; }
+}

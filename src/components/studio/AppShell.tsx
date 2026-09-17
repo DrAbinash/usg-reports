@@ -10,6 +10,8 @@ import { UsgDailySummary } from "./usg/UsgDailySummary";
 import { UsgDarkModeToggle } from "./usg/UsgDarkModeToggle";
 import { UsgCommandPalette } from "./usg/UsgCommandPalette";
 import { UsgClinicSwitcher } from "./usg/UsgClinicSwitcher";
+import { UsgClinicLink } from "./usg/UsgClinicLink";
+import { OnboardingLayer } from "./usg/OnboardingLayer";
 import { UsgBirthdayGreeting, BirthdayHeaderButton, birthdayDismissed, rememberBirthdayDismissed, useBirthdayFlag } from "./usg/UsgBirthdayGreeting";
 import { Waves, Settings2, LogOut, Stethoscope, BarChart3, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -69,6 +71,7 @@ export function AppShell() {
 
         <div className="ml-auto flex items-center gap-3">
           <UsgClinicSwitcher />
+          <UsgClinicLink />
           {bday?.today ? <BirthdayHeaderButton onClick={() => setBdayCard(true)} /> : null}
           <button
             onClick={() => {
@@ -126,8 +129,11 @@ export function AppShell() {
         </main>
       </div>
 
+
+      <OnboardingLayer />
+
       {bday?.today ? (
-        <UsgBirthdayGreeting open={bdayCard} onClose={closeBirthdayCard} name={bday.name} birthday={bday.birthday} />
+        <UsgBirthdayGreeting message={bday?.message ?? ""} open={bdayCard} onClose={closeBirthdayCard} name={bday.name} birthday={bday.birthday} />
       ) : null}
 
       {/* v6.9 — Global command palette (Ctrl/Cmd+K) */}

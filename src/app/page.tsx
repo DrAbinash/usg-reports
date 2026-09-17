@@ -9,6 +9,23 @@ export default function Page() {
   const { bootstrapped, needsSetup, authenticated, setAuth } = useStudio();
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const clinicSlug = params.get("clinic");
+    if (clinicSlug) {
+      fetch("/api/clinics").then(r => r.json()).then(d => {
+        const clinics = d?.clinics ?? [];
+        const match = clinics.find((c: any) => c.slug === clinicSlug || c.name?.toLowerCase().includes(clinicSlug.toLowerCase()));
+        if (match) {
+          fetch("/api/clinics/active", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ clinicId: match.id }),
+          }).then(() => window.location.reload());
+        }
+      });
+    }
+  }, []);
+  useEffect(() => {
     fetch("/api/auth/state")
       .then((r) => r.json())
       .then((d) => setAuth({ needsSetup: !!d.needsSetup, authenticated: !!d.authenticated }))

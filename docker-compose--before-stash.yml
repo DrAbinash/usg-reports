@@ -1,0 +1,60 @@
+# USG Reporting Studio — Synology Container Manager
+# Project folder: /volume1/docker/usg-reports
+#
+#   cd /volume1/docker/usg-reports
+#   sudo docker compose up -d --build
+#
+# USG has its own SQLite database under ./data/db and its own container names.
+
+services:
+  studio:
+    build: .
+    container_name: usg-reporting-studio
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:/app/data/db/studio.db
+      - TZ=${TZ:-Asia/Kolkata}
+
+      # Integration defaults. Values saved in app Settings take precedence.
+      - CARE_API_BASE=${CARE_API_BASE:-}
+      - CARE_API_KEY=${CARE_API_KEY:-}
+      - ORTHANC_URL=${ORTHANC_URL:-}
+      - ORTHANC_USERNAME=${ORTHANC_USERNAME:-}
+      - ORTHANC_PASSWORD=${ORTHANC_PASSWORD:-}
+      - OHIF_LAN_URL=${OHIF_LAN_URL:-}
+      - OHIF_TAILSCALE_URL=${OHIF_TAILSCALE_URL:-}
+      - INTEGRATION_DEFAULTS=${INTEGRATION_DEFAULTS:-on}
+    volumes:
+      - ./data/db:/app/data/db
+
+    # Caddy fronts the studio. If Caddy is removed, publish directly instead:
+    # ports:
+    #   - "${STUDIO_PORT:-3040}:3000"
+
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+        reservations:
+          memory: 192M
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: usg-reporting-caddy
+    restart: unless-stopped
+    ports:
+      - "${STUDIO_PORT:-3040}:8090"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy:/data
+      - ./data/caddy-config:/config
+    environment:
+      - OHIF_UPSTREAM=${OHIF_UPSTREAM:-172.16.1.139:3010}
+    depends_on:
+      - studio
+
+    deploy:
+      resources:
+        limits:
+          memory: 128M

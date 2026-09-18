@@ -1,15 +1,15 @@
-# Pending work — read first, every session
+# Pending work — read this first, every session
 
-## Template library (formats-usg/)
-- _index.json = extracted text of all .doc/.docx, classified USG/CT/MRI/XRAY/ECHO/EEG/LAB
-- NEXT: wire USG rows into composer quick-select + whole-report picker (reuse /api/usg/templates)
-- NEXT: copy CT+MRI rows into mri-reports (snippet macros / formats library)
-- Wife's NEW clinic-NAS templates: copy into formats-usg/, re-run extractor (see git log for the python)
+## Template Library (formats-usg/_index.json)
+- Extracted 4,608 Word templates: 2557 USG, 1210 CT, 499 XRAY, 245 ECHO, 26 MRI, 64 LAB, 7 EEG.
+- **NEXT (USG)**: Wire USG rows into composer quick-select (pathologies) + whole-report picker.
+- **NEXT (MRI)**: Copy CT/MRI rows into mri-reports repo (snippet macros / formats library).
+- **Wife's NEW templates**: When she brings new ones from the clinic NAS, copy them into `formats-usg/`, then re-run the Python extractor script (see git log for the exact python snippet).
 
 ## usg-reports pending
-- DICOM picker: thumbnail grid + tick-boxes + "Add N to report"
-- Trial-expiry date on CREATE-clinic form
-- Optional: re-stamp finalized reports with cropped signature
+- DICOM picker: thumbnail grid with tick-boxes + "Add N to report" (one-go select)
+- Trial-expiry date field on the CREATE-clinic form (currently edit-only)
+- Optional: re-stamp finalized reports' stored HTML with new cropped signature
 
 ## mri-reports pending
-- Verify worklist filters (modality tabs + date chips) after 18-Sep deps fix
+- Worklist filters: modality tabs + date chips (verify after deps fix)

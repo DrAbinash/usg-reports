@@ -8,7 +8,6 @@
 
 ## usg-reports pending
 - DICOM picker: thumbnail grid with tick-boxes + "Add N to report" (one-go select)
-- Trial-expiry date field on the CREATE-clinic form (currently edit-only)
 - Optional: re-stamp finalized reports' stored HTML with new cropped signature
 
 ## mri-reports pending

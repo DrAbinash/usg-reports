@@ -47,6 +47,7 @@ import { UsgStudyPicker } from "./UsgStudyPicker";
 import { UsgShortcutOverlay } from "./UsgShortcutOverlay";
 import { UsgGrowthChart } from "./UsgGrowthChart";
 import { UsgTemplateBar } from "./UsgTemplateBar";
+import { UsgFormatsLibrary } from "./UsgFormatsLibrary";
 import { UsgDoctorAutocomplete } from "./UsgDoctorAutocomplete";
 import { UsgCriticalCommDialog } from "./UsgCriticalCommDialog";
 import { UsgAiDraftPanel } from "./UsgAiDraftPanel";
@@ -1137,7 +1138,9 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
 
       {/* v6.15: Quick report templates bar — one-click pre-filled reports */}
       {!isFinal && (
-        <UsgTemplateBar
+        <div className="flex flex-wrap items-center gap-2">
+          <UsgFormatsLibrary organs={state.organs} onApply={(organs, imp) => setState((p) => ({ ...p, organs, impressionOverride: imp ?? p.impressionOverride }))} />
+          <UsgTemplateBar
           onApply={(template) => {
             try {
               const savedState = JSON.parse(template.stateJson) as UsgComposerState;
@@ -1150,6 +1153,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
           currentStateJson={JSON.stringify(state)}
           currentStudyKey={state.studyKey}
         />
+        </div>
       )}
 
       {/* ══ BODY: organ cards + impression + preview ════════════════════ */}

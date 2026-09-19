@@ -34,7 +34,7 @@ type Settings = {
   careApiBase: string; careApiKeySet: boolean;
   orthancUrl: string; orthancUsername: string; orthancPasswordSet: boolean;
   geminiApiKeySet: boolean;
-  pcpndtCentreName: string; pcpndtRegistrationNo: string; pcpndtPlace: string;
+  pcpndtCentreName: string; usgFormFEnabled: boolean; pcpndtRegistrationNo: string; pcpndtPlace: string;
   // v6.10 feature toggles (per-clinic)
   enableCriticalComm?: boolean;
   enableFollowUps?: boolean;
@@ -867,6 +867,13 @@ export function SettingsView() {
             </Field>
           </section>
 
+          <div className="mb-4 flex items-center justify-between gap-4 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-900/20">
+            <div>
+              <h3 className="text-base font-semibold text-amber-900 dark:text-amber-200">Form F (PCPNDT) master switch</h3>
+              <p className="text-sm text-amber-700 dark:text-amber-300">OFF = Form F dialogs, validations and PDF blocks bypassed everywhere (CARE ERP keeps its own Form F). ON = full PC-PNDT flow in this studio.</p>
+            </div>
+            <Switch checked={!!s.usgFormFEnabled} onCheckedChange={(v) => set("usgFormFEnabled", v)} />
+          </div>
           {/* PC-PNDT Form F fixed details */}
           <section className="space-y-3 border-t border-border pt-4">
             <div className="flex items-center gap-2">
@@ -874,6 +881,8 @@ export function SettingsView() {
               <h3 className="text-[13px] font-bold">PC-PNDT Form F — fixed details</h3>
             </div>
             <Field label="Centre name &amp; address" hint="Pre-filled on every Form F (field 1). Two lines are fine.">
+              
+
               <Textarea value={s.pcpndtCentreName} onChange={(e) => set("pcpndtCentreName", e.target.value)} rows={2}
                 className="border-border bg-panel text-[12.5px]" />
             </Field>

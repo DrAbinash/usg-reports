@@ -7,6 +7,7 @@
  * chip. "Start report" opens the composer pre-filled; "Form F" opens the
  * statutory form pre-populated. Reported rows stay for the day's record.
  */
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStudio } from "@/lib/store";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { SectionLabel } from "../bits";
 import { UsgFormFDialog, type FormFDefaults, type FormFOrderLite } from "./UsgFormFDialog";
 import { Search, RefreshCw, ChevronRight, Hourglass, CheckCircle2, EyeOff, ScanLine, FileCheck2, CloudOff, Link2, CalendarDays } from "lucide-react";
+import { WifiOff, Activity } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { toLocalDateString } from "@/lib/usg/dates";
@@ -85,6 +87,35 @@ function BillingBadge({ status }: { status: string | null }) {
 
 function SexChip({ sex }: { sex: string }) {
   const f = sex === "M";
+
+  const [pacsQueue, setPacsQueue] = useState<any[]>([]);
+  const [loadingPacs, setLoadingPacs] = useState(false);
+  const router = useRouter();
+
+  const loadPacsQueue = async () => {
+    setLoadingPacs(true);
+    try {
+      const r = await fetch("/api/usg/worklist/pacs");
+      if (r.ok) {
+        const d = await r.json();
+        setPacsQueue(d.rows || []);
+      }
+    } catch {} finally { setLoadingPacs(false); }
+  };
+
+  const openPacsDraft = async (row: any) => {
+    try {
+      const r = await fetch("/api/usg/reports/pacs-draft", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(row),
+      });
+      if (r.ok) {
+        const d = await r.json();
+        router.push(`/studio/usg/${d.reportId}`);
+      }
+    } catch {}
+  };
+
   return (
     <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-bold ring-1", f ? "bg-sky-50 text-sky-700 ring-sky-200" : "bg-rose-50 text-rose-700 ring-rose-200")}>
       {sex === "M" ? "M" : "F"}
@@ -232,7 +263,7 @@ export function UsgWorklistView() {
   const sync = useCallback(async (opts?: { silent?: boolean; full?: boolean }) => {
     const silent = opts?.silent ?? false;
     setSyncing(true);
-    const url = opts?.full ? "/api/usg/worklist/sync?full=1" : "/api/usg/worklist/sync";
+    const url = opts?.full ? "/api/usg/worklist/sync?full=1" : ("/api/usg/worklist/sync" + (full ? "?full=1" : ""));
     const r = await fetch(url, { method: "POST" })
       .then((x) => x.json() as Promise<(WorklistResponse & { ok?: boolean; newOrders?: number; stats?: SyncStats }) | null>)
       .catch(() => null);
@@ -356,7 +387,51 @@ export function UsgWorklistView() {
           <RefreshCw className={cn("mr-2 h-3.5 w-3.5", syncing && "animate-spin")} />
           {syncing ? "Syncing…" : "Sync now"}
         </Button>
+        <Button onClick={() => void sync(true)} disabled={syncing} variant="ghost"
+          className="h-10 px-2 text-[12px] text-faint hover:text-foreground"
+          title="Re-pull EVERY row from the ERP once — refreshes stale ages/referrers">
+          Deep sync
+        </Button>
       </div>
+
+      {/* PACS Fallback Queue */}
+      {data && !data.careOk && data.careConfigured && (
+        <div className="rounded-lg border-2 border-dashed border-orange-400 bg-orange-50 p-4 dark:border-orange-600 dark:bg-orange-900/20">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <WifiOff className="h-5 w-5 text-orange-600" />
+              <span className="font-bold text-orange-800 dark:text-orange-300">CARE ERP is unreachable. Showing live PACS queue (Unbilled).</span>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => void loadPacsQueue()} disabled={loadingPacs}>
+              {loadingPacs ? "Loading..." : "Refresh PACS"}
+            </Button>
+          </div>
+          {pacsQueue.length > 0 ? (
+            <div className="space-y-2">
+              {pacsQueue.map((row) => (
+                <div key={row.worklistId} className="flex items-center justify-between rounded border border-orange-200 bg-white p-3 dark:border-orange-700 dark:bg-gray-800">
+                  <div>
+                    <div className="font-semibold">{row.patientName} <span className="text-xs text-muted-foreground">({row.patientAge} / {row.patientSex})</span></div>
+                    <div className="text-xs text-muted-foreground">{row.testName} · {row.studyDate} · {row.accessionNumber || "No Accession"}</div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="ghost" onClick={() => window.open(`http://172.16.1.139:3010/viewer?StudyInstanceUIDs=${row.studyInstanceUid}`, '_blank')}>
+                      <Activity className="mr-1 h-3 w-3" /> Viewer
+                    </Button>
+                    <Button size="sm" onClick={() => void openPacsDraft(row)} className="bg-orange-600 hover:bg-orange-700 text-white">
+                      Draft Report (Unbilled)
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center text-sm text-orange-700 dark:text-orange-400 py-2">
+              No new USG studies in Orthanc from the last 72 hours.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* v6.14: Date range filter — quick presets + custom from-to */}
       <div className="flex flex-wrap items-center gap-2">
@@ -513,7 +588,7 @@ export function UsgWorklistView() {
       ) : null}
 
       {/* Form F dialog */}
-      {defaults ? (
+      {defaults && data?.usgFormFEnabled ? (
         <UsgFormFDialog
           open={formFOpen}
           onClose={() => setFormFOpen(false)}

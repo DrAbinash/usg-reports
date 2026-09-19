@@ -171,6 +171,7 @@ export async function updateSettings(patch: SettingsUpdate) {
     "careApiBase", "orthancUrl", "orthancUsername",
     // v6 PC-PNDT Form F fixed details
     "pcpndtCentreName", "pcpndtRegistrationNo", "pcpndtPlace",
+    "usgFormFEnabled",
     // v6.10 feature toggles (per-clinic) — handled as string-checkboxes below.
     "enableCriticalComm", "enableFollowUps", "enableAiDraft", "enableBirads", "enableDicomSr",
   ];
@@ -266,7 +267,7 @@ export async function updateSettings(patch: SettingsUpdate) {
   }
   // v6.10 feature toggles — per-clinic, all default to true (opt-out).
   // Same string-checkbox contract as the other toggles.
-  for (const k of ["enableCriticalComm", "enableFollowUps", "enableAiDraft", "enableBirads", "enableDicomSr"] as const) {
+  for (const k of ["enableCriticalComm", "enableFollowUps", "enableAiDraft", "enableBirads", "enableDicomSr", "usgFormFEnabled"] as const) {
     const v = patch[k];
     if (typeof v === "string") {
       data[k] = !/^(0|false|off|no)$/i.test(v.trim());

@@ -146,6 +146,9 @@ model HospitalSettings {
   pcpndtRegistrationNo String  @default("34/2020")
   pcpndtPlace         String   @default("DEOGHAR")
 
+  // Master kill-switch for Form F (PCPNDT). Default false.
+  usgFormFEnabled Boolean @default(false)
+
   // ── v6.10 feature toggles (per-clinic) ──────────────────────────────
   // Each toggle defaults to true so existing clinics keep all features;
   // a trial center can turn off features they don't want (e.g. turn off

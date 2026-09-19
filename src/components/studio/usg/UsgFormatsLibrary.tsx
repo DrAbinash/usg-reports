@@ -19,7 +19,7 @@ export function UsgFormatsLibrary({ organs, onApply }: {
   const load = async () => {
     setLoading(true);
     try {
-      const r = await fetch("/api/formats/library");
+      const r = await fetch("/formats-index.json");
       const { templates } = await r.json();
       setData(templates.filter((t: Format) => t.modality === "USG"));
     } catch { toast.error("Failed to load formats library"); }

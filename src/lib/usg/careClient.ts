@@ -115,7 +115,7 @@ export type FetchWorklistOpts = {
   full?: boolean;
 };
 
-export function fetchWorklist(opts?: FetchWorklistOpts) {
+export async function fetchWorklist(opts?: FetchWorklistOpts) {
   // v6.14: fetch ALL statuses, not just pending. The ERP's ?status=pending
   // only returned new orders; the doctor needs to see reported/completed
   // orders too (for the day's record, billing follow-up, etc.). The
@@ -127,7 +127,11 @@ export function fetchWorklist(opts?: FetchWorklistOpts) {
   if (opts?.since && !opts?.full) {
     path += `&since=${encodeURIComponent(opts.since)}`;
   }
-  return careFetch<CareWorklistItem[]>(path);
+  const r = await careFetch<CareWorklistItem[] | { rows: CareWorklistItem[] }>(path);
+  if (!r.ok) return r;
+  // v6.20 shape-tolerant: bridge returns bare array (legacy) or { rows, meta } (audit suite).
+  const list = Array.isArray(r.data) ? r.data : ((r.data as { rows: CareWorklistItem[] }).rows ?? []);
+  return { ok: true as const, data: list };
 }
 
 export type FinalizePayload = {

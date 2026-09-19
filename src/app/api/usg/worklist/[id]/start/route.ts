@@ -22,6 +22,32 @@ export async function POST(_req: Request, ctx: Ctx) {
   const { id } = await ctx.params;
 
   const order = await db.usgCareOrder.findUnique({ where: { id } });
+
+  // v6.18 — Orthanc DICOM Fallback for missing demographics
+  let orthancAge = order.patientAge;
+  let orthancRef = order.referringDoctor;
+  if ((!orthancAge || !orthancRef) && order.studyInstanceUid) {
+    try {
+      const s = await getSettings();
+      if (s.orthancUrl) {
+        const base = s.orthancUrl.replace(/\/+$/, "");
+        const headers: Record<string, string> = { "Content-Type": "text/plain" };
+        if (s.orthancUsername) {
+          headers.Authorization = `Basic ${Buffer.from(`${s.orthancUsername}:${s.orthancPassword ?? ""}`).toString("base64")}`;
+        }
+        const lookup = await fetch(`${base}/tools/lookup`, { method: "POST", headers, body: order.studyInstanceUid });
+        if (lookup.ok) {
+          const ids = await lookup.json();
+          if (Array.isArray(ids) && ids.length > 0) {
+            const study = await fetch(`${base}/studies/${ids[0]}`, { headers }).then(r => r.json());
+            const tags = study.MainDicomTags || {};
+            if (!orthancAge && tags.PatientAge) orthancAge = tags.PatientAge.replace(/^0+/, '');
+            if (!orthancRef && tags.ReferringPhysicianName) orthancRef = tags.ReferringPhysicianName;
+          }
+        }
+      }
+    } catch (e) { /* silent fail */ }
+  }
   if (!order) return Response.json({ error: "Order not found" }, { status: 404 });
   if (order.ignored) return Response.json({ error: "This order is ignored" }, { status: 400 });
 
@@ -50,9 +76,9 @@ export async function POST(_req: Request, ctx: Ctx) {
     data: {
       clinicId,
       patientName: order.patientName,
-      patientAge: order.patientAge || prior.age,
+      patientAge: orthancAge || order.patientAge || prior.age,
       patientSex: orderSex(order.patientSex, child) === "M" ? "M" : orderSex(order.patientSex, child) === "CHILD" ? "CHILD" : "F",
-      referredBy: order.referringDoctor || prior.referredBy,
+      referredBy: order.referringDoctor || prior.referredBy || "Self/Walk-in",
       patientId,
       technique: study.technique,
       stateJson: JSON.stringify(state),
@@ -66,8 +92,8 @@ export async function POST(_req: Request, ctx: Ctx) {
     await db.usgCareOrder.update({
       where: { id: order.id },
       data: {
-        patientAge: order.patientAge || prior.age,
-        referringDoctor: order.referringDoctor || prior.referredBy,
+        patientAge: orthancAge || order.patientAge || prior.age,
+        referringDoctor: orthancRef || order.referringDoctor || prior.referredBy,
       },
     });
   }

@@ -38,6 +38,13 @@ export type UsgOrganDef = {
   label: string; // "LIVER" — printed finding subheading
   /** Normal finding text (may contain {variable} tokens for measured studies). */
   normal: string;
+  /**
+   * Peak-time / rush normal — same clinical meaning, NO size/measurement
+   * slots. Used by "Normal · no sizes" so a normal liver prints without
+   * forcing MCL span entry. Falls back to stripping `{token}` sentences
+   * from `normal` when omitted.
+   */
+  normalQuick?: string;
   vars?: UsgVarDef[];
   /**
    * Impression line added when this organ is normal while some other organ

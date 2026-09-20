@@ -858,6 +858,7 @@ export function initialState(
     organs: study.organs.map((o) => ({
       organ: o.key,
       pathology: null,
+      pathologies: [],
       custom: false,
       text: o.normal,
       vars: {},

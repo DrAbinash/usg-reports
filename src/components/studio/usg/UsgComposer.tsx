@@ -427,11 +427,42 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [isFinal]);
 
-  // ── Keyboard-first flow: Ctrl+S save · Ctrl+Enter finalize · Ctrl+K study ─
+  // ── Keyboard-first flow: Ctrl+S save · Ctrl+Enter finalize · Ctrl+K study · N rush normal ─
   const persistRef = useRef<((status: "" | "finalize") => Promise<string | null>) | null>(null);
+  const rushNormalRef = useRef<() => void>(() => {});
+  rushNormalRef.current = () => {
+    if (isFinal) return;
+    if (studyAllowsRushNormals(study)) {
+      const next = applyRushNormalStudy(state, study);
+      if (!next) {
+        toast.error("This study needs measurements — use organ cards");
+        return;
+      }
+      setState(next);
+      toast.success("All normal · no sizes — ready to print");
+    } else {
+      setState((s) => markAllNormal(s, study));
+      toast.success("All organs set to normal");
+    }
+  };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
+      const target = e.target as HTMLElement | null;
+      const typing =
+        !!target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable);
+
+      // Peak-time: bare "N" → Normal · no sizes (skipped while typing in a field)
+      if (!mod && !typing && e.key.toLowerCase() === "n" && !e.altKey) {
+        e.preventDefault();
+        rushNormalRef.current();
+        return;
+      }
+
       if (!mod) return;
       if (e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -912,7 +943,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
             <span className="text-[9px] text-emerald-600">· autosaved {new Date(lastAutosave).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>
           ) : null}
           <span className="ml-auto hidden items-center gap-1 text-faint md:flex" title="Keyboard shortcuts">
-            <Command className="h-2.5 w-2.5" /> Ctrl+S · Ctrl+↵ · ?
+            <Command className="h-2.5 w-2.5" /> Ctrl+S · Ctrl+↵ · N · ?
           </span>
         </div>
 

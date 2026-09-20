@@ -222,6 +222,20 @@ type CareOrderRow = {
  * REPORTED rows are frozen (their demographics and links are the day's
  * record) — resync can never reset a finalized/reporting state.
  */
+/** ERP sends date-only today; accepts optional DICOM HHMMSS when any source supplies it.
+ *  No time  -> midnight UTC (unchanged behaviour). With time -> IST wall time converted to UTC. */
+function parseStudyDateTime(dateStr: string | null | undefined, timeStr?: string | null): Date | null {
+  const d = (dateStr ?? "").replace(/[^0-9]/g, "");
+  if (d.length < 8) return null;
+  const t = (timeStr ?? "").replace(/[^0-9]/g, "");
+  const hh = t.length >= 2 ? Number(t.slice(0, 2)) : 0;
+  const mm = t.length >= 4 ? Number(t.slice(2, 4)) : 0;
+  const ss = t.length >= 6 ? Number(t.slice(4, 6)) : 0;
+  const istMs = t.length >= 4 ? (5 * 60 + 30) * 60 * 1000 : 0;
+  const utc = Date.UTC(Number(d.slice(0, 4)), Number(d.slice(4, 6)) - 1, Number(d.slice(6, 8)), hh, mm, ss) - istMs;
+  const dt = new Date(utc);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+}
 export async function importCareRows(rows: CareWorklistItem[], clinicId: string = "default"): Promise<SyncStats> {
   const stats = emptySyncStats();
   stats.careRowsReceived = rows.length;
@@ -324,7 +338,7 @@ export async function importCareRows(rows: CareWorklistItem[], clinicId: string 
               billingUpdatedAt: w.billingStatus ? new Date() : undefined,
               careWorklistId: n.wlId ?? target.careWorklistId,
               studyInstanceUid: n.uid ?? target.studyInstanceUid,
-              studyDate: w.studyDate ? new Date(w.studyDate) : target.studyDate,
+              studyDate: parseStudyDateTime(w.studyDate, (w as any).studyTime) ?? target.studyDate,
             },
           });
           stats.updatedExisting++;
@@ -351,7 +365,7 @@ export async function importCareRows(rows: CareWorklistItem[], clinicId: string 
             modality: "USG",
             studyInstanceUid: n.uid,
             billingStatus: w.billingStatus ?? null,
-            studyDate: w.studyDate ? new Date(w.studyDate) : null,
+            studyDate: parseStudyDateTime(w.studyDate, (w as any).studyTime),
             // v6.14.1: if the ERP already finalized, mirror that locally so
             // the studio's finalize button is hidden. careSyncedAt is left
             // null so the audit trail shows "imported as already-finalized".
@@ -402,6 +416,15 @@ export async function attachOrthancStudies(studies: OrthancStudy[], clinicId: st
     if (m.kind === "studyUid") {
       stats.matchedByStudyUid++;
       matchedStudyIds.add(m.study.ID);
+      // A part 2: Enrich with DICOM StudyTime if present
+      const stDate = m.study.MainDicomTags?.StudyDate;
+      const stTime = m.study.MainDicomTags?.StudyTime;
+      if (stDate && stTime) {
+        const preciseDate = parseStudyDateTime(stDate, stTime);
+        if (preciseDate && order.studyDate && preciseDate.getTime() !== order.studyDate.getTime()) {
+          await db.usgCareOrder.update({ where: { id: order.id }, data: { studyDate: preciseDate } });
+        }
+      }
     } else if (m.kind === "accession") {
       const uid = clean(m.study.MainDicomTags?.StudyInstanceUID);
       if (uid) {
@@ -415,6 +438,15 @@ export async function attachOrthancStudies(studies: OrthancStudy[], clinicId: st
         }
         stats.matchedByAccession++;
         matchedStudyIds.add(m.study.ID);
+        // A part 2: Enrich with DICOM StudyTime if present
+        const stDate = m.study.MainDicomTags?.StudyDate;
+        const stTime = m.study.MainDicomTags?.StudyTime;
+        if (stDate && stTime) {
+          const preciseDate = parseStudyDateTime(stDate, stTime);
+          if (preciseDate && order.studyDate && preciseDate.getTime() !== order.studyDate.getTime()) {
+            await db.usgCareOrder.update({ where: { id: order.id }, data: { studyDate: preciseDate } });
+          }
+        }
       }
     } else if (m.kind === "ambiguous") {
       stats.ambiguousMatches++;

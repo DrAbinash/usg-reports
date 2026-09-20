@@ -66,7 +66,7 @@ describe("quickActions", () => {
         pathologies: [] as string[],
         custom: false,
         text: d.normal,
-        vars: d.key === "liver" ? { span: "9.2" } : {},
+        vars: (d.key === "liver" ? { span: "9.2" } : {}) as Record<string, string>,
       })),
       impressionOverride: null,
     };

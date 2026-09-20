@@ -4,6 +4,7 @@
  */
 import { db } from "@/lib/db";
 import { hashPin } from "@/lib/auth";
+import { ensureBuiltinNpTemplates } from "@/lib/usg/reportTemplates";
 
 /** Seed everything. Safe to call on every boot — all writes are guarded. */
 export async function ensureSeed(): Promise<void> {
@@ -23,4 +24,9 @@ export async function ensureSeed(): Promise<void> {
       },
     });
   }
+
+  // Peak-time NP templates (WA F/M/Child + Upper) — pinned, never overwrite.
+  await ensureBuiltinNpTemplates("default").catch(() => {
+    // Table may not exist yet on first schema push — listing templates seeds later.
+  });
 }

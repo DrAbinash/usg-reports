@@ -24,12 +24,25 @@ export const USG_PATHOLOGIES: UsgPathologyDef[] = [
     titleFragment: "grade i fatty changes",
     vars: [V("span", "Liver span (MCL)"), V("pv", "Portal vein")],
   }),
+  // Peak-time: same Grade I fatty wording without MCL / portal-vein slots.
+  P({
+    key: "liver-fatty-g1-nosize", organ: "liver", label: "Fatty Gr I · no size", category: "Liver",
+    text: "Liver appears normal in morphology with mildly increased hepatic parenchymal echogenicity (Grade I Fatty Changes). No masses or focal pathology is noted. Intrahepatic biliary channels are not dilated. The portal vein is normal in appearance.",
+    impression: ["Fatty infiltration of liver (Grade I)."],
+    titleFragment: "grade i fatty changes",
+  }),
   P({
     key: "liver-hepatomegaly-fatty-g1", organ: "liver", label: "Hepatomegaly + Fatty Gr I", category: "Liver",
     text: "Liver is enlarged in size and measures in mid-clavicular line {span} cm. Appears normal in morphology with mildly increased hepatic parenchymal echogenicity (Grade I Fatty Changes). No masses or focal pathology is noted. Intrahepatic biliary channels are not dilated. The portal vein is normal in appearance. It measures {pv} cm.",
     impression: ["Hepatomegaly with fatty infiltration of liver (Grade I)."],
     titleFragment: "hepatomegaly with grade i fatty changes",
     vars: [V("span", "Liver span (MCL)"), V("pv", "Portal vein")],
+  }),
+  P({
+    key: "liver-hepatomegaly-fatty-g1-nosize", organ: "liver", label: "Hepatomegaly + Fatty Gr I · no size", category: "Liver",
+    text: "Liver is enlarged in size. Appears normal in morphology with mildly increased hepatic parenchymal echogenicity (Grade I Fatty Changes). No masses or focal pathology is noted. Intrahepatic biliary channels are not dilated. The portal vein is normal in appearance.",
+    impression: ["Hepatomegaly with fatty infiltration of liver (Grade I)."],
+    titleFragment: "hepatomegaly with grade i fatty changes",
   }),
   P({
     key: "liver-fatty-g2", organ: "liver", label: "Fatty Liver — Gr II", category: "Liver",
@@ -39,11 +52,23 @@ export const USG_PATHOLOGIES: UsgPathologyDef[] = [
     vars: [V("span", "Liver span (MCL)")],
   }),
   P({
+    key: "liver-fatty-g2-nosize", organ: "liver", label: "Fatty Gr II · no size", category: "Liver",
+    text: "Liver shows moderately increased hepatic parenchymal echogenicity with mild attenuation and blurring of the portal vein radicles (Grade II fatty changes). No masses or focal pathology is noted. Intrahepatic biliary channels are not dilated.",
+    impression: ["Grade II fatty changes of liver."],
+    titleFragment: "grade ii fatty changes",
+  }),
+  P({
     key: "liver-coarse", organ: "liver", label: "Hepatomegaly + Coarse Echotexture", category: "Liver",
     text: "Liver is enlarged in size and measures in mid-clavicular line {span} cm. Appears coarse in hepatic parenchymal echogenicity. No masses or focal pathology is noted. Intrahepatic biliary channels are not dilated. The portal vein is normal in appearance. It measures {pv} cm.",
     impression: ["Hepatomegaly with coarse hepatic parenchymal echogenicity."],
     titleFragment: "hepatomegaly with coarse echotexture",
     vars: [V("span", "Liver span (MCL)"), V("pv", "Portal vein")],
+  }),
+  P({
+    key: "liver-coarse-nosize", organ: "liver", label: "Hepatomegaly + Coarse · no size", category: "Liver",
+    text: "Liver is enlarged in size. Appears coarse in hepatic parenchymal echogenicity. No masses or focal pathology is noted. Intrahepatic biliary channels are not dilated. The portal vein is normal in appearance.",
+    impression: ["Hepatomegaly with coarse hepatic parenchymal echogenicity."],
+    titleFragment: "hepatomegaly with coarse echotexture",
   }),
   P({
     key: "liver-abscess", organ: "liver", label: "Liver Abscess", category: "Liver",

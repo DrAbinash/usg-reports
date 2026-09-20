@@ -2,7 +2,17 @@
  * Tests for v6.6 features.
  */
 import { describe, expect, it } from "vitest";
-import { markAllNormal, isAllNormal, copyForwardMeasurements, copyForwardDiff } from "@/lib/usg/quickActions";
+import {
+  markAllNormal,
+  isAllNormal,
+  copyForwardMeasurements,
+  copyForwardDiff,
+  unmeasuredNormalText,
+  applyRushNormalStudy,
+  applyOrganQuickNormal,
+  studyAllowsRushNormals,
+} from "@/lib/usg/quickActions";
+import { getStudy, LIVER_CHILD_N, LIVER_N } from "@/lib/usg/studies";
 import { validateMeasurement, validateAllMeasurements, validationClass } from "@/lib/usg/measurementValidation";
 import { matchSnippet, getAllSnippets } from "@/lib/usg/textExpansion";
 import { buildGrowthChart } from "@/lib/usg/growthChart";
@@ -12,17 +22,19 @@ import { buildDailySummary } from "@/lib/usg/dailySummary";
 
 describe("quickActions", () => {
   it("marks all organs normal (clears pathologies)", () => {
+    const study = getStudy("wa-female")!;
     const state = {
       studyKey: "wa-female",
       organs: [
         { organ: "liver", pathology: "liver-fatty-g1", pathologies: ["liver-fatty-g1"], custom: false, text: "Fatty", vars: {} },
-        { organ: "gallbladder", pathology: null, pathologies: [], custom: false, text: "Normal", vars: {} },
+        { organ: "gb", pathology: null, pathologies: [], custom: false, text: "Normal", vars: {} },
       ],
       impressionOverride: null,
     };
-    const normal = markAllNormal(state);
+    const normal = markAllNormal(state, study);
     expect(normal.organs.every((o) => o.pathology === null && (o.pathologies ?? []).length === 0)).toBe(true);
     expect(normal.impressionOverride).toBeNull();
+    expect(normal.organs.find((o) => o.organ === "liver")?.text).toBe(LIVER_N);
   });
 
   it("detects when study is already all normal", () => {
@@ -41,6 +53,58 @@ describe("quickActions", () => {
       impressionOverride: null,
     };
     expect(isAllNormal(state)).toBe(false);
+  });
+
+  it("rush normal strips child liver span and uses LIVER_N", () => {
+    expect(unmeasuredNormalText({ normal: LIVER_CHILD_N, normalQuick: LIVER_N })).toBe(LIVER_N);
+    const study = getStudy("wa-child")!;
+    const state = {
+      studyKey: "wa-child",
+      organs: study.organs.map((d) => ({
+        organ: d.key,
+        pathology: null as string | null,
+        pathologies: [] as string[],
+        custom: false,
+        text: d.normal,
+        vars: d.key === "liver" ? { span: "9.2" } : {},
+      })),
+      impressionOverride: null,
+    };
+    const rush = applyRushNormalStudy(state, study)!;
+    expect(rush.organs.find((o) => o.organ === "liver")?.text).toBe(LIVER_N);
+    expect(rush.organs.find((o) => o.organ === "liver")?.vars).toEqual({});
+    expect(rush.organs.find((o) => o.organ === "liver")?.text).not.toMatch(/\{span\}/);
+  });
+
+  it("organ quick-normal clears pathologies and size slots", () => {
+    const study = getStudy("la-female")!;
+    const uterus = study.organs.find((o) => o.key === "uterus")!;
+    const state = {
+      studyKey: "la-female",
+      organs: [
+        {
+          organ: "uterus",
+          pathology: null as string | null,
+          pathologies: [] as string[],
+          custom: false,
+          text: uterus.normal,
+          vars: { u1: "7.2", u2: "4.1", u3: "3.0", et: "0.6" },
+        },
+      ],
+      impressionOverride: null,
+    };
+    const next = applyOrganQuickNormal(state, "uterus", uterus);
+    expect(next.organs[0]!.text).toBe(uterus.normalQuick);
+    expect(next.organs[0]!.vars).toEqual({});
+    expect(next.organs[0]!.text).not.toMatch(/\{u1\}/);
+  });
+
+  it("blocks rush normals on obstetric studies", () => {
+    const ob = getStudy("ob")!;
+    expect(studyAllowsRushNormals(ob)).toBe(false);
+    expect(applyRushNormalStudy({ studyKey: "ob", organs: [], impressionOverride: null }, ob)).toBeNull();
+    expect(studyAllowsRushNormals(getStudy("wa-female")!)).toBe(true);
+    expect(studyAllowsRushNormals(getStudy("tvs")!)).toBe(true);
   });
 
   it("copies forward measurements from prior scan", () => {

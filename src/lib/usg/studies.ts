@@ -129,6 +129,13 @@ export const THY_LT_N =
   "Left lobe measures {l1} X {l2} mm in AP diameter. It is normal in echotexture. No SOL or calcification seen. Color Doppler shows normal blood flow.";
 export const THY_ISTHMUS_N =
   "Isthmus measure {isth} mm. Normal in size and echotexture. Color Doppler shows normal blood flow.";
+/** Peak-time thyroid normals — qualitative, no lobe/isthmus millimetres. */
+export const THY_RT_QUICK_N =
+  "Right lobe is normal in size and echotexture. No SOL or calcification seen. Color Doppler shows normal blood flow.";
+export const THY_LT_QUICK_N =
+  "Left lobe is normal in size and echotexture. No SOL or calcification seen. Color Doppler shows normal blood flow.";
+export const THY_ISTHMUS_QUICK_N =
+  "Isthmus is normal in size and echotexture. Color Doppler shows normal blood flow.";
 export const THY_SUBMAND_N =
   "Bilateral submandibular glands are normal in echotexture. No SOL or calcification seen. Color Doppler shows normal blood flow.";
 export const THY_PAROTID_N =
@@ -148,6 +155,9 @@ export const TESTIS_RT_N =
   "Measures {t1} X {t2} mm. Appear normal in size, shape and echotexture. Epididymis is normal in size and texture. Color Doppler shows normal blood flow pattern.";
 export const TESTIS_LT_N =
   "Measures {t1} X {t2} mm. Appear normal in size, shape and echotexture. Epididymis is normal in size and texture. Color Doppler shows normal blood flow pattern.";
+/** Peak-time scrotum normals — no testicular dimensions. */
+export const TESTIS_QUICK_N =
+  "Appear normal in size, shape and echotexture. Epididymis is normal in size and texture. Color Doppler shows normal blood flow pattern.";
 export const SAC_N = "No collection in either scrotal sac.";
 export const CORD_N =
   "Bilateral spermatic cord are normal in size with normal blood flow pattern.";
@@ -318,8 +328,8 @@ export const USG_STUDIES: UsgStudyDef[] = [
       { key: "kidney_lt", label: "LT KIDNEY", normal: KIDNEY_N },
       { key: "ureters", label: "URETERS", normal: URETERS_N },
       { key: "ub", label: "U. B", normal: UB_N },
-      { key: "uterus", label: "UTERUS", normal: UTERUS_MEASURED_N, vars: GYN_VARS, normalImpression: "Normal sized uterus with normal endometrial thickness." },
-      { key: "adnexa", label: "ADNEXA", normal: ADNEXA_MEASURED_N, vars: GYN_VARS, normalImpression: "Bilateral adenexa normal in morphology." },
+      { key: "uterus", label: "UTERUS", normal: UTERUS_MEASURED_N, normalQuick: UTERUS_N, vars: GYN_VARS, normalImpression: "Normal sized uterus with normal endometrial thickness." },
+      { key: "adnexa", label: "ADNEXA", normal: ADNEXA_MEASURED_N, normalQuick: ADNEXA_N, vars: GYN_VARS, normalImpression: "Bilateral adenexa normal in morphology." },
       { key: "pod", label: "P.O.D", normal: POD_N, normalImpression: "No POD collection." },
       { key: "others", label: "OTHERS", normal: OTHERS_N },
     ],
@@ -352,21 +362,25 @@ export const USG_STUDIES: UsgStudyDef[] = [
     technique: T_WA,
     allNormalImpression: ["No significant abnormality detected."],
     organs: [
-      { key: "liver", label: "LIVER", normal: LIVER_CHILD_N, vars: [V("span", "Liver span (MCL)")] },
+      // normalQuick = adult unmeasured wording — rush/peak child normals
+      // without forcing MCL / organ length entry.
+      { key: "liver", label: "LIVER", normal: LIVER_CHILD_N, normalQuick: LIVER_N, vars: [V("span", "Liver span (MCL)")] },
       { key: "gb", label: "G. B", normal: GB_N },
       { key: "cbd", label: "C.B.DUCT", normal: CBD_N },
       { key: "pancreas", label: "PANCREAS", normal: PANCREAS_N },
-      { key: "spleen", label: "SPLEEN", normal: SPLEEN_CHILD_N, vars: [V("span", "Spleen length")] },
+      { key: "spleen", label: "SPLEEN", normal: SPLEEN_CHILD_N, normalQuick: SPLEEN_N, vars: [V("span", "Spleen length")] },
       {
         key: "kidney_rt",
         label: "RT KIDNEY",
         normal: KIDNEY_CHILD_N,
+        normalQuick: KIDNEY_N,
         vars: [V("span", "RT kidney length")],
       },
       {
         key: "kidney_lt",
         label: "LT KIDNEY",
         normal: KIDNEY_CHILD_N,
+        normalQuick: KIDNEY_N,
         vars: [V("span", "LT kidney length")],
       },
       { key: "ureters", label: "URETERS", normal: URETERS_N },
@@ -442,7 +456,7 @@ export const USG_STUDIES: UsgStudyDef[] = [
         normal: GRAVID_UTERUS_N,
         normalImpression: GRAVID_UTERUS_IMPRESSION_N,
       },
-      { key: "adnexa", label: "ADNEXA", normal: ADNEXA_MEASURED_N, vars: GYN_VARS },
+      { key: "adnexa", label: "ADNEXA", normal: ADNEXA_MEASURED_N, normalQuick: ADNEXA_N, vars: GYN_VARS },
       { key: "pod", label: "P.O.D", normal: POD_N },
     ],
   },
@@ -457,8 +471,8 @@ export const USG_STUDIES: UsgStudyDef[] = [
     technique: T_KUB,
     allNormalImpression: ["No significant abnormality detected in KUB region."],
     organs: [
-      { key: "kidney_rt", label: "RT KIDNEY", normal: KIDNEY_RT_KUB_N, vars: [V("span", "RT kidney length")] },
-      { key: "kidney_lt", label: "LT KIDNEY", normal: KIDNEY_LT_KUB_N, vars: [V("span", "LT kidney length")] },
+      { key: "kidney_rt", label: "RT KIDNEY", normal: KIDNEY_RT_KUB_N, normalQuick: KIDNEY_N, vars: [V("span", "RT kidney length")] },
+      { key: "kidney_lt", label: "LT KIDNEY", normal: KIDNEY_LT_KUB_N, normalQuick: KIDNEY_N, vars: [V("span", "LT kidney length")] },
       { key: "ureters", label: "URETERS", normal: URETERS_N },
       { key: "ub", label: "U. B", normal: UB_N, normalImpression: "Insignificant post void residual urine." },
       { key: "others", label: "OTHERS", normal: OTHERS_N },
@@ -473,9 +487,9 @@ export const USG_STUDIES: UsgStudyDef[] = [
     technique: T_THY,
     allNormalImpression: ["No significant abnormality detected."],
     organs: [
-      { key: "thyroid_rt", label: "RIGHT LOBE", normal: THY_RT_N, vars: [V("r1", "RT lobe AP", "mm"), V("r2", "RT lobe TR", "mm")] },
-      { key: "thyroid_lt", label: "LEFT LOBE", normal: THY_LT_N, vars: [V("l1", "LT lobe AP", "mm"), V("l2", "LT lobe TR", "mm")] },
-      { key: "isthmus", label: "ISTHMUS", normal: THY_ISTHMUS_N, vars: [V("isth", "Isthmus", "mm")] },
+      { key: "thyroid_rt", label: "RIGHT LOBE", normal: THY_RT_N, normalQuick: THY_RT_QUICK_N, vars: [V("r1", "RT lobe AP", "mm"), V("r2", "RT lobe TR", "mm")] },
+      { key: "thyroid_lt", label: "LEFT LOBE", normal: THY_LT_N, normalQuick: THY_LT_QUICK_N, vars: [V("l1", "LT lobe AP", "mm"), V("l2", "LT lobe TR", "mm")] },
+      { key: "isthmus", label: "ISTHMUS", normal: THY_ISTHMUS_N, normalQuick: THY_ISTHMUS_QUICK_N, vars: [V("isth", "Isthmus", "mm")] },
       { key: "submandibular", label: "SUBMANDIBULAR", normal: THY_SUBMAND_N },
       { key: "parotid", label: "PAROTID", normal: THY_PAROTID_N },
       { key: "nodes", label: "LYMPH NODES", normal: THY_NODES_N },
@@ -508,8 +522,8 @@ export const USG_STUDIES: UsgStudyDef[] = [
     technique: T_SCROTUM,
     allNormalImpression: ["No significant abnormality detected."],
     organs: [
-      { key: "testis_rt", label: "RIGHT TESTIS", normal: TESTIS_RT_N, vars: [V("t1", "RT testis L", "mm"), V("t2", "RT testis W", "mm")] },
-      { key: "testis_lt", label: "LEFT TESTIS", normal: TESTIS_LT_N, vars: [V("t1", "LT testis L", "mm"), V("t2", "LT testis W", "mm")] },
+      { key: "testis_rt", label: "RIGHT TESTIS", normal: TESTIS_RT_N, normalQuick: TESTIS_QUICK_N, vars: [V("t1", "RT testis L", "mm"), V("t2", "RT testis W", "mm")] },
+      { key: "testis_lt", label: "LEFT TESTIS", normal: TESTIS_LT_N, normalQuick: TESTIS_QUICK_N, vars: [V("t1", "LT testis L", "mm"), V("t2", "LT testis W", "mm")] },
       { key: "sac", label: "SCROTAL SAC", normal: SAC_N },
       { key: "cord", label: "INGUINAL REGION", normal: CORD_N },
     ],
@@ -529,8 +543,8 @@ export const USG_STUDIES: UsgStudyDef[] = [
       "No POD collection.",
     ],
     organs: [
-      { key: "uterus", label: "UTERUS", normal: UTERUS_MEASURED_N, vars: GYN_VARS, normalImpression: "Normal sized uterus with normal endometrial thickness." },
-      { key: "adnexa", label: "ADNEXA", normal: ADNEXA_MEASURED_N, vars: GYN_VARS, normalImpression: "Bilateral adenexa normal in morphology." },
+      { key: "uterus", label: "UTERUS", normal: UTERUS_MEASURED_N, normalQuick: UTERUS_N, vars: GYN_VARS, normalImpression: "Normal sized uterus with normal endometrial thickness." },
+      { key: "adnexa", label: "ADNEXA", normal: ADNEXA_MEASURED_N, normalQuick: ADNEXA_N, vars: GYN_VARS, normalImpression: "Bilateral adenexa normal in morphology." },
       { key: "pod", label: "P.O.D", normal: POD_N, normalImpression: "No POD collection." },
     ],
   },
@@ -549,6 +563,7 @@ export const USG_STUDIES: UsgStudyDef[] = [
         key: "prostate",
         label: "PROSTATE",
         normal: PROSTATE_TRUS_N,
+        normalQuick: PROSTATE_N,
         vars: [V("p1", "Prostate L", "cm"), V("p2", "Prostate W", "cm"), V("p3", "Prostate H", "cm"), V("vol", "Volume", "gms")],
       },
       { key: "seminal", label: "SEMINAL VESICLES", normal: SEMINAL_N },

@@ -1,61 +1,72 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
-import { listStudies } from "@/lib/usg/orthancClient";
-
-const US_MODALITIES = new Set(["US", "USG", "OB US", "OBUS", "DOPPLER", "US-DOPPLER", "ULTRASOUND", "SONOGRAPHY"]);
-
-function isUsModality(mod: string | null | undefined): boolean {
-  if (!mod) return false;
-  const m = mod.trim().toUpperCase();
-  if (US_MODALITIES.has(m)) return true;
-  return m.includes("US") || m.includes("DOPPLER") || m.includes("ULTRASOUND") || m.includes("SONOGRAPH");
-}
-
-function extractAge(tags: any): string {
-  const raw = String(tags?.PatientAge ?? "").trim();
-  const n = Number(raw.replace(/[^0-9]/g, ""));
-  if (Number.isFinite(n) && n >= 0 && n <= 110) return String(Math.round(n));
-  return "";
-}
 
 export async function GET(req: NextRequest) {
   const guard = await requireSession();
   if (guard) return guard;
   
   const s = await getSettings();
-  if (!s.orthancUrl) return NextResponse.json({ error: "Orthanc not configured" }, { status: 400 });
+  if (!s.orthancUrl) return NextResponse.json({ error: "Orthanc not configured", rows: [] }, { status: 400 });
 
-  const r = await listStudies();
-  if (!r.ok) return NextResponse.json({ error: r.error }, { status: 502 });
+  const baseUrl = s.orthancUrl.replace(/\/$/, "");
+  const auth = s.orthancUsername && s.orthancPassword 
+    ? "Basic " + Buffer.from(`${s.orthancUsername}:${s.orthancPassword}`).toString("base64") 
+    : null;
 
-  const now = Date.now();
-  const cutoff = now - (72 * 60 * 60 * 1000); // 72h window
+  // Calculate date 72h ago (YYYYMMDD format)
+  const d = new Date();
+  d.setDate(d.getDate() - 3);
+  const dateStr = d.toISOString().slice(0, 10).replace(/-/g, "");
+  
+  // Use DICOM-Web which sees the raw tags (including 00080061 ModalitiesInStudy)
+  const url = `${baseUrl}/dicom-web/studies?00080020=${dateStr}-&includefield=00080061,00100010,00100020,00080050,00080090,00081030,0020000D,00100040&limit=200`;
+  
+  try {
+    const headers: Record<string, string> = { "Accept": "application/dicom+json" };
+    if (auth) headers["Authorization"] = auth;
+    
+    const r = await fetch(url, { headers, next: { revalidate: 0 } });
+    if (!r.ok) {
+      return NextResponse.json({ error: `Orthanc DICOM-Web returned ${r.status}`, rows: [] }, { status: 502 });
+    }
+    
+    const studies = await r.json();
+    const rows = [];
+    
+    for (const st of studies) {
+      const mods = st["00080061"]?.Value || [];
+      const isUs = mods.some((m: string) => ["US", "USG", "OB US", "OBUS", "DOPPLER"].includes(String(m).toUpperCase()));
+      
+      // Fallback: if modality is blank but description suggests US
+      const desc = String(st["00081030"]?.Value?.[0] || "").toUpperCase();
+      const isUsByDesc = /USG|ULTRASOUND|SONOGRAPH|DOPPLER|OBSTETRIC|ANTENATAL|FETAL|GROWTH/.test(desc);
+      
+      if (!isUs && !isUsByDesc) continue;
+      
+      const rawName = (pn: any): string => { const v = pn?.Value?.[0]; if (!v) return ""; return (typeof v === "string" ? v : v.Alphabetic || "").replace(/\^+/g, " ").trim(); };
+      const getName = (pn: any) => {
+        if (!pn?.Value?.[0]) return "UNKNOWN";
+        const v = pn.Value[0];
+        return (typeof v === "string" ? v : v.Alphabetic || "").replace(/\^+/g, " ").trim() || "UNKNOWN";
+      };
 
-  const rows = (r.data || [])
-    .filter((st: any) => {
-      const mod = st.MainDicomTags?.ModalitiesInStudy || st.MainDicomTags?.Modality;
-      if (!isUsModality(mod)) return false;
-      const dateStr = st.MainDicomTags?.StudyDate;
-      if (!dateStr) return true;
-      const y = parseInt(dateStr.substring(0, 4), 10);
-      const m = parseInt(dateStr.substring(4, 6), 10) - 1;
-      const d = parseInt(dateStr.substring(6, 8), 10);
-      return new Date(y, m, d).getTime() >= cutoff;
-    })
-    .map((st: any) => ({
-      worklistId: `PACS-${st.ID}`,
-      accessionNumber: st.MainDicomTags?.AccessionNumber || "",
-      patientName: (st.PatientMainDicomTags?.PatientName || "").replace(/\^+/g, " ").trim() || "UNKNOWN",
-      patientAge: extractAge(st.PatientMainDicomTags),
-      patientSex: String(st.PatientMainDicomTags?.PatientSex || "").toUpperCase().startsWith("M") ? "M" : "F",
-      referringDoctor: (st.MainDicomTags?.ReferringPhysicianName || "").replace(/\^+/g, " ").trim() || "Self/Walk-in",
-      testName: st.MainDicomTags?.StudyDescription || "USG Study",
-      modality: "US",
-      studyDate: st.MainDicomTags?.StudyDate ? `${st.MainDicomTags.StudyDate.substring(0,4)}-${st.MainDicomTags.StudyDate.substring(4,6)}-${st.MainDicomTags.StudyDate.substring(6,8)}` : null,
-      studyInstanceUid: st.MainDicomTags?.StudyInstanceUID || st.ID,
-      orthancId: st.ID,
-    }));
-
-  return NextResponse.json({ rows, meta: { total: rows.length, windowHours: 72 } });
+      rows.push({
+        worklistId: `PACS-${st["0020000D"]?.Value?.[0] || ""}`,
+        accessionNumber: st["00080050"]?.Value?.[0] || st["00100020"]?.Value?.[0] || "",
+        patientName: getName(st["00100010"]),
+        patientAge: (st["00101010"]?.Value?.[0] || "").replace(/[^0-9]/g, ""), 
+        patientSex: st["00100040"]?.Value?.[0] === "M" ? "M" : "F",
+        referringDoctor: rawName(st["00080090"]) || "Self/Walk-in",
+        testName: st["00081030"]?.Value?.[0] || "USG Study",
+        modality: "US",
+        studyDate: st["00080020"]?.Value?.[0] ? `${st["00080020"].Value[0].substring(0,4)}-${st["00080020"].Value[0].substring(4,6)}-${st["00080020"].Value[0].substring(6,8)}` : null,
+        studyInstanceUid: st["0020000D"]?.Value?.[0] || "",
+      });
+    }
+    
+    return NextResponse.json({ rows, meta: { total: rows.length, source: "dicom-web" } });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message, rows: [] }, { status: 500 });
+  }
 }

@@ -54,9 +54,15 @@ export async function POST(req: NextRequest) {
       incremental = true;
     }
     const r = await fetchWorklist({ since, full: fullSync });
+    console.log('[sync] care fetch:', r.ok ? ('ok rows=' + ((r.data as any[])?.length ?? 0)) : r.error);
     if (r.ok) {
       careOk = true;
-      importStats = await importCareRows(r.data, clinicId);
+      try {
+          importStats = await importCareRows(r.data, clinicId);
+        } catch (e: any) {
+          lastError = `import failed: ${e?.message ?? String(e)}`;
+          console.error('[sync] importCareRows threw:', e);
+        }
     } else {
       lastError = r.error;
     }
@@ -67,7 +73,12 @@ export async function POST(req: NextRequest) {
     const r = await listStudies();
     if (r.ok) {
       orthancOk = true;
-      attachStats = await attachOrthancStudies(r.data, clinicId);
+      try {
+          attachStats = await attachOrthancStudies(r.data, clinicId);
+        } catch (e: any) {
+          lastError = lastError ?? `attach failed: ${e?.message ?? String(e)}`;
+          console.error('[sync] attachOrthancStudies threw:', e);
+        }
     } else {
       lastError = lastError ?? r.error;
     }

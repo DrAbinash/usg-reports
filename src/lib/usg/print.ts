@@ -201,12 +201,12 @@ const PREMIUM_CSS = `
   h2.band { display: flex; align-items: center; gap: 9px; background: linear-gradient(90deg, #143E6E, #2E6DA4); color: #fff; font-size: 10pt; font-weight: 800; letter-spacing: 1.8px; text-transform: uppercase; padding: 5.5px 13px; border-radius: 7px; margin: 15px 0 8px; page-break-after: avoid; }
   h2.band .n { background: #fff; color: #1B4F8A; border-radius: 5px; min-width: 17px; height: 17px; display: inline-flex; align-items: center; justify-content: center; font-size: 9pt; font-weight: 800; }
 
-  p.technique { margin: 3.5px 0; text-align: justify; }
+  p.technique { margin: 3.5px 0; text-align: left; }
 
   table.organs { width: 100%; border-collapse: collapse; margin-top: 2px; }
   table.organs tr.organ { page-break-inside: avoid; }
   table.organs th { width: 22mm; text-align: left; vertical-align: top; font-size: 8.5pt; font-weight: 800; color: #1B4F8A; text-transform: uppercase; letter-spacing: .8px; padding: 5px 8px 5px 0; border-bottom: 1px solid #E1ECF7; }
-  table.organs td { vertical-align: top; text-align: justify; padding: 5px 0; border-bottom: 1px solid #E1ECF7; }
+  table.organs td { vertical-align: top; text-align: left; padding: 5px 0; border-bottom: 1px solid #E1ECF7; }
   table.organs tr:last-child th, table.organs tr:last-child td { border-bottom: none; }
 
   .meas-block { margin-top: 2px; page-break-inside: avoid; }
@@ -236,11 +236,11 @@ const PREMIUM_CSS = `
   .sig .name { font-weight: 800; color: #143E6E; font-size: 11.5pt; }
   .sig .sub { font-size: 9pt; font-weight: 600; color: #40586D; }
 
-  .declaration { margin-top: 10px; font-size: 8pt; font-weight: 600; color: #61788C; border: 1px solid #AFCDE8; border-radius: 7px; padding: 6px 10px; text-align: justify; }
+  .declaration { margin-top: 10px; font-size: 8pt; font-weight: 600; color: #61788C; border: 1px solid #AFCDE8; border-radius: 7px; padding: 6px 10px; text-align: left; }
 
   .pcpndt { margin-top: 10px; border: 1.5px solid #1B4F8A; border-radius: 8px; padding: 8px 12px; background: #F4F8FC; page-break-inside: avoid; }
   .pcpndt-title { font-size: 9pt; font-weight: 800; letter-spacing: 1.2px; color: #143E6E; text-transform: uppercase; margin-bottom: 4px; }
-  .pcpndt p { font-size: 8.5pt; font-weight: 600; color: #16222E; text-align: justify; line-height: 1.55; }
+  .pcpndt p { font-size: 8.5pt; font-weight: 600; color: #16222E; text-align: left; line-height: 1.55; }
 
   .footer { margin-top: 10px; border-top: 2.5px solid #1B4F8A; padding-top: 5px; font-size: 8pt; font-weight: 600; color: #61788C; display: flex; justify-content: space-between; align-items: center; }
   .qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 1px; }
@@ -277,12 +277,12 @@ const CLASSIC_CSS = `
   h2.band { font-size: 10pt; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; border-bottom: 1.5px solid #000; padding-bottom: 2px; margin: 16px 0 7px; page-break-after: avoid; }
   h2.band .n { margin-right: 7px; }
 
-  p.technique { margin: 3px 0; text-align: justify; }
+  p.technique { margin: 3px 0; text-align: left; }
 
   table.organs { width: 100%; border-collapse: collapse; margin-top: 2px; }
   table.organs tr.organ { page-break-inside: avoid; }
   table.organs th { width: 24mm; text-align: left; vertical-align: top; font-size: 9pt; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; padding: 4.5px 8px 4.5px 0; border-bottom: 1px solid #999; }
-  table.organs td { vertical-align: top; text-align: justify; padding: 4.5px 0; border-bottom: 1px solid #999; }
+  table.organs td { vertical-align: top; text-align: left; padding: 4.5px 0; border-bottom: 1px solid #999; }
   table.organs tr:last-child th, table.organs tr:last-child td { border-bottom: none; }
 
   .meas-block { margin-top: 2px; page-break-inside: avoid; }
@@ -312,11 +312,11 @@ const CLASSIC_CSS = `
   .sig .name { font-weight: 700; font-size: 11pt; }
   .sig .sub { font-size: 9pt; font-weight: 600; }
 
-  .declaration { margin-top: 10px; font-size: 8pt; font-weight: 600; border: 1px solid #000; padding: 6px 10px; text-align: justify; }
+  .declaration { margin-top: 10px; font-size: 8pt; font-weight: 600; border: 1px solid #000; padding: 6px 10px; text-align: left; }
 
   .pcpndt { margin-top: 10px; border: 1.5px solid #000; padding: 8px 12px; page-break-inside: avoid; }
   .pcpndt-title { font-size: 9pt; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; margin-bottom: 4px; }
-  .pcpndt p { font-size: 8.5pt; font-weight: 600; text-align: justify; line-height: 1.55; }
+  .pcpndt p { font-size: 8.5pt; font-weight: 600; text-align: left; line-height: 1.55; }
 
   .footer { margin-top: 10px; border-top: 1.5px solid #000; padding-top: 5px; font-size: 8pt; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
   .qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 1px; }
@@ -516,6 +516,7 @@ export function buildUsgReportHtml(
 ): string {
   // v6.7 — route to the two-column sidebar layout when selected
   if (settings.usgPrintStyle === "premium_sidebar") {
+    if (String((settings as any)?.usgPrintStyle ?? "").toLowerCase() === "premium") return buildPremiumReportHtml(settings, patient, resolved, images, qr);
     return buildSidebarReportHtml(settings, patient, resolved, images, qr);
   }
 
@@ -1110,6 +1111,128 @@ ${SIDEBAR_CSS}
     ${showThanks ? esc(footerMsg) : ""}
     ${qrHtml}
   </div>
+</div>
+</body></html>`;
+}
+
+
+/** v6.18 premium port — ERP-grade couture for USG: navy key-image rail,
+ *  demographic grid, tinted impression, signature block, navy footer band.
+ *  Gated by HospitalSettings.usgPrintStyle === "premium"; other styles untouched. */
+export function buildPremiumReportHtml(settings: any, patient: any, resolved: any, images: any, qr: any): string {
+  const e = (v: any) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const s = settings ?? {};
+  const p = patient ?? {};
+  const name = p.name || p.patientName || "";
+  const age = p.age || p.patientAge || "";
+  const sex = p.sex || p.patientSex || "";
+  const ref = p.referredBy || p.referringDoctor || "";
+  const pid = p.patientId || (p.serial ? `USG-${String(p.serial).padStart(4, "0")}` : "");
+  const studyTitle = p.studyTitle || p.study || p.testName || "";
+  const accession = p.accessionNumber || p.accession || "";
+  const scanDate = p.scanDate || p.scanDateText || p.date || "";
+  const imgs: any[] = Array.isArray(images) ? images : [];
+  const sections: { label: string; text: string }[] = [];
+  let impression = "";
+  const pushSec = (label: any, text: any) => {
+    const L = String(label ?? "").trim(); const T = String(text ?? "").trim();
+    if (!T) return;
+    if (/^impression$/i.test(L)) { impression += (impression ? "\n" : "") + T; return; }
+    if (L) sections.push({ label: L.toUpperCase(), text: T });
+  };
+  if (Array.isArray(resolved)) for (const r of resolved as any[]) pushSec(r?.label ?? r?.organLabel ?? r?.organ ?? r?.title, r?.text ?? r?.findings ?? r?.body);
+  else if (resolved && typeof resolved === "object") {
+    const ro = resolved as any;
+    if (Array.isArray(ro.organs)) for (const o of ro.organs) pushSec(o?.label ?? o?.organ, o?.text ?? o?.findings);
+    if (ro.impression) impression += String(ro.impression);
+  }
+  if (!impression) impression = String(p.impression ?? "");
+  const sig = s.usgSignatureUrl ? `<img class="psig-img" src="${e(s.usgSignatureUrl)}" alt="signature" />` : `<span class="psig-line"></span>`;
+  const qrHtml = qr?.dataUrl ? `<span class="pqr"><img src="${e(qr.dataUrl)}" alt="verification QR" /><span>scan to verify</span></span>` : "";
+  const rail = imgs.length ? `
+    <aside class="prail">
+      <div class="prail-h">KEY IMAGES</div>
+      <div class="prail-m">${e(studyTitle || "USG")}</div>
+      ${imgs.slice(0, 6).map((im, i) => {
+        const src = im?.dataUrl || im?.url || im?.src || "";
+        if (!src) return "";
+        return `<figure class="pkey"><span class="pnum">${i + 1}</span><img src="${e(src)}" alt="key image ${i + 1}" />${im?.caption || im?.label ? `<figcaption>${e(im.caption || im.label)}</figcaption>` : ""}</figure>`;
+      }).join("")}
+    </aside>` : "";
+  const gen = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8" /><title>${e(name)} — USG report</title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; font-family: "Segoe UI", Arial, sans-serif; color: #16202b; }
+  .pwrap { display: flex; min-height: 297mm; }
+  .prail { flex: 0 0 52mm; background: #0e2a3f; color: #eaf2f8; padding: 8mm 4mm 6mm 4mm; }
+  .prail-h { font-size: 11pt; font-weight: 800; letter-spacing: 1.2px; }
+  .prail-m { font-size: 7.5pt; opacity: .85; margin: 1mm 0 4mm 0; text-transform: uppercase; letter-spacing: .4px; }
+  .pkey { position: relative; margin: 0 0 5mm 0; }
+  .pkey img { width: 100%; height: 34mm; object-fit: cover; border: 1px solid #35566e; border-radius: 1.5mm; background: #000; }
+  .pnum { position: absolute; top: -1.5mm; left: -1.5mm; width: 6mm; height: 6mm; background: #2f80ed; color: #fff; font-size: 8pt; font-weight: 700; border-radius: 1mm; display: flex; align-items: center; justify-content: center; }
+  .pkey figcaption { font-size: 6.5pt; margin-top: 1mm; opacity: .9; }
+  .pmain { flex: 1; padding: 8mm 8mm 6mm 8mm; min-width: 0; }
+  .phead { display: flex; align-items: flex-start; gap: 6mm; }
+  .plogo { width: 22mm; height: 22mm; object-fit: contain; }
+  .phosp { flex: 1; }
+  .phosp h1 { margin: 0; font-size: 17pt; letter-spacing: .5px; color: #0e2a3f; }
+  .phosp .tag { font-size: 7.5pt; color: #5a6b7c; margin-top: .5mm; }
+  .phosp .addr { font-size: 8pt; color: #33475b; margin-top: 1.5mm; line-height: 1.35; }
+  .pqr { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+  .pqr img { width: 20mm; height: 20mm; }
+  .pqr span { font-size: 6.5pt; font-weight: 700; letter-spacing: .5px; color: #33475b; }
+  .pdemo { border: .35mm solid #c9d6e2; border-radius: 2mm; margin: 5mm 0 4mm 0; padding: 3mm 4mm; display: grid; grid-template-columns: 1fr 1fr; gap: 1.6mm 8mm; font-size: 8.5pt; }
+  .pdemo div { display: flex; gap: 2mm; }
+  .pdemo b { color: #51606f; font-weight: 600; min-width: 24mm; }
+  .psec { margin: 4mm 0 2.5mm 0; font-size: 10.5pt; font-weight: 800; color: #0e2a3f; letter-spacing: .4px; display: flex; align-items: center; gap: 2mm; }
+  .psec::before { content: ""; width: 3mm; height: 3mm; border-radius: 50%; border: .5mm solid #2f80ed; }
+  .pbody { font-size: 9pt; line-height: 1.5; text-align: left; margin: 0 0 2mm 0; white-space: pre-wrap; }
+  .pimp { background: #eef3f8; border-left: 1.2mm solid #2f80ed; border-radius: 1.5mm; padding: 3mm 4mm; margin-top: 4mm; }
+  .pimp .psec { margin-top: 0; }
+  .pdisc { font-size: 7.5pt; color: #5a6b7c; margin: 4mm 0 3mm 0; }
+  .psig { display: flex; justify-content: flex-end; margin-top: 6mm; }
+  .psig-box { text-align: center; font-size: 8.5pt; }
+  .psig-img { height: 12mm; object-fit: contain; }
+  .psig-line { display: block; width: 45mm; border-bottom: .3mm solid #7a8a99; height: 10mm; }
+  .psig-box .nm { font-weight: 700; margin-top: 1mm; }
+  .psig-box .ql { font-size: 7.5pt; color: #51606f; }
+  .pfoot { background: #0e2a3f; color: #dfe9f2; text-align: center; font-size: 8pt; letter-spacing: 1.4px; padding: 2.6mm 0; margin-top: 6mm; text-transform: uppercase; }
+  .pgen { font-size: 7pt; color: #7a8a99; text-align: right; margin-top: 1.5mm; text-transform: none; letter-spacing: 0; }
+</style></head>
+<body>
+<div class="pwrap">
+${rail}
+<main class="pmain">
+  <div class="phead">
+    ${s.logoUrl ? `<img class="plogo" src="${e(s.logoUrl)}" alt="logo" />` : ""}
+    <div class="phosp">
+      <h1>${e(s.hospitalName || "CARE DIAGNOSTICS")}</h1>
+      <div class="tag">${e(s.footerMessage || "Precision. Compassion. Care.")}</div>
+      <div class="addr">${e(s.addressLine)}${s.phone ? ` · Ph: ${e(s.phone)}` : ""}${s.email ? ` · ${e(s.email)}` : ""}</div>
+    </div>
+    ${qrHtml}
+  </div>
+  <div class="pdemo">
+    <div><b>Patient Name</b><span>: ${e(name)}</span></div>
+    <div><b>Study Date</b><span>: ${e(scanDate)}</span></div>
+    <div><b>Age / Gender</b><span>: ${e(age)}${sex ? ` / ${e(sex)}` : ""}</span></div>
+    <div><b>Modality</b><span>: USG</span></div>
+    <div><b>Patient ID</b><span>: ${e(pid)}</span></div>
+    <div><b>Accession No</b><span>: ${e(accession || "—")}</span></div>
+    <div><b>Ref. Doctor</b><span>: ${e(ref || "—")}</span></div>
+    <div><b>Study</b><span>: ${e(studyTitle)}</span></div>
+  </div>
+  <div class="psec">ULTRASOUND FINDINGS</div>
+  ${sections.map((sec) => `<div class="psec" style="font-size:9.5pt;">${e(sec.label)}</div><p class="pbody">${e(sec.text)}</p>`).join("")}
+  ${impression ? `<div class="pimp"><div class="psec">IMPRESSION</div><p class="pbody" style="margin:0;">${e(impression)}</p></div>` : ""}
+  <p class="pdisc">${e(s.usgDeclarationLine || "This report is based on the images and clinical information provided. Kindly correlate clinically.")}</p>
+  <div class="psig"><div class="psig-box">${sig}<div class="nm">${e(s.usgDoctorName || "")}</div><div class="ql">${e(s.usgDoctorQual || "")}${s.usgDoctorRegNo ? ` · Reg. No: ${e(s.usgDoctorRegNo)}` : ""}</div></div></div>
+  <div class="pfoot">Thank you for choosing ${e(s.hospitalName || "CARE DIAGNOSTICS")}</div>
+  <div class="pgen">Report generated on ${e(gen)} IST</div>
+</main>
 </div>
 </body></html>`;
 }

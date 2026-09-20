@@ -13,7 +13,7 @@ import { UsgClinicSwitcher } from "./usg/UsgClinicSwitcher";
 import { UsgClinicLink } from "./usg/UsgClinicLink";
 import { OnboardingLayer } from "./usg/OnboardingLayer";
 import { UsgBirthdayGreeting, BirthdayHeaderButton, birthdayDismissed, rememberBirthdayDismissed, useBirthdayFlag } from "./usg/UsgBirthdayGreeting";
-import { Waves, Settings2, LogOut, Stethoscope, BarChart3, ClipboardList } from "lucide-react";
+import { Waves, Settings2, LogOut, Stethoscope, BarChart3, ClipboardList, Activity} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -24,6 +24,7 @@ const NAV: { id: View; label: string; icon: typeof Waves; tint: string }[] = [
   { id: "usg", label: "USG Studio", icon: Waves, tint: "text-rose-700 bg-rose-50 ring-rose-200" },
   { id: "insights", label: "Insights", icon: BarChart3, tint: "text-violet-700 bg-violet-50 ring-violet-200" },
   { id: "settings", label: "Settings", icon: Settings2, tint: "text-amber-700 bg-amber-50 ring-amber-200" },
+  { id: "pacs-viewer", label: "PACS Viewer", icon: Activity, tint: "text-indigo-700 bg-indigo-50 ring-indigo-200" },
 ];
 
 export function AppShell() {

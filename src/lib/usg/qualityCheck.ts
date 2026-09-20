@@ -94,13 +94,19 @@ export function runQualityCheck(
     // Check if any {variable} tokens remain unsubstituted
     const unfilledMatch = organ.text.match(/\{[a-z0-9_]+\}/i);
     if (unfilledMatch && !organ.custom) {
-      items.push({
-        kind: "incomplete_biometry",
-        severity: "warning",
-        message: `${organ.organ}: variable "${unfilledMatch[0]}" is unfilled. Enter a value or remove the placeholder.`,
-        organKey: organ.organ,
-        acknowledged: false,
-      });
+      // Only warn if the token is still literally in the current findings text.
+      // If the user typed the value inline (e.g., "14 cm" instead of "{lspan}"),
+      // the token is gone from the text, so this is legitimate prose, not a hole.
+      const currentText = organ.findings || "";
+      if (currentText.includes(unfilledMatch[0])) {
+        items.push({
+          kind: "incomplete_biometry",
+          severity: "warning",
+          message: `${organ.organ}: variable "${unfilledMatch[0]}" is unfilled. Enter a value or remove the placeholder.`,
+          organKey: organ.organ,
+          acknowledged: false,
+        });
+      }
     }
   }
 

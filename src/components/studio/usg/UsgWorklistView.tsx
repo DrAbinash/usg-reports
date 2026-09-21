@@ -63,6 +63,7 @@ type WorklistResponse = {
   lastError: string | null;
   careConfigured: boolean;
   orthancConfigured: boolean;
+  usgFormFEnabled?: boolean;
 };
 
 function stampIST(iso: string | null): string {

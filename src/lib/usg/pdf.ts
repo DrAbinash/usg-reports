@@ -170,7 +170,7 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
   
   // Address pinned to right edge when usgAddressPosition = "right"
   const addrPos = settings.usgAddressPosition ?? "right";
-  const addrLines = [settings.addressLine, settings.phone ? `📞 ${settings.phone}` : null, settings.email ? `✉ ${settings.email}` : null].filter(Boolean);
+  const addrLines = [settings.addressLine, settings.phone ? `Ph: ${settings.phone}` : null, settings.email ? `Email: ${settings.email}` : null].filter((x): x is string => !!x);
   if (addrLines.length > 0) {
     const addrY = ctx.y - nameSize - 4;
     if (addrPos === "right") {

@@ -32,8 +32,20 @@ export async function GET(req: NextRequest) {
     }
     
     const studies = await r.json();
-    const rows = [];
-    
+    type PacsRow = {
+      worklistId: string;
+      accessionNumber: string;
+      patientName: string;
+      patientAge: string;
+      patientSex: string;
+      referringDoctor: string;
+      testName: string;
+      modality: string;
+      studyDate: string | null;
+      studyInstanceUid: string;
+    };
+    const rows: PacsRow[] = [];
+
     for (const st of studies) {
       const mods = st["00080061"]?.Value || [];
       const isUs = mods.some((m: string) => ["US", "USG", "OB US", "OBUS", "DOPPLER"].includes(String(m).toUpperCase()));

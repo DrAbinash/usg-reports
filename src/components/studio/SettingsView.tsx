@@ -29,6 +29,7 @@ type Settings = {
   usgPrintFontSize: number; usgPrintLineHeight: number;
   usgPrintSpacing: string; usgPrintShowTechnique: boolean; usgPrintShowThanks: boolean;
   usgSidebarPosition?: string; usgLogoPosition?: string; usgAddressPosition?: string; usgPrintFontFamily?: string;
+  usgLogoSizeMm?: number; usgNameSizePt?: number; usgAddressSizePt?: number; usgSignatureSizeMm?: number;
   usgAutoBackup: boolean;
   // v6 integrations (secrets arrive masked — only their presence flags)
   careApiBase: string; careApiKeySet: boolean;
@@ -80,6 +81,63 @@ function imageFileToDataUrl(file: File, maxDim: number): Promise<string> {
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not read image")); };
     img.src = url;
+  });
+}
+
+/**
+ * Trim near-white margins from a scanned signature so the print block
+ * sits tight over the name line (Print Layout Studio auto-crop).
+ */
+function cropSig(dataUrl: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("canvas");
+        ctx.drawImage(img, 0, 0);
+        const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const isInk = (i: number) => {
+          const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
+          if (a < 16) return false;
+          // Near-white / light-grey paper stays background.
+          return r < 245 || g < 245 || b < 245;
+        };
+        let top = height, left = width, right = 0, bottom = 0;
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            if (!isInk((y * width + x) * 4)) continue;
+            if (y < top) top = y;
+            if (y > bottom) bottom = y;
+            if (x < left) left = x;
+            if (x > right) right = x;
+          }
+        }
+        if (right <= left || bottom <= top) {
+          resolve(dataUrl);
+          return;
+        }
+        const pad = 4;
+        const sx = Math.max(0, left - pad);
+        const sy = Math.max(0, top - pad);
+        const sw = Math.min(width - sx, right - left + 1 + pad * 2);
+        const sh = Math.min(height - sy, bottom - top + 1 + pad * 2);
+        const out = document.createElement("canvas");
+        out.width = sw;
+        out.height = sh;
+        const octx = out.getContext("2d");
+        if (!octx) throw new Error("canvas");
+        octx.drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+        resolve(out.toDataURL("image/png"));
+      } catch (e) {
+        reject(e);
+      }
+    };
+    img.onerror = () => reject(new Error("Could not crop signature"));
+    img.src = dataUrl;
   });
 }
 
@@ -606,16 +664,16 @@ export function SettingsView() {
 
           {/* v6.20 — Print Layout Studio: size dials */}
           <Field label={`Logo size — ${(s.usgLogoSizeMm ?? 14).toFixed(0)} mm`}>
-            <input type="range" min={8} max={30} step={1} value={s.usgLogoSizeMm ?? 14} onChange={(e) => set("usgLogoSizeMm", Number(e.target.value))} className="w-full" />
+            <input type="range" min={8} max={30} step={1} value={s.usgLogoSizeMm ?? 14} onChange={(e) => setS({ ...s, usgLogoSizeMm: Number(e.target.value) })} className="w-full" />
           </Field>
           <Field label={`Hospital name size — ${(s.usgNameSizePt ?? 15).toFixed(0)} pt`}>
-            <input type="range" min={10} max={22} step={0.5} value={s.usgNameSizePt ?? 15} onChange={(e) => set("usgNameSizePt", Number(e.target.value))} className="w-full" />
+            <input type="range" min={10} max={22} step={0.5} value={s.usgNameSizePt ?? 15} onChange={(e) => setS({ ...s, usgNameSizePt: Number(e.target.value) })} className="w-full" />
           </Field>
           <Field label={`Address size — ${(s.usgAddressSizePt ?? 8.5).toFixed(1)} pt`}>
-            <input type="range" min={6} max={12} step={0.5} value={s.usgAddressSizePt ?? 8.5} onChange={(e) => set("usgAddressSizePt", Number(e.target.value))} className="w-full" />
+            <input type="range" min={6} max={12} step={0.5} value={s.usgAddressSizePt ?? 8.5} onChange={(e) => setS({ ...s, usgAddressSizePt: Number(e.target.value) })} className="w-full" />
           </Field>
           <Field label={`Signature size — ${(s.usgSignatureSizeMm ?? 26).toFixed(0)} mm`}>
-            <input type="range" min={12} max={40} step={1} value={s.usgSignatureSizeMm ?? 26} onChange={(e) => set("usgSignatureSizeMm", Number(e.target.value))} className="w-full" />
+            <input type="range" min={12} max={40} step={1} value={s.usgSignatureSizeMm ?? 26} onChange={(e) => setS({ ...s, usgSignatureSizeMm: Number(e.target.value) })} className="w-full" />
           </Field>
           {/* v6.2 — Print layout fine-tuning: dials that size the letterhead to the clinic's paper */}
           <div className="space-y-3.5 rounded-xl border border-rose-200 bg-rose-50/40 p-3.5">
@@ -872,7 +930,7 @@ export function SettingsView() {
               <h3 className="text-base font-semibold text-amber-900 dark:text-amber-200">Form F (PCPNDT) master switch</h3>
               <p className="text-sm text-amber-700 dark:text-amber-300">OFF = Form F dialogs, validations and PDF blocks bypassed everywhere (CARE ERP keeps its own Form F). ON = full PC-PNDT flow in this studio.</p>
             </div>
-            <Switch checked={!!s.usgFormFEnabled} onCheckedChange={(v) => set("usgFormFEnabled", v)} />
+            <Switch checked={!!s.usgFormFEnabled} onCheckedChange={(v) => void setBool("usgFormFEnabled", v)} />
           </div>
           {/* PC-PNDT Form F fixed details */}
           <section className="space-y-3 border-t border-border pt-4">

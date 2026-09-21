@@ -244,6 +244,23 @@ export async function updateSettings(patch: SettingsUpdate) {
     const n = Number(patch.usgPrintLineHeight);
     data.usgPrintLineHeight = Number.isFinite(n) ? Math.min(1.9, Math.max(1.15, n)) : 1.4;
   }
+  // v6.20 Print Layout Studio size dials
+  if (patch.usgLogoSizeMm != null) {
+    const n = Number(patch.usgLogoSizeMm);
+    data.usgLogoSizeMm = Number.isFinite(n) ? Math.min(30, Math.max(8, n)) : 14;
+  }
+  if (patch.usgNameSizePt != null) {
+    const n = Number(patch.usgNameSizePt);
+    data.usgNameSizePt = Number.isFinite(n) ? Math.min(22, Math.max(10, n)) : 15;
+  }
+  if (patch.usgAddressSizePt != null) {
+    const n = Number(patch.usgAddressSizePt);
+    data.usgAddressSizePt = Number.isFinite(n) ? Math.min(12, Math.max(6, n)) : 8.5;
+  }
+  if (patch.usgSignatureSizeMm != null) {
+    const n = Number(patch.usgSignatureSizeMm);
+    data.usgSignatureSizeMm = Number.isFinite(n) ? Math.min(40, Math.max(12, n)) : 26;
+  }
   // Section spacing preset: anything unexpected falls back to "normal".
   if (typeof patch.usgPrintSpacing === "string") {
     data.usgPrintSpacing = ["tight", "normal", "relaxed"].includes(patch.usgPrintSpacing.trim())

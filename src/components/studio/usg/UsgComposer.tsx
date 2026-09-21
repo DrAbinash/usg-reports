@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, CalendarDays, ChevronDown, Command, FileCheck2, Loader2, Maximize2, Minimize2, Phone, Printer, Save, Search, Settings2, Zap } from "lucide-react";
+import { ArrowLeft, CalendarDays, ChevronDown, FileCheck2, Loader2, Maximize2, Minimize2, Phone, Printer, Save, Search, Settings2, Zap } from "lucide-react";
 import type { UsgComposerState, UsgPathologyDef } from "@/lib/usg/types";
 import { USG_SEX_CHILD } from "@/lib/usg/types";
 import { USG_STUDIES, STUDY_GROUPS, applyNormalOverrides, getStudy, normalOverrideKey, type NormalOverrides } from "@/lib/usg/studies";
@@ -50,7 +50,7 @@ import { UsgDicomPicker } from "./UsgDicomPicker";
 import { UsgFormFDialog, type FormFDefaults, type FormFOrderLite } from "./UsgFormFDialog";
 import { DictationButton } from "./DictationButton";
 import { UsgStudyPicker } from "./UsgStudyPicker";
-import { UsgShortcutOverlay } from "./UsgShortcutOverlay";
+import { UsgTipsRibbon } from "./UsgTipsRibbon";
 import { UsgGrowthChart } from "./UsgGrowthChart";
 import { UsgTemplateBar } from "./UsgTemplateBar";
 import { UsgFormatsLibrary } from "./UsgFormatsLibrary";
@@ -942,10 +942,9 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
           {lastAutosave && !isFinal ? (
             <span className="text-[9px] text-emerald-600">· autosaved {new Date(lastAutosave).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>
           ) : null}
-          <span className="ml-auto hidden items-center gap-1 text-faint md:flex" title="Keyboard shortcuts">
-            <Command className="h-2.5 w-2.5" /> Ctrl+S · Ctrl+↵ · N · ?
-          </span>
         </div>
+
+        <UsgTipsRibbon />
 
         {/* ── Expanded: full patient input form ──────────────────────────── */}
         {!headerCollapsed && (
@@ -1477,12 +1476,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         />
       )}
 
-      {/* Audit #13 — UsgShortcutOverlay was exported but never mounted,
-          so the advertised "?" shortcut silently did nothing. Mount it
-          here so the overlay opens when the doctor presses "?". */}
-      <UsgShortcutOverlay />
-
-      {/* v6.9 — Critical findings communication log (PCPNDT/NMC legal record) */}
+      {/* Critical findings communication log (PCPNDT/NMC legal record) */}
       <UsgCriticalCommDialog
         open={commOpen}
         onOpenChange={setCommOpen}

@@ -524,7 +524,7 @@ export function buildUsgReportHtml(
 ): string {
   // v6.7 — route to the two-column sidebar layout when selected
   if (settings.usgPrintStyle === "premium_sidebar") {
-    if (String((settings as any)?.usgPrintStyle ?? "").toLowerCase() === "premium") return buildPremiumReportHtml(settings, patient, resolved, images, qr);
+    if (String((settings as any)?.usgPrintStyle ?? "").toLowerCase() === "couture") return buildPremiumReportHtml(settings, patient, resolved, images, qr);
     return buildSidebarReportHtml(settings, patient, resolved, images, qr);
   }
 

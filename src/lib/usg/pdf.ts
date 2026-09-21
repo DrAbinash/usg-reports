@@ -170,7 +170,7 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
   
   // Address pinned to right edge when usgAddressPosition = "right"
   const addrPos = settings.usgAddressPosition ?? "right";
-  const addrLines = [settings.addressLine, settings.phone ? `📞 ${settings.phone}` : null, settings.email ? `✉ ${settings.email}` : null].filter(Boolean);
+  const addrLines = [settings.addressLine, settings.phone ? `Ph: ${settings.phone}` : null, settings.email ? `Email: ${settings.email}` : null].filter((x): x is string => !!x);
   if (addrLines.length > 0) {
     const addrY = ctx.y - nameSize - 4;
     if (addrPos === "right") {
@@ -190,7 +190,9 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
       ctx.page.drawText(contact, { x, y: addrY, size: addrSize, font: fonts.reg, color: GREY });
     }
   }
-  ctx.y -= titleSize + (a5 ? 18 : 24);
+  // Header height: hospital name (was titleSize before Print Layout Studio
+  // renamed it to nameSize). Keep the same post-header gap as before.
+  ctx.y -= nameSize + (a5 ? 18 : 24);
   ctx.page.drawLine({
     start: { x: margin, y: ctx.y }, end: { x: pageW - margin, y: ctx.y },
     thickness: a5 ? 1 : 1.4, color: NAVY,

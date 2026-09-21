@@ -79,6 +79,14 @@ export type UsgPrintSettings = {
   usgAddressPosition?: string;
   /** v6.7 — font family: "sans-serif" (default) | "serif" | "system". */
   usgPrintFontFamily?: string;
+  /** v6.20 Print Layout Studio — logo height in mm (8–30). */
+  usgLogoSizeMm?: number;
+  /** v6.20 — hospital name font size in pt (10–22). */
+  usgNameSizePt?: number;
+  /** v6.20 — address font size in pt (6–12). */
+  usgAddressSizePt?: number;
+  /** v6.20 — signature height in mm (12–40). */
+  usgSignatureSizeMm?: number;
   // ── v6.10 feature toggles (per-clinic) ──────────────────────────
   // Optional — when undefined, the feature is treated as enabled.
   enableCriticalComm?: boolean;

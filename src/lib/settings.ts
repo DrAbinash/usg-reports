@@ -205,7 +205,7 @@ export async function updateSettings(patch: SettingsUpdate) {
   // Print style: "classic" | "premium" | "premium_sidebar"
   if (typeof patch.usgPrintStyle === "string") {
     const style = patch.usgPrintStyle.trim();
-    data.usgPrintStyle = (style === "classic" || style === "premium_sidebar") ? style : "premium";
+    data.usgPrintStyle = (["classic", "premium_sidebar", "couture"].includes(style)) ? style : "premium";
   }
   // v6.7 sidebar layout settings
   if (typeof patch.usgSidebarPosition === "string") {

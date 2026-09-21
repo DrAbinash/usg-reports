@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, CalendarDays, ChevronDown, Command, FileCheck2, Loader2, Maximize2, Minimize2, Phone, Printer, Save, Search, Settings2 } from "lucide-react";
+import { ArrowLeft, CalendarDays, ChevronDown, Command, FileCheck2, Loader2, Maximize2, Minimize2, Phone, Printer, Save, Search, Settings2, Zap } from "lucide-react";
 import type { UsgComposerState, UsgPathologyDef } from "@/lib/usg/types";
 import { USG_SEX_CHILD } from "@/lib/usg/types";
 import { USG_STUDIES, STUDY_GROUPS, applyNormalOverrides, getStudy, normalOverrideKey, type NormalOverrides } from "@/lib/usg/studies";
@@ -31,6 +31,12 @@ import {
   setOrganVar,
   switchStudy,
 } from "@/lib/usg/composer";
+import {
+  applyOrganQuickNormal,
+  applyRushNormalStudy,
+  markAllNormal,
+  studyAllowsRushNormals,
+} from "@/lib/usg/quickActions";
 import { buildUsgReportHtml, formatUsgSerial, type UsgPrintSettings } from "@/lib/usg/print";
 import { lmpSummary, parseLmpInput } from "@/lib/usg/lmp";
 import { toScanDateInput } from "@/lib/usg/dates";
@@ -421,11 +427,42 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [isFinal]);
 
-  // ── Keyboard-first flow: Ctrl+S save · Ctrl+Enter finalize · Ctrl+K study ─
+  // ── Keyboard-first flow: Ctrl+S save · Ctrl+Enter finalize · Ctrl+K study · N rush normal ─
   const persistRef = useRef<((status: "" | "finalize") => Promise<string | null>) | null>(null);
+  const rushNormalRef = useRef<() => void>(() => {});
+  rushNormalRef.current = () => {
+    if (isFinal) return;
+    if (studyAllowsRushNormals(study)) {
+      const next = applyRushNormalStudy(state, study);
+      if (!next) {
+        toast.error("This study needs measurements — use organ cards");
+        return;
+      }
+      setState(next);
+      toast.success("All normal · no sizes — ready to print");
+    } else {
+      setState((s) => markAllNormal(s, study));
+      toast.success("All organs set to normal");
+    }
+  };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
+      const target = e.target as HTMLElement | null;
+      const typing =
+        !!target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable);
+
+      // Peak-time: bare "N" → Normal · no sizes (skipped while typing in a field)
+      if (!mod && !typing && e.key.toLowerCase() === "n" && !e.altKey) {
+        e.preventDefault();
+        rushNormalRef.current();
+        return;
+      }
+
       if (!mod) return;
       if (e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -906,7 +943,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
             <span className="text-[9px] text-emerald-600">· autosaved {new Date(lastAutosave).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>
           ) : null}
           <span className="ml-auto hidden items-center gap-1 text-faint md:flex" title="Keyboard shortcuts">
-            <Command className="h-2.5 w-2.5" /> Ctrl+S · Ctrl+↵ · ?
+            <Command className="h-2.5 w-2.5" /> Ctrl+S · Ctrl+↵ · N · ?
           </span>
         </div>
 
@@ -1137,8 +1174,45 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
       </div>
 
       {/* v6.15: Quick report templates bar — one-click pre-filled reports */}
+      {/* Peak-time: one-tap all-normal without measurement slots */}
       {!isFinal && (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 px-3 pt-2">
+          {studyAllowsRushNormals(study) ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 border-amber-200 bg-amber-50 px-2.5 text-[11px] font-semibold text-amber-800 hover:bg-amber-100"
+              title="Peak-time: mark every organ normal with no size measurements (liver/kidney/uterus etc. print qualitative normals)"
+              onClick={() => {
+                const next = applyRushNormalStudy(state, study);
+                if (!next) {
+                  toast.error("This study needs measurements — use organ cards");
+                  return;
+                }
+                setState(next);
+                toast.success("All normal · no sizes — ready to print");
+              }}
+            >
+              <Zap className="mr-1 h-3.5 w-3.5" />
+              Normal · no sizes
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 border-emerald-200 bg-emerald-50 px-2.5 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100"
+              title="Clear all pathologies back to measured normals"
+              onClick={() => {
+                setState((s) => markAllNormal(s, study));
+                toast.success("All organs set to normal");
+              }}
+            >
+              <Zap className="mr-1 h-3.5 w-3.5" />
+              All normal
+            </Button>
+          )}
           <UsgFormatsLibrary organs={state.organs} onApply={(organs, imp) => setState((p) => ({ ...p, organs, impressionOverride: imp ?? p.impressionOverride }))} />
           <UsgTemplateBar
           onApply={(template) => {
@@ -1178,7 +1252,8 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
                 normalOverride={override}
                 onSaveNormal={(text) => saveNormalOverride(def.key, text)}
                 onResetNormal={() => resetNormalOverride(def.key)}
-                onToggle={(k) => setState((s) => applyPathologies(s, def.key, k ? [k] : [], lookup, normalOverrides))}
+                onToggle={(k) => togglePathology(def.key, k)}
+                onQuickNormal={() => setState((s) => applyOrganQuickNormal(s, def.key, def))}
                 onVar={(k, v) => setState((s) => setOrganVar(s, def.key, k, v))}
                 onText={(t) => setState((s) => setOrganText(s, def.key, t))}
                 onAddCustom={(organ) => setDialogOrgan(organ)}

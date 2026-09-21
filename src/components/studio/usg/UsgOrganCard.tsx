@@ -22,6 +22,7 @@ import { Check, Pencil, Plus, RotateCcw, Stethoscope, Type, ChevronDown } from "
 import type { UsgOrganDef, UsgOrganState, UsgPathologyDef, UsgVarDef } from "@/lib/usg/types";
 import { extractTokens, ORGAN_SIDE, selectedPathologies, substitute } from "@/lib/usg/composer";
 import { isSelectToken, getTokenOptions } from "@/lib/usg/tokenTypes";
+import { organNormalHasMeasurements } from "@/lib/usg/quickActions";
 import { appendTranscript } from "@/lib/usg/dictation";
 import { DictationButton } from "./DictationButton";
 import { UsgSuggestionsPanel } from "./UsgSuggestionsPanel";
@@ -38,6 +39,11 @@ export type OrganCardProps = {
   onResetNormal: () => void;
   /** null = clear to normal; a key = toggle that pathology on/off. */
   onToggle: (pathologyKey: string | null) => void;
+  /**
+   * Peak-time: clear pathologies and apply measurement-free normal wording
+   * (e.g. liver without MCL span). Only shown when the organ has size slots.
+   */
+  onQuickNormal?: () => void;
   onVar: (key: string, value: string) => void;
   onText: (text: string) => void;
   onAddCustom: (organKey: string, after?: string) => void;
@@ -49,7 +55,7 @@ function varLabel(defs: UsgVarDef[] | undefined, token: string): { label: string
   return { label: token.replace(/_/g, " ") };
 }
 
-export function UsgOrganCard({ def, state, pathologies, normalOverride, onSaveNormal, onResetNormal, onToggle, onVar, onText, onAddCustom }: OrganCardProps) {
+export function UsgOrganCard({ def, state, pathologies, normalOverride, onSaveNormal, onResetNormal, onToggle, onQuickNormal, onVar, onText, onAddCustom }: OrganCardProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(state.text);
   const [showAll, setShowAll] = useState(false);
@@ -69,6 +75,12 @@ export function UsgOrganCard({ def, state, pathologies, normalOverride, onSaveNo
   // only the real measurements get inputs.
   const autoSide = ORGAN_SIDE[def.key];
   const inputTokens = tokens.filter((t) => !autoSide || !(t in autoSide));
+  const showQuickNormal = !!onQuickNormal && organNormalHasMeasurements(def);
+  const usingQuickNormal =
+    !anySelected &&
+    !state.custom &&
+    !!def.normalQuick &&
+    state.text.trim() === def.normalQuick.trim();
 
   const isKidneySlot = def.key === "kidney_rt" || def.key === "kidney_lt";
   const visible = showAll ? pathologies : pathologies.slice(0, 6);
@@ -217,13 +229,31 @@ export function UsgOrganCard({ def, state, pathologies, normalOverride, onSaveNo
           }}
           className={cn(
             "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
-            !anySelected && !state.custom
+            !anySelected && !state.custom && !usingQuickNormal
               ? "border-emerald-300 bg-emerald-50 text-emerald-700"
               : "border-border bg-muted/40 text-muted-foreground hover:border-emerald-200 hover:text-emerald-700",
           )}
+          title={def.vars?.length ? "Normal with measurement slots" : "Normal"}
         >
           Normal
         </button>
+        {showQuickNormal ? (
+          <button
+            onClick={() => {
+              setEditing(false);
+              onQuickNormal();
+            }}
+            className={cn(
+              "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
+              usingQuickNormal
+                ? "border-amber-300 bg-amber-50 text-amber-800"
+                : "border-dashed border-amber-200 bg-amber-50/40 text-amber-700 hover:border-amber-300 hover:bg-amber-50",
+            )}
+            title="Peak-time normal — qualitative wording, no size measurements (e.g. liver without MCL span)"
+          >
+            Normal · no size
+          </button>
+        ) : null}
         {visible.map((p) => {
           const on = selectedKeys.includes(p.key);
           return (

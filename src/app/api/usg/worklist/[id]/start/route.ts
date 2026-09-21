@@ -7,6 +7,7 @@ import { resolveColumns } from "@/lib/usg/server";
 import { linkPatient, latestKnownDemographics } from "@/lib/usg/patients";
 import { audit } from "@/lib/usg/audit";
 import { guessStudyKey, isObStudyKey, orderSex, testSuggestsChild } from "@/lib/usg/orderStudy";
+import { applyRushNormalStudy, studyAllowsRushNormals } from "@/lib/usg/quickActions";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -16,8 +17,12 @@ type Ctx = { params: Promise<{ id: string }> };
  * (name, age, sex, referral doctor, scan date) plus the guessed study, so
  * the doctor's first keystroke is a pathology chip, not a patient header.
  * Idempotent: a second call opens the SAME draft, never a duplicate.
+ *
+ * Body `{ rushNormal: true }` (or `?rush=1`): pre-fill measurement-free
+ * NP normals when the study allows it (abdomen/KUB/TVS…). Obstetric/echo
+ * ignore the flag and open with measured normals.
  */
-export async function POST(_req: Request, ctx: Ctx) {
+export async function POST(req: Request, ctx: Ctx) {
   const guard = await requireSession();
   if (guard) return guard;
   const { id } = await ctx.params;
@@ -25,6 +30,13 @@ export async function POST(_req: Request, ctx: Ctx) {
   const order = await db.usgCareOrder.findUnique({ where: { id } });
   if (!order) return Response.json({ error: "Order not found" }, { status: 404 });
   if (order.ignored) return Response.json({ error: "This order is ignored" }, { status: 400 });
+
+  const url = new URL(req.url);
+  const body = await req.json().catch(() => ({} as Record<string, unknown>));
+  const rushNormal =
+    body.rushNormal === true ||
+    body.rush === true ||
+    url.searchParams.get("rush") === "1";
 
   // v6.18 — Orthanc DICOM Fallback for missing demographics
   let orthancAge = order.patientAge;
@@ -42,20 +54,22 @@ export async function POST(_req: Request, ctx: Ctx) {
         if (lookup.ok) {
           const ids = await lookup.json();
           if (Array.isArray(ids) && ids.length > 0) {
-            const study = await fetch(`${base}/studies/${ids[0]}`, { headers }).then(r => r.json());
+            const study = await fetch(`${base}/studies/${ids[0]}`, { headers }).then((r) => r.json());
             const tags = study.MainDicomTags || {};
-            if (!orthancAge && tags.PatientAge) orthancAge = tags.PatientAge.replace(/^0+/, '');
+            if (!orthancAge && tags.PatientAge) orthancAge = tags.PatientAge.replace(/^0+/, "");
             if (!orthancRef && tags.ReferringPhysicianName) orthancRef = tags.ReferringPhysicianName;
           }
         }
       }
-    } catch { /* silent fail */ }
+    } catch {
+      /* silent fail */
+    }
   }
 
-  // Already started? Open the same draft.
+  // Already started? Open the same draft (rush flag does not rewrite it).
   if (order.reportId) {
     const existing = await db.usgReport.findUnique({ where: { id: order.reportId } });
-    if (existing) return Response.json({ report: existing, ob: isObStudyKey(existing.studyKey) });
+    if (existing) return Response.json({ report: existing, ob: isObStudyKey(existing.studyKey), rushApplied: false });
   }
 
   const child = testSuggestsChild(order.testName);
@@ -63,7 +77,16 @@ export async function POST(_req: Request, ctx: Ctx) {
   const study = getStudy(studyKey);
   if (!study) return Response.json({ error: "Unknown study" }, { status: 400 });
 
-  const state = normaliseState({}, studyKey);
+  let state = normaliseState({}, studyKey);
+  let rushApplied = false;
+  if (rushNormal && studyAllowsRushNormals(study)) {
+    const rushed = applyRushNormalStudy(state, study);
+    if (rushed) {
+      state = rushed;
+      rushApplied = true;
+    }
+  }
+
   const cols = await resolveColumns(JSON.stringify(state), study.technique);
 
   const clinicId = await getActiveClinicId();
@@ -107,8 +130,8 @@ export async function POST(_req: Request, ctx: Ctx) {
     action: "report.create",
     reportId: report.id,
     patientName: report.patientName,
-    detail: `started from bill-desk order ${order.accessionNumber ?? `WL ${order.careWorklistId ?? order.id}`} — ${study.label}`,
+    detail: `started from bill-desk order ${order.accessionNumber ?? `WL ${order.careWorklistId ?? order.id}`} — ${study.label}${rushApplied ? " (NP · no sizes)" : ""}`,
   });
 
-  return Response.json({ report, ob: isObStudyKey(studyKey) });
+  return Response.json({ report, ob: isObStudyKey(studyKey), rushApplied });
 }

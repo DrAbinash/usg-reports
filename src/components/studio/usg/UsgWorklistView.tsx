@@ -16,10 +16,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { SectionLabel } from "../bits";
 import { UsgPacsQueue } from "./UsgPacsQueue";
 import { UsgFormFDialog, type FormFDefaults, type FormFOrderLite } from "./UsgFormFDialog";
-import { Search, RefreshCw, ChevronRight, Hourglass, CheckCircle2, EyeOff, ScanLine, FileCheck2, CloudOff, Link2, CalendarDays } from "lucide-react";
+import { Search, RefreshCw, ChevronRight, Hourglass, CheckCircle2, EyeOff, ScanLine, FileCheck2, CloudOff, Link2, CalendarDays, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { toLocalDateString } from "@/lib/usg/dates";
+import { guessStudyKey, isObStudyKey, testSuggestsChild } from "@/lib/usg/orderStudy";
+import { studyAllowsRushNormals } from "@/lib/usg/quickActions";
+import { getStudy } from "@/lib/usg/studies";
 
 type Order = FormFOrderLite & {
   id: string;
@@ -306,8 +309,12 @@ export function UsgWorklistView() {
     };
   }, [sync]);
 
-  const startReport = async (order: Order) => {
-    const r = await fetch(`/api/usg/worklist/${order.id}/start`, { method: "POST" })
+  const startReport = async (order: Order, opts?: { rush?: boolean }) => {
+    const r = await fetch(`/api/usg/worklist/${order.id}/start`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ rushNormal: !!opts?.rush }),
+    })
       .then((x) => x.json())
       .catch(() => null);
     if (!r || r.error) {
@@ -315,7 +322,21 @@ export function UsgWorklistView() {
       return;
     }
     load();
+    if (opts?.rush && r.rushApplied) {
+      toast.success("Opened as NP · no sizes");
+    } else if (opts?.rush && !r.rushApplied) {
+      toast.message("Opened — this study keeps measurement slots");
+    }
     openComposer(r.report.id);
+  };
+
+  /** True when Start NP (rush normals) is useful for this bill-desk row. */
+  const orderAllowsRush = (order: Order): boolean => {
+    const child = testSuggestsChild(order.testName ?? "");
+    const key = guessStudyKey(order.testName ?? "", order.patientSex === "M" ? "M" : "F", child);
+    if (isObStudyKey(key)) return false;
+    const study = getStudy(key);
+    return study ? studyAllowsRushNormals(study) : false;
   };
 
   const ignore = async (order: Order) => {
@@ -443,22 +464,37 @@ export function UsgWorklistView() {
                 onClick={() => void startReport(o)}
                 action={
                   <div className="flex items-center gap-1">
+                    {orderAllowsRush(o) && !o.reportId ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 border-amber-200 bg-amber-50 px-2 text-[11px] font-semibold text-amber-800 hover:bg-amber-100"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void startReport(o, { rush: true });
+                        }}
+                        title="Start report as NP · no sizes (peak-time qualitative normals)"
+                      >
+                        <Zap className="mr-1 h-3 w-3" />
+                        NP
+                      </Button>
+                    ) : null}
                     {data?.usgFormFEnabled ? (
-<Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 border-rose-200 bg-rose-50 px-2 text-[11px] font-semibold text-rose-700 hover:bg-rose-50"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setFormFOrder(o);
-                        setFormFOpen(true);
-                      }}
-                      title="PC-PNDT Form F — pre-filled from the bill desk"
-                    >
-                      <FileCheck2 className="mr-1 h-3 w-3" />
-                      Form F
-                    </Button>
-) : null}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 border-rose-200 bg-rose-50 px-2 text-[11px] font-semibold text-rose-700 hover:bg-rose-50"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setFormFOrder(o);
+                          setFormFOpen(true);
+                        }}
+                        title="PC-PNDT Form F — pre-filled from the bill desk"
+                      >
+                        <FileCheck2 className="mr-1 h-3 w-3" />
+                        Form F
+                      </Button>
+                    ) : null}
                     <Button
                       size="sm"
                       variant="ghost"

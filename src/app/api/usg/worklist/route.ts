@@ -107,6 +107,7 @@ export async function GET(req: Request) {
     lastError: sync?.lastError ?? null,
     careConfigured: !!s.careApiBase, // v6.14: only base URL required,
     orthancConfigured: !!s.orthancUrl,
+    usgFormFEnabled: !!s.usgFormFEnabled,
     // v6.14: echo the applied date range so the UI can show it
     dateRange: { from: fromParam, to: toParam },
   });

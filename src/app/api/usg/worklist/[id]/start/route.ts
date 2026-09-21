@@ -1,5 +1,6 @@
 import { requireSession, getActiveClinicId } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getSettings } from "@/lib/settings";
 import { getStudy } from "@/lib/usg/studies";
 import { normaliseState } from "@/lib/usg/composer";
 import { resolveColumns } from "@/lib/usg/server";
@@ -22,6 +23,8 @@ export async function POST(_req: Request, ctx: Ctx) {
   const { id } = await ctx.params;
 
   const order = await db.usgCareOrder.findUnique({ where: { id } });
+  if (!order) return Response.json({ error: "Order not found" }, { status: 404 });
+  if (order.ignored) return Response.json({ error: "This order is ignored" }, { status: 400 });
 
   // v6.18 — Orthanc DICOM Fallback for missing demographics
   let orthancAge = order.patientAge;
@@ -46,10 +49,8 @@ export async function POST(_req: Request, ctx: Ctx) {
           }
         }
       }
-    } catch (e) { /* silent fail */ }
+    } catch { /* silent fail */ }
   }
-  if (!order) return Response.json({ error: "Order not found" }, { status: 404 });
-  if (order.ignored) return Response.json({ error: "This order is ignored" }, { status: 400 });
 
   // Already started? Open the same draft.
   if (order.reportId) {

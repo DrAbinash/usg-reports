@@ -97,7 +97,7 @@ export function runQualityCheck(
       // Only warn if the token is still literally in the current findings text.
       // If the user typed the value inline (e.g., "14 cm" instead of "{lspan}"),
       // the token is gone from the text, so this is legitimate prose, not a hole.
-      const currentText = organ.findings || "";
+      const currentText = organ.text || "";
       if (currentText.includes(unfilledMatch[0])) {
         items.push({
           kind: "incomplete_biometry",

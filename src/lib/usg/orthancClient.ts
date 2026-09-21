@@ -44,7 +44,7 @@ async function orthancFetch<T>(path: string, timeoutMs = TIMEOUT_MS): Promise<Or
 
 export type OrthancStudy = {
   ID: string;
-  MainDicomTags: { StudyInstanceUID?: string; AccessionNumber?: string; StudyDate?: string; StudyDescription?: string };
+  MainDicomTags: { StudyInstanceUID?: string; AccessionNumber?: string; StudyDate?: string; StudyTime?: string; StudyDescription?: string };
   PatientMainTags?: { PatientName?: string; PatientID?: string };
 };
 

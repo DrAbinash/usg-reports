@@ -103,7 +103,13 @@ export function AppShell() {
             return (
               <button
                 key={n.id}
-                onClick={() => setView(n.id)}
+                onClick={() => {
+                  if (n.id === "pacs-viewer") {
+                    window.open("http://172.16.1.139:3010/viewer", "_blank", "noopener,noreferrer");
+                    return;
+                  }
+                  setView(n.id);
+                }}
                 className={cn(
                   "relative flex h-10 items-center justify-center gap-2.5 rounded-lg text-[13px] font-medium transition-all md:justify-start md:px-3",
                   active

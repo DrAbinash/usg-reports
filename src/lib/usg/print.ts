@@ -635,7 +635,7 @@ export function buildUsgReportHtml(
 .top-bar .logo-block img { height: var(--logo-h, 14mm); }
 .top-bar .logo-block .hospital-name { font-size: var(--name-fs, 15pt); }
 .top-bar .contact-block { font-size: var(--addr-fs, 8.5pt); }
-</style></head>
+</style><style id="usg-justify-kill">p, li, td, th, div, span, .organ-body, .ob-body, .pbody { text-align: left !important; hyphens: none !important; word-spacing: normal !important; letter-spacing: normal !important; }</style><style id="usg-sig-fit">.signature-block,.sig-wrap,.sig-pin{position:static !important;bottom:auto !important;right:auto !important;transform:none !important;}</style><script>window.addEventListener("beforeprint",function(){var mm=277/25.4*96;var h=document.body.scrollHeight;if(h>mm){document.body.style.zoom=(mm/h).toFixed(3);}});</script></head>
 <body>
 ${watermark}
 <div class="sheet">
@@ -645,7 +645,7 @@ ${watermark}
       <div class="hospital">${esc(settings.hospitalName || settings.appTitle)}</div>
       <div class="addr">${esc(settings.addressLine)}${settings.phone ? ` &nbsp;·&nbsp; ${esc(settings.phone)}` : ""}${settings.email ? ` &nbsp;·&nbsp; ${esc(settings.email)}` : ""}</div>
     </div>
-    ${classic ? "" : `<div class="brand"><div class="t">ULTRASOUND REPORT</div></div>`}
+    ""
   </div>
   ${provisionalTag}
 
@@ -1047,7 +1047,7 @@ ${SIDEBAR_CSS}
   --sidebar-w: ${images.length > 2 ? "65mm" : "55mm"};
 }
 </style>
-</head><body>
+<style id="usg-justify-kill">p, li, td, th, div, span, .organ-body, .ob-body, .pbody { text-align: left !important; hyphens: none !important; word-spacing: normal !important; letter-spacing: normal !important; }</style><style id="usg-sig-fit">.signature-block,.sig-wrap,.sig-pin{position:static !important;bottom:auto !important;right:auto !important;transform:none !important;}</style><script>window.addEventListener("beforeprint",function(){var mm=277/25.4*96;var h=document.body.scrollHeight;if(h>mm){document.body.style.zoom=(mm/h).toFixed(3);}});</script></head><body>
 <div class="page">
   ${watermark}
   ${provisionalTag}
@@ -1135,9 +1135,7 @@ export function buildPremiumReportHtml(settings: any, patient: any, resolved: an
   const age = p.age || p.patientAge || "";
   const sex = p.sex || p.patientSex || "";
   const ref = p.referredBy || p.referringDoctor || "";
-  const pid = p.patientId || (p.serial ? `USG-${String(p.serial).padStart(4, "0")}` : "");
   const studyTitle = p.studyTitle || p.study || p.testName || "";
-  const accession = p.accessionNumber || p.accession || "";
   const scanDate = p.scanDate || p.scanDateText || p.date || "";
   const imgs: any[] = Array.isArray(images) ? images : [];
   const sections: { label: string; text: string }[] = [];
@@ -1184,22 +1182,25 @@ export function buildPremiumReportHtml(settings: any, patient: any, resolved: an
   .pkey figcaption { font-size: 6.5pt; margin-top: 1mm; opacity: .9; }
   .pmain { flex: 1; padding: 8mm 8mm 6mm 8mm; min-width: 0; }
   .phead { display: flex; align-items: flex-start; gap: 6mm; }
-  .plogo { width: 22mm; height: 22mm; object-fit: contain; }
+  .plogo { width: 30mm; height: 30mm; object-fit: contain; }
   .phosp { flex: 1; }
   .phosp h1 { margin: 0; font-size: 17pt; letter-spacing: .5px; color: #0e2a3f; }
   .phosp .tag { font-size: 7.5pt; color: #5a6b7c; margin-top: .5mm; }
-  .phosp .addr { font-size: 8pt; color: #33475b; margin-top: 1.5mm; line-height: 1.35; }
+  .phosp .addr { font-size: 8pt; color: #33475b; margin-top: 1.5mm; line-height: 1.45; text-align: right; }
   .pqr { display: flex; flex-direction: column; align-items: center; gap: 1px; }
   .pqr img { width: 20mm; height: 20mm; }
   .pqr span { font-size: 6.5pt; font-weight: 700; letter-spacing: .5px; color: #33475b; }
-  .pdemo { border: .35mm solid #c9d6e2; border-radius: 2mm; margin: 5mm 0 4mm 0; padding: 3mm 4mm; display: grid; grid-template-columns: 1fr 1fr; gap: 1.6mm 8mm; font-size: 8.5pt; }
+  .pdemo { border: .35mm solid #c9d6e2; border-radius: 1.5mm; margin: 3mm 0 1.5mm 0; padding: 1.6mm 4mm; display: grid; grid-template-columns: 1.5fr 1.5fr 0.9fr 0.9fr; gap: 0 6mm; font-size: 8.5pt; }
+  .pstudy { text-align: center; font-weight: 800; font-size: 11pt; letter-spacing: .6px; margin: 1.5mm 0 2.5mm 0; color: #0e2a3f; }
   .pdemo div { display: flex; gap: 2mm; }
   .pdemo b { color: #51606f; font-weight: 600; min-width: 24mm; }
   .psec { margin: 4mm 0 2.5mm 0; font-size: 10.5pt; font-weight: 800; color: #0e2a3f; letter-spacing: .4px; display: flex; align-items: center; gap: 2mm; }
   .psec::before { content: ""; width: 3mm; height: 3mm; border-radius: 50%; border: .5mm solid #2f80ed; }
+  .pcenter { justify-content: center; }
   .pbody { font-size: 9pt; line-height: 1.5; text-align: left; margin: 0 0 2mm 0; white-space: pre-wrap; }
   .pimp { background: #eef3f8; border-left: 1.2mm solid #2f80ed; border-radius: 1.5mm; padding: 3mm 4mm; margin-top: 4mm; }
   .pimp .psec { margin-top: 0; }
+  .pimp-list { margin: 0; padding-left: 6mm; font-size: 9pt; line-height: 1.5; }
   .pdisc { font-size: 7.5pt; color: #5a6b7c; margin: 4mm 0 3mm 0; }
   .psig { display: flex; justify-content: flex-end; margin-top: 6mm; }
   .psig-box { text-align: center; font-size: 8.5pt; }
@@ -1209,7 +1210,7 @@ export function buildPremiumReportHtml(settings: any, patient: any, resolved: an
   .psig-box .ql { font-size: 7.5pt; color: #51606f; }
   .pfoot { background: #0e2a3f; color: #dfe9f2; text-align: center; font-size: 8pt; letter-spacing: 1.4px; padding: 2.6mm 0; margin-top: 6mm; text-transform: uppercase; }
   .pgen { font-size: 7pt; color: #7a8a99; text-align: right; margin-top: 1.5mm; text-transform: none; letter-spacing: 0; }
-</style></head>
+</style><style id="usg-justify-kill">p, li, td, th, div, span, .organ-body, .ob-body, .pbody { text-align: left !important; hyphens: none !important; word-spacing: normal !important; letter-spacing: normal !important; }</style><style id="usg-sig-fit">.signature-block,.sig-wrap,.sig-pin{position:static !important;bottom:auto !important;right:auto !important;transform:none !important;}</style><script>window.addEventListener("beforeprint",function(){var mm=277/25.4*96;var h=document.body.scrollHeight;if(h>mm){document.body.style.zoom=(mm/h).toFixed(3);}});</script></head>
 <body>
 <div class="pwrap">
 ${rail}
@@ -1219,25 +1220,23 @@ ${rail}
     <div class="phosp">
       <h1>${e(s.hospitalName || "CARE DIAGNOSTICS")}</h1>
       <div class="tag">${e(s.footerMessage || "Precision. Compassion. Care.")}</div>
-      <div class="addr">${e(s.addressLine)}${s.phone ? ` · Ph: ${e(s.phone)}` : ""}${s.email ? ` · ${e(s.email)}` : ""}</div>
+      <div class="addr">${e(s.addressLine)}<br/>${e(s.phone || "")}<br/>${e(s.email || "")}<br/>www.caredeoghar.com</div>
     </div>
     ${qrHtml}
   </div>
   <div class="pdemo">
-    <div><b>Patient Name</b><span>: ${e(name)}</span></div>
-    <div><b>Study Date</b><span>: ${e(scanDate)}</span></div>
-    <div><b>Age / Gender</b><span>: ${e(age)}${sex ? ` / ${e(sex)}` : ""}</span></div>
-    <div><b>Modality</b><span>: USG</span></div>
-    <div><b>Patient ID</b><span>: ${e(pid)}</span></div>
-    <div><b>Accession No</b><span>: ${e(accession || "—")}</span></div>
-    <div><b>Ref. Doctor</b><span>: ${e(ref || "—")}</span></div>
-    <div><b>Study</b><span>: ${e(studyTitle)}</span></div>
+    <div><b>Patient</b><span>: ${e(name)}</span></div>
+    <div><b>Ref. By</b><span>: ${e(ref || "—")}</span></div>
+    <div><b>Age/Sex</b><span>: ${e(age)}${sex ? ` / ${e(sex)}` : ""}</span></div>
+    <div><b>Date</b><span>: ${e(scanDate)}</span></div>
   </div>
-  <div class="psec">ULTRASOUND FINDINGS</div>
+  <div class="pstudy">${e(studyTitle || "ULTRASOUND")}</div>
+  <div class="psec">FINDINGS</div>
   ${sections.map((sec) => `<div class="psec" style="font-size:9.5pt;">${e(sec.label)}</div><p class="pbody">${e(sec.text)}</p>`).join("")}
-  ${impression ? `<div class="pimp"><div class="psec">IMPRESSION</div><p class="pbody" style="margin:0;">${e(impression)}</p></div>` : ""}
+  ${impression ? `<div class="psec">IMPRESSION</div>
+  <div class="pimp" style="margin-top:1mm;"><ol class="pimp-list">${impression.split(/\n+/).filter(Boolean).map((l) => `<li>${e(l)}</li>`).join("")}</ol></div>` : ""}
   <p class="pdisc">${e(s.usgDeclarationLine || "This report is based on the images and clinical information provided. Kindly correlate clinically.")}</p>
-  <div class="psig"><div class="psig-box">${sig}<div class="nm">${e(s.usgDoctorName || "")}</div><div class="ql">${e(s.usgDoctorQual || "")}${s.usgDoctorRegNo ? ` · Reg. No: ${e(s.usgDoctorRegNo)}` : ""}</div></div></div>
+  <div class="psig"><div class="psig-box">${sig}<div class="nm">${e(s.usgDoctorName || "")}</div><div class="ql">${e(s.usgDoctorQual || "MBBS, MD (Radiology)")}<br/>RADIOLOGIST${s.usgDoctorRegNo ? ` · Reg. No: ${e(s.usgDoctorRegNo)}` : ""}</div></div></div>
   <div class="pfoot">Thank you for choosing ${e(s.hospitalName || "CARE DIAGNOSTICS")}</div>
   <div class="pgen">Report generated on ${e(gen)} IST</div>
 </main>

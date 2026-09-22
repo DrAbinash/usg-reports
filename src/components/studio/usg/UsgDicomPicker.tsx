@@ -1,231 +1,172 @@
-"use client";
-/**
- * UsgDicomPicker — the key-image selector from the MRI studio (CARE R1.3
- * soul): browse the linked Orthanc study's series → instances, preview
- * server-rendered frames, and file key images into the report (frozen at
- * pick time — the printed report stays perfect even after the study leaves
- * Orthanc).
- */
-import { useEffect, useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Loader2, Layers, ImagePlus, ChevronLeft, AlertTriangle } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { toast } from "sonner";
+import { useState, useEffect } from "react";
 
-type Series = { uid: string; description: string; modality: string; number: string };
-type Instance = { sopUid: string; instanceNumber: string };
+type Series = { uid: string; description?: string; number?: number; modality?: string; count?: number };
+type Instance = { sopUid: string; instanceNumber: number };
 
-export function UsgDicomPicker({
-  open, onClose, reportId, studyInstanceUid, onAdded,
-}: {
+type Props = {
   open: boolean;
   onClose: () => void;
   reportId: string | null;
   studyInstanceUid: string | null;
-  onAdded?: () => void;
-}) {
-  const [series, setSeries] = useState<Series[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [openSeries, setOpenSeries] = useState<string | null>(null);
-  const [instances, setInstances] = useState<Instance[] | null>(null);
-  const [selected, setSelected] = useState<{ inst: Instance; series: Series } | null>(null);
-  const [caption, setCaption] = useState("");
-  const [adding, setAdding] = useState(false);
+  onAdded: () => void;
+  onOcrResult?: (ocr: any) => void;
+};
+
+const asArray = (d: any): any[] =>
+  Array.isArray(d) ? d : Array.isArray(d?.series) ? d.series : Array.isArray(d?.rows) ? d.rows : Array.isArray(d?.instances) ? d.instances : [];
+
+export function UsgDicomPicker({ open, onClose, reportId, studyInstanceUid, onAdded, onOcrResult }: Props) {
+  const [series, setSeries] = useState<Series[]>([]);
+  const [selectedSeries, setSelectedSeries] = useState<Series | null>(null);
+  const [instances, setInstances] = useState<Instance[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [thumbs, setThumbs] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+  const [ocrBusy, setOcrBusy] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open || !studyInstanceUid) return;
-    let alive = true;
-    const load = async () => {
-      const r = await fetch(`/api/usg/dicom/series?study=${encodeURIComponent(studyInstanceUid)}`)
-        .then((res) => res.json())
-        .catch(() => null);
-      if (!alive) return;
-      if (!r || r.error) {
-        setError(r?.error ?? "Could not reach Orthanc");
-        setSeries(null);
-      } else {
-        setError(null);
-        setSeries(r.series ?? []);
-      }
-    };
-    void load();
-    return () => {
-      alive = false;
-    };
+    setLoading(true);
+    fetch(`/api/usg/dicom/series?study=${encodeURIComponent(studyInstanceUid)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        const arr = asArray(data) as Series[];
+        setSeries(arr);
+        if (arr.length > 0) setSelectedSeries(arr[0]);
+      })
+      .catch(() => console.error("Could not load series"))
+      .finally(() => setLoading(false));
   }, [open, studyInstanceUid]);
 
-  const loadInstances = (s: Series) => {
-    setOpenSeries(s.uid);
-    setInstances(null);
-    setSelected(null);
-    fetch(`/api/usg/dicom/instances?study=${encodeURIComponent(studyInstanceUid ?? "")}&series=${encodeURIComponent(s.uid)}`)
+  useEffect(() => {
+    if (!selectedSeries || !studyInstanceUid) return;
+    fetch(`/api/usg/dicom/instances?study=${encodeURIComponent(studyInstanceUid)}&series=${encodeURIComponent(selectedSeries.uid)}`)
       .then((r) => r.json())
-      .then((r) => {
-        if (r.error) {
-          toast.error(r.error);
-          setInstances([]);
-        } else setInstances(r.instances ?? []);
+      .then((data) => {
+        const arr = asArray(data) as Instance[];
+        setInstances(arr);
+        setSelected(new Set());
+        const t: Record<string, string> = {};
+        arr.forEach((inst) => {
+          t[inst.sopUid] = `/api/usg/dicom/rendered?study=${encodeURIComponent(studyInstanceUid)}&series=${encodeURIComponent(selectedSeries.uid)}&sop=${encodeURIComponent(inst.sopUid)}&size=200`;
+        });
+        setThumbs(t);
       })
-      .catch(() => toast.error("Could not load instances"));
+      .catch(() => console.error("Could not load instances"));
+  }, [selectedSeries, studyInstanceUid]);
+
+  const toggleSelect = (sopUid: string) =>
+    setSelected((prev) => { const n = new Set(prev); if (n.has(sopUid)) n.delete(sopUid); else n.add(sopUid); return n; });
+
+  const addSelected = async () => {
+    if (!reportId || !studyInstanceUid || !selectedSeries || selected.size === 0) return;
+    let added = 0;
+    for (const sopUid of Array.from(selected)) {
+      const inst = instances.find((i) => i.sopUid === sopUid);
+      if (!inst) continue;
+      try {
+        const r = await fetch(`/api/usg/reports/${reportId}/images/dicom`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ studyInstanceUid, seriesInstanceUid: selectedSeries.uid, sopInstanceUid: sopUid, instanceNumber: inst.instanceNumber }),
+        });
+        if (r.ok) added++;
+      } catch {}
+    }
+    if (added > 0) { alert(`${added} image(s) attached to report`); onAdded(); onClose(); }
+    else alert("Could not attach images");
   };
 
-  const addImage = async () => {
-    if (!selected || !reportId) return;
-    setAdding(true);
-    const r = await fetch(`/api/usg/reports/${reportId}/images/dicom`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        seriesInstanceUid: selected.series.uid,
-        sopInstanceUid: selected.inst.sopUid,
-        caption: caption.trim() || `${selected.series.description || selected.series.modality} · img ${selected.inst.instanceNumber}`,
-      }),
-    })
-      .then((res) => res.json())
-      .catch(() => null);
-    setAdding(false);
-    if (r?.error) {
-      toast.error(r.error);
-      return;
-    }
-    if (r?.ok) {
-      toast.success("Key image frozen from PACS");
-      setSelected(null);
-      setCaption("");
-      onAdded?.();
-    }
+  const runOcrOnSelected = async () => {
+    if (selected.size === 0) return;
+    const firstSop = Array.from(selected)[0];
+    const thumbUrl = thumbs[firstSop];
+    if (!thumbUrl) return;
+    setOcrBusy(firstSop);
+    try {
+      const ocrUrl = thumbUrl.replace("size=200", "size=1024");
+      const imgRes = await fetch(ocrUrl);
+      const blob = await imgRes.blob();
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const imageBase64 = reader.result as string;
+        const ocrRes = await fetch("/api/usg/ocr", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imageBase64 }) });
+        if (ocrRes.ok) {
+          const { ocr, engine } = await ocrRes.json();
+          if (ocr && onOcrResult) { onOcrResult(ocr); alert(`OCR complete via ${engine} — verify extracted values`); }
+        } else {
+          const err = await ocrRes.json().catch(() => ({ error: "OCR failed" }));
+          alert(err.error || "OCR failed");
+        }
+        setOcrBusy(null);
+      };
+      reader.readAsDataURL(blob);
+    } catch (e: any) { alert(`OCR error: ${e.message}`); setOcrBusy(null); }
   };
 
-  const previewSrc =
-    selected && studyInstanceUid
-      ? `/api/usg/dicom/rendered?study=${encodeURIComponent(studyInstanceUid)}&series=${encodeURIComponent(selected.series.uid)}&sop=${encodeURIComponent(selected.inst.sopUid)}&size=420`
-      : null;
-
+  if (!open) return null;
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent aria-describedby={undefined} className="max-h-[85vh] w-[min(940px,94vw)] overflow-hidden p-0">
-        <DialogHeader className="border-b border-border px-5 py-3.5">
-          <DialogTitle className="flex items-center gap-2 text-[14px]">
-            <Layers className="h-4 w-4 text-primary" />
-            Select key images from DICOM
-            <span className="ml-2 text-[11px] font-normal text-faint">picked images are frozen into the printed report</span>
-          </DialogTitle>
-        </DialogHeader>
-
-        {!studyInstanceUid ? (
-          <div className="flex flex-col items-center gap-2 px-6 py-12 text-center">
-            <AlertTriangle className="h-5 w-5 text-warn" />
-            <p className="text-[13px] font-semibold">No study linked</p>
-            <p className="max-w-[380px] text-[12px] text-faint">
-              This report did not come from a synced bill-desk order, or the machine has not pushed the study to Orthanc yet.
-            </p>
-          </div>
-        ) : error ? (
-          <div className="flex flex-col items-center gap-2 px-6 py-12 text-center">
-            <AlertTriangle className="h-5 w-5 text-warn" />
-            <p className="text-[13px] font-semibold">{error}</p>
-            <p className="max-w-[380px] text-[12px] text-faint">Check the Orthanc URL and credentials in Settings → Integrations (use the Test button).</p>
-          </div>
-        ) : (
-          <div className="flex h-[62vh] min-h-0">
-            {/* Series / instances column */}
-            <div className="studio-scroll w-[46%] min-w-[300px] overflow-y-auto border-r border-border p-3">
-              {!series ? (
-                <div className="flex items-center gap-2 p-4 text-[12px] text-faint">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Loading series…
-                </div>
-              ) : series.length === 0 ? (
-                <p className="p-4 text-[12px] text-faint">No series found for this study.</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {series.map((s) => (
-                    <div key={s.uid} className="overflow-hidden rounded-lg border border-border bg-card">
-                      <button
-                        onClick={() => loadInstances(s)}
-                        className={cn(
-                          "flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-accent",
-                          openSeries === s.uid && "bg-accent",
-                        )}
-                      >
-                        <span className="rounded bg-panel px-1.5 py-0.5 font-mono text-[10px] font-bold text-primary">{s.number || "—"}</span>
-                        <span className="min-w-0 flex-1 truncate text-[12px] font-medium">{s.description || s.modality || "Series"}</span>
-                        <span className="shrink-0 text-[10px] font-bold text-faint">{s.modality}</span>
-                      </button>
-                      {openSeries === s.uid ? (
-                        <div className="border-t border-border bg-panel/60 p-2">
-                          {!instances ? (
-                            <div className="flex items-center gap-2 px-2 py-3 text-[11px] text-faint">
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading images…
-                            </div>
-                          ) : (
-                            <div className="grid max-h-64 grid-cols-8 gap-1 overflow-y-auto">
-                              {instances.map((inst) => (
-                                <button
-                                  key={inst.sopUid}
-                                  onClick={() => {
-                                    setSelected({ inst, series: s });
-                                    setCaption("");
-                                  }}
-                                  className={cn(
-                                    "flex h-8 items-center justify-center rounded font-mono text-[11px] font-semibold transition-all",
-                                    selected?.inst.sopUid === inst.sopUid
-                                      ? "bg-primary text-primary-foreground shadow-sm"
-                                      : "bg-card text-muted-foreground ring-1 ring-border hover:text-foreground hover:ring-primary/40",
-                                  )}
-                                  title={`Image ${inst.instanceNumber}`}
-                                >
-                                  {inst.instanceNumber || "·"}
-                                </button>
-                              ))}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <h2 className="text-lg font-bold">Select Images from PACS</h2>
+          <button onClick={onClose} className="text-faint hover:text-black text-2xl">×</button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6">
+          {loading ? <div className="py-12 text-center text-faint">Loading series…</div>
+          : series.length === 0 ? <div className="py-12 text-center text-faint">No series found</div>
+          : (
+            <div className="flex gap-4 h-[60vh]">
+              <div className="w-64 flex-shrink-0 overflow-y-auto border-r pr-2">
+                <div className="mb-2 text-xs font-semibold text-faint">SERIES ({series.length})</div>
+                {series.map((s) => (
+                  <button key={s.uid} onClick={() => setSelectedSeries(s)}
+                    className={`mb-1 w-full rounded px-3 py-2 text-left text-sm ${selectedSeries?.uid === s.uid ? "bg-indigo-50 font-semibold text-indigo-700" : "hover:bg-gray-50"}`}>
+                    <div className="truncate">{s.description || `Series ${s.number ?? ""}`}</div>
+                    <div className="text-xs text-faint">{s.modality} · {s.count ?? "?"} images</div>
+                  </button>
+                ))}
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                {instances.length === 0 ? <div className="py-12 text-center text-faint">No instances</div>
+                : (
+                  <div className="grid grid-cols-4 gap-3">
+                    {instances.map((inst) => {
+                      const isSel = selected.has(inst.sopUid);
+                      return (
+                        <div key={inst.sopUid} onClick={() => toggleSelect(inst.sopUid)}
+                          className={`relative cursor-pointer rounded border-2 ${isSel ? "border-indigo-500" : "border-transparent hover:border-gray-300"}`}>
+                          <img src={thumbs[inst.sopUid]} alt={`Image ${inst.instanceNumber}`} loading="lazy" className="h-32 w-full rounded object-cover" />
+                          <div className="absolute left-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-xs text-white">{inst.instanceNumber}</div>
+                          {isSel && <div className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-xs text-white">✓</div>}
+                          {ocrBusy === inst.sopUid && (
+                            <div className="absolute inset-0 flex items-center justify-center rounded bg-black/50">
+                              <div className="h-6 w-6 animate-spin rounded-full border-2 border-white border-t-transparent" />
                             </div>
                           )}
                         </div>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Preview column */}
-            <div className="flex min-w-0 flex-1 flex-col">
-              {selected ? (
-                <>
-                  <div className="flex min-h-0 flex-1 items-center justify-center bg-[#0e1216] p-3">
-                    {previewSrc ? <img src={previewSrc} alt={`Image ${selected.inst.instanceNumber}`} className="max-h-full max-w-full object-contain" /> : null}
+                      );
+                    })}
                   </div>
-                  <div className="space-y-2 border-t border-border p-3">
-                    <div className="flex items-center gap-2 text-[11px] text-faint">
-                      <ChevronLeft className="h-3 w-3" />
-                      {selected.series.description || selected.series.modality} · image {selected.inst.instanceNumber}
-                    </div>
-                    <Input
-                      value={caption}
-                      onChange={(e) => setCaption(e.target.value)}
-                      placeholder="Caption (printed under the image)…"
-                      className="h-8 border-border bg-card text-[12px]"
-                    />
-                    <Button className="h-9 w-full gap-2 text-[12.5px]" onClick={() => void addImage()} disabled={adding}>
-                      {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
-                      {adding ? "Rendering & saving…" : "Add to report"}
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
-                  <ImagePlus className="h-5 w-5 text-faint" />
-                  <p className="text-[12.5px] font-semibold">Pick an image</p>
-                  <p className="max-w-[260px] text-[11.5px] leading-relaxed text-faint">
-                    Open a series on the left, tap an image number to preview it, then add it to the report.
-                  </p>
-                </div>
-              )}
+                )}
+              </div>
             </div>
+          )}
+        </div>
+        <div className="flex items-center justify-between border-t bg-gray-50 px-6 py-4">
+          <div className="text-sm text-faint">{selected.size > 0 ? `${selected.size} selected` : "Click thumbnails to select"}</div>
+          <div className="flex gap-2">
+            <button onClick={runOcrOnSelected} disabled={selected.size === 0 || !!ocrBusy}
+              className="rounded border border-border px-4 py-2 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50">
+              {ocrBusy ? "OCR…" : "OCR Selected"}
+            </button>
+            <button onClick={addSelected} disabled={selected.size === 0}
+              className="rounded bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">
+              Attach to Report ({selected.size})
+            </button>
           </div>
-        )}
-      </DialogContent>
-    </Dialog>
+        </div>
+      </div>
+    </div>
   );
 }

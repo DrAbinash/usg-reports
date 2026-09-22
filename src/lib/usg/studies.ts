@@ -800,6 +800,127 @@ export const STUDY_GROUPS: { key: string; label: string }[] = [
   { key: "small", label: "Small Parts & Others" },
   { key: "doppler", label: "Doppler & Vascular" },
   { key: "cardiac", label: "Cardiac" },
+  {
+    key: "ob-tiffa-4d",
+    label: "Pregnancy — 4D Anomaly Scan",
+    title: "U.S.G OF FOETUS (4D ANOMALY SCAN)",
+    sex: "F",
+    group: "obg",
+    technique: T_OB,
+    allNormalImpression: [
+      "Single live intrauterine pregnancy in presently {presentation} presentation with a composite gestational age of {gaw} weeks {gad} days.",
+      "No gross fetal congenital anomalies detected.",
+      "Not all congenital anomalies especially of heart, limbs & chromosomal abnormalities can be ruled out on an ultrasound scan."
+    ],
+    normalImpressionFirst: true,
+    pcpndt: true,
+    organs: [
+      {
+        key: "fetus",
+        label: "FETUS & PRESENTATION",
+        normal: "There is a single live intrauterine fetus in presently {presentation} presentation with active body movement. Fetal heart beat is seen in real time and corroborated in M-mode study.",
+        vars: [{ key: "presentation", label: "Presentation", unit: "" }]
+      },
+      {
+        key: "biometry",
+        label: "FETAL BIOMETRY",
+        normal: "Fetal biometry corresponds to {gaw} weeks {gad} days.",
+        vars: [
+          V("bpd", "BPD", "mm"), V("bpdw", "BPD GA wk"), V("bpdd", "BPD GA d"),
+          V("hc", "HC", "mm"), V("hcw", "HC GA wk"), V("hcd", "HC GA d"),
+          V("ac", "AC", "mm"), V("acw", "AC GA wk"), V("acd", "AC GA d"),
+          V("fl", "FL", "mm"), V("flw", "FL GA wk"), V("fld", "FL GA d"),
+          V("gaw", "Mean GA wk"), V("gad", "Mean GA d"),
+          V("edd", "EDD"), V("ewt", "EFW", "g"), V("ewtd", "EFW ±", "g"),
+          V("fhr", "FHR", "bpm"),
+        ],
+      },
+      {
+        key: "anomaly_4d",
+        label: "CONGENITAL ANOMALY SCAN (4D)",
+        normal: "The shape of the fetal skull is normal. The cerebral and cerebellar hemispheres are bilaterally symmetrical. The cavum septum pellucidum and thalamus are normal. The ventricular system is within normal limits. Cisterna magna is normal. No evidence of hydrocephalus. No evidence of any space occupying lesions. Fetal face was scanned. Bilateral orbits are at normal distance. The fetal nose and lips are normally formed. Fetal spine was scanned in sagittal and longitudinal planes from the cervical to the coccygeal region. No significant defect or splaying was visualized."
+      },
+      {
+        key: "cardiac_stic",
+        label: "FETAL HEART (4D STIC)",
+        normal: "Fetal heart is evaluated with 4D fetal STIC. Heart is 4 chambered with apex towards left. No large VSD seen. However small ASD, VSD & Coarctation are well known to be missed. A reevaluation is recommended. Aortic arch, head and neck vessels were seen and they appear to be within normal limits."
+      },
+      {
+        key: "thorax_cord_limbs",
+        label: "THORAX, ABDOMEN, CORD & LIMBS",
+        normal: "The fetal thoracic movements are normal during respiration. No fetal pleural effusion. The fetal abdomen was scanned. The liver, GB and kidney appears normal. The stomach is normally fluid filled. No fetal ascites. The cord insertion was checked. The umbilical cord is 3 vessels. No evidence of umbilical hernia. The fetal limbs (upper and lower) are normal in echogenicity, shape, movements and position. No evidence of club foot. All the 4 limb movements are normal."
+      },
+      {
+        key: "color_doppler",
+        label: "COLOR DOPPLER",
+        normal: "Color Doppler reveals normal low resistance flow waveforms of uterine arteries with good diastolic flow. No diastolic notch is seen. Umbilical artery shows normal waveforms with good diastolic flow. MCA shows normal waveforms and flow velocities."
+      },
+      { key: "placenta", label: "PLACENTA & OS", normal: "Grade {grade} placenta is seen in the {position}. Cord is not surrounding neck. Three vessel system is seen in the umbilical cord. The lower part is not extending up to the lower segment. Internal OS is closed.", vars: [{ key: "position", label: "Position", unit: "" }, { key: "grade", label: "Grade", unit: "" }] },
+      { key: "liquor", label: "LIQUOR", normal: "It is adequate - AFI is {afi} cms (Normal range - 8 to 24 cm).", vars: [{ key: "afi", label: "AFI", unit: "cms" }] },
+    ],
+  },
+  {
+    key: "ob-tiffa-twin",
+    label: "Pregnancy — Twin Anomaly Scan",
+    title: "U.S.G OF TWIN FETUS (ANOMALY SCAN)",
+    sex: "F",
+    group: "obg",
+    technique: T_OB,
+    allNormalImpression: [
+      "Twin intrauterine (diamniotic, diachorionic) pregnancy.",
+      "No gross fetal congenital anomalies detected."
+    ],
+    normalImpressionFirst: true,
+    pcpndt: true,
+    organs: [
+      {
+        key: "twins_intro",
+        label: "TWIN PREGNANCY & PRESENTATION",
+        normal: "Diamniotic, diachorionic twin pregnancies are seen. Fetus-A in the {a_lie} and Fetus-B in {b_lie} presentation. Normal fetal movement is seen.",
+        vars: [{ key: "a_lie", label: "Fetus-A lie", unit: "" }, { key: "b_lie", label: "Fetus-B lie", unit: "" }]
+      },
+      {
+        key: "biometry_a",
+        label: "FETAL BIOMETRY — TWIN-A",
+        normal: "Twin-A biometry corresponds to {a_w} weeks {a_d} days.",
+        vars: [
+          V("a_bpd", "A: BPD", "mm"), V("a_hc", "A: HC", "mm"), V("a_ac", "A: AC", "mm"), V("a_fl", "A: FL", "mm"),
+          V("a_w", "A: GA wk"), V("a_d", "A: GA d"), V("a_ewt", "A: AFW", "g"), V("a_ewtd", "A: AFW ±", "g"), V("a_fhr", "A: FHR", "bpm"),
+        ],
+      },
+      {
+        key: "biometry_b",
+        label: "FETAL BIOMETRY — TWIN-B",
+        normal: "Twin-B biometry corresponds to {b_w} weeks {b_d} days.",
+        vars: [
+          V("b_bpd", "B: BPD", "mm"), V("b_hc", "B: HC", "mm"), V("b_ac", "B: AC", "mm"), V("b_fl", "B: FL", "mm"),
+          V("b_w", "B: GA wk"), V("b_d", "B: GA d"), V("b_ewt", "B: AFW", "g"), V("b_ewtd", "B: AFW ±", "g"), V("b_fhr", "B: FHR", "bpm"),
+        ],
+      },
+      {
+        key: "survey_a",
+        label: "FETAL SURVEY TWIN-A",
+        normal: "HEAD: No abnormality is seen in the thalami, lateral ventricle hemispheric width ratio, cerebral peduncles. Head circumference and abdominal circumference ratio is normal.\nNECK: No cystic lesion noted around the neck.\nFACE: Fetal face shows normal anatomy. Both orbit, nose and mouth appear normal. Nasal bone length within normal limit.\nTHORAX: Both lungs seen and demonstrate normal echogenicity. No e/o of pleural and pericardial effusion.\nHEART: Normal cardiac situs and axis. Four chamber view normal. Outflow tracts are normal. Three vessel tracheal view normal. Fetal Heart Rate- {a_fhr} BPM.\nSPINE: Entire spine visualized in axial, longitudinal and transverse axis. Vertebrae and spinal canal appears normal.\nABDOMEN: Abdominal viscera like stomach, kidney, urinary bladder show no abnormality. Abdominal wall is intact. No distended intestinal loop is seen.\nLIMBS: All fetal limb bones are visualized and appears normal for the gestational age."
+      },
+      {
+        key: "survey_b",
+        label: "FETAL SURVEY TWIN-B",
+        normal: "HEAD: No abnormality is seen in the thalami, lateral ventricle hemispheric width ratio, cerebral peduncles. Head circumference and abdominal circumference ratio is normal.\nNECK: No cystic lesion noted around the neck.\nFACE: Fetal face shows normal anatomy. Both orbit, nose and mouth appear normal. Nasal bone length within normal limit.\nTHORAX: Both lungs seen and demonstrate normal echogenicity. No e/o of pleural and pericardial effusion.\nHEART: Normal cardiac situs and axis. Four chamber view normal. Outflow tracts are normal. Three vessel tracheal view normal. Fetal Heart Rate- {b_fhr} BPM.\nSPINE: Entire spine visualized in axial, longitudinal and transverse axis. Vertebrae and spinal canal appears normal.\nABDOMEN: Abdominal viscera like stomach, kidney, urinary bladder show no abnormality. Abdominal wall is intact. No distended intestinal loop is seen.\nLIMBS: All fetal limb bones are visualized and appears normal for the gestational age."
+      },
+      {
+        key: "placenta_twin",
+        label: "PLACENTA & OS (TWINS)",
+        normal: "Fetus-A – Placenta located {a_pos} (Maturity Grade {a_grade}) & Fetus-B is {b_pos} located (Maturity Grade {b_grade}). Three vessel system is seen in the umbilical cord. The lower part is not extending up to the lower segment. Internal OS is closed.",
+        vars: [{ key: "a_pos", label: "A: Position", unit: "" }, { key: "a_grade", label: "A: Grade", unit: "" }, { key: "b_pos", label: "B: Position", unit: "" }, { key: "b_grade", label: "B: Grade", unit: "" }]
+      },
+      {
+        key: "liquor_twin",
+        label: "LIQUOR (TWINS)",
+        normal: "It is adequate. Limb and cord free maximum amniotic space is {pocket} cm (Normal range for single largest pocket - 2 to 8). AFI is {afi} cms (Normal range - 8 to 24 cm).",
+        vars: [{ key: "pocket", label: "Largest pocket", unit: "cm" }, { key: "afi", label: "AFI", unit: "cms" }]
+      },
+    ],
+  },
 ];
 
 /** Quick lookup by key. O(1) via a Map built once at module load — the

@@ -58,9 +58,20 @@ export async function shareReportPdf(
   return "downloaded";
 }
 
-export function downloadReportPdf(target: ShareTarget): void {
+export function downloadReportPdf(params: {
+  reportId: string;
+  patientName: string;
+  serial?: number;
+  date?: string;
+}): void {
+  if (!params.reportId) { alert("Save the report first before downloading"); return; }
+  const safeName = (params.patientName || "report").replace(/[^a-z0-9]+/gi, "-").slice(0, 30);
+  const serialPart = params.serial ? `${params.serial}-` : "";
+  const datePart = params.date ? `-${params.date.replace(/\//g, "-")}` : "";
   const a = document.createElement("a");
-  a.href = `/api/usg/reports/${target.reportId}/pdf`;
-  a.download = `${target.serial ? `${target.serial}-` : ""}${target.patientName.replace(/[^a-z0-9]+/gi, "-").slice(0, 30)}.pdf`;
+  a.href = `/api/usg/reports/${params.reportId}/pdf`;
+  a.download = `${serialPart}${safeName}${datePart}.pdf`;
+  document.body.appendChild(a);
   a.click();
+  document.body.removeChild(a);
 }

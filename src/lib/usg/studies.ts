@@ -987,3 +987,31 @@ export function initialState(
     impressionOverride: null,
   };
 }
+
+
+export function studyKeyForBillTest(name: string, gender?: string): string | null {
+  const n = (name || "").toLowerCase();
+  const g = (gender || "").toLowerCase();
+  const fem = !g.startsWith("m");
+  if (/twin/.test(n)) return "ob-tiffa-twin";
+  if (/anomaly|tiffa|targeted|level ?(ii|2)|4d/.test(n)) return "ob-tiffa-4d";
+  if (/nt scan|nuchal/.test(n)) return "ep";
+  if (/fetal doppler|fwb|well ?being|growth/.test(n)) return "ob";
+  if (/tvs|transvaginal|follicular|sonosalping/.test(n)) return "tvs";
+  if (/thyroid/.test(n)) return "thyroid";
+  if (/breast|sonomamm/.test(n)) return "breast";
+  if (/scrotum|testis|inguino/.test(n)) return "scrotum";
+  if (/echo|echocardi/.test(n)) return "echo";
+  if (/carotid|vertebral/.test(n)) return "carotid";
+  if (/limb|thigh|penis/.test(n)) return "doppler-lower";
+  if (/upper abdomen/.test(n)) return "ua";
+  if (/lower abdom/.test(n)) return fem ? "la-female" : "la-male";   // tolerates desk typo "ABDOMEM"
+  if (/brain|cranium/.test(n)) return "cranium";
+  if (/eye|orbit/.test(n)) return "orbit";
+  if (/chest|pleura|ascitic/.test(n)) return "chest";
+  if (/prostate|trus/.test(n)) return "trus";
+  if (/fnac|aspirat/.test(n)) return "swelling";
+  if (/inguinal/.test(n)) return "swelling";
+  if (/whole abdomen|kub/.test(n)) return fem ? "wa-female" : "wa-male";
+  return null;
+}

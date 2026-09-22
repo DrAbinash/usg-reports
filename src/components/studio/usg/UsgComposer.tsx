@@ -145,7 +145,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     }
   }, [report]);
 
-  const studyKey0 = report?.studyKey ?? "wa-female";
+  const studyKey0 = report?.studyKey ?? studyKeyForBillTest((report as any)?.testName ?? (prefill as any)?.testName ?? "", (report as any)?.sex ?? (report as any)?.gender ?? (report as any)?.patientGender ?? "") ?? "wa-female";
   const [patientName, setPatientName] = useState(report?.patientName ?? prefill?.patientName ?? "");
   const [patientPhone, setPatientPhone] = useState(report?.patient?.phone ?? prefill?.patientPhone ?? "");
   const [patientAge, setPatientAge] = useState(report?.patientAge ?? prefill?.patientAge ?? "");
@@ -1237,7 +1237,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
           Was fixed at 460px max; now starts at 460px but grows to 55% on wide
           screens. On narrow screens (< lg), stacks vertically (organ cards
           on top, impression + preview below). */}
-      <div onClick={(e) => { const g = e.currentTarget; const r = g.getBoundingClientRect(); const left = e.clientX < r.left + r.width / 2; g.classList.remove("usg-focus-edit", "usg-focus-preview"); g.classList.add(left ? "usg-focus-edit" : "usg-focus-preview"); }} onDoubleClick={(e) => { e.currentTarget.classList.remove("usg-focus-edit", "usg-focus-preview"); }} title="Click left: widen workspace · Click right: widen preview · Double-click: reset" className={`grid min-h-0 flex-1 gap-4 overflow-hidden p-4 ${images.length > 0 ? "lg:grid-cols-[minmax(0,2fr)_minmax(380px,1fr)] xl:grid-cols-[minmax(0,2fr)_minmax(420px,1fr)]" : "lg:grid-cols-1"}`}>
+      <div onClick={(e) => { const g = e.currentTarget; const r = g.getBoundingClientRect(); const left = e.clientX < r.left + r.width / 2; g.classList.remove("usg-focus-edit", "usg-focus-preview"); g.classList.add(left ? "usg-focus-edit" : "usg-focus-preview"); }} onDoubleClick={(e) => { e.currentTarget.classList.remove("usg-focus-edit", "usg-focus-preview"); }} title="Click left: widen workspace · Click right: widen preview · Double-click: reset" className={`grid min-h-0 flex-1 gap-4 overflow-hidden p-4 ${images.length > 0 ? "lg:grid-cols-[minmax(360px,1fr)_minmax(0,2fr)] xl:grid-cols-[minmax(400px,1fr)_minmax(0,2fr)]" : "lg:grid-cols-1"}`}>
         {/* Left column: organ cards + images */}
         <div className="flex min-h-0 flex-col gap-3 overflow-hidden pr-1">
           {orderUid && <UsgViewerSidebar studyInstanceUid={orderUid} />}
@@ -1245,11 +1245,18 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
             <iframe
               title="USG report preview"
               srcDoc={previewHtml}
-              className="w-full h-full h-full w-full flex-1 rounded-lg border border-border bg-white"
+              className="h-full w-full border-0"
               sandbox="allow-same-origin"
             />
           </div>
-          <div className="studio-scroll min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+        </div>
+
+        {/* Right rail: impression + live preview
+            v6.15: flex column (not overflow-y-auto) so the preview iframe
+            can grow to fill available vertical space. The impression box
+            stays fixed at its natural height; the preview gets flex-1. */}
+        <div className="studio-scroll min-h-0 space-y-3 overflow-y-auto pr-1">
+          <div className="space-y-3">
           {study.organs.map((def) => {
             const st = state.organs.find((o) => o.organ === def.key);
             if (!st) return null;
@@ -1302,13 +1309,6 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
             }}
           />
           </div>
-        </div>
-
-        {/* Right rail: impression + live preview
-            v6.15: flex column (not overflow-y-auto) so the preview iframe
-            can grow to fill available vertical space. The impression box
-            stays fixed at its natural height; the preview gets flex-1. */}
-        <div className="flex min-h-0 flex-col gap-3">
           {/* v6.10 — BI-RADS picker for breast studies, gated by the enableBirads toggle */}
           {state.studyKey === "breast" && settings.enableBirads !== false && !isFinal ? (
             <UsgBiradsPicker

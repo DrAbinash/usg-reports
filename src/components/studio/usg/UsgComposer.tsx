@@ -47,6 +47,9 @@ import { UsgBiometryCalc } from "./UsgBiometryCalc";
 import { UsgCalculators } from "./UsgCalculators";
 import { UsgImagesCard, type ImageRow, type PendingImage } from "./UsgImagesCard";
 import { UsgDicomPicker } from "./UsgDicomPicker";
+import { UsgViewerRail } from "./UsgViewerRail";
+import { UsgObAntenatalPanel } from "./UsgObAntenatalPanel";
+
 import { UsgFormFDialog, type FormFDefaults, type FormFOrderLite } from "./UsgFormFDialog";
 import { DictationButton } from "./DictationButton";
 import { UsgStudyPicker } from "./UsgStudyPicker";
@@ -1229,6 +1232,12 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         </div>
       )}
 
+      {orderUid ? (
+        <div className="px-4 pt-3">
+          <UsgViewerRail studyInstanceUid={orderUid} />
+        </div>
+      ) : null}
+
       {/* ══ BODY: organ cards + impression + preview ════════════════════ */}
       {/* v6.15: responsive grid — the right column grows with display width.
           Was fixed at 460px max; now starts at 460px but grows to 55% on wide
@@ -1411,6 +1420,22 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         studyInstanceUid={orderUid ?? null}
         onClose={() => setDicomOpen(false)}
         onAdded={() => { /* refresh images */ }}
+        onOcrResult={(ocr) => {
+          // Map OCR JSON to OB state if pregnancy study
+          if (isPregnancyStudy && ocr) {
+            const obPatch: any = {};
+            if (ocr.bpd) obPatch.bpdMm = parseFloat(ocr.bpd) * 10;
+            if (ocr.hc) obPatch.hcMm = parseFloat(ocr.hc) * 10;
+            if (ocr.ac) obPatch.acMm = parseFloat(ocr.ac) * 10;
+            if (ocr.fl) obPatch.flMm = parseFloat(ocr.fl) * 10;
+            if (ocr.fhr) obPatch.fhr = parseInt(ocr.fhr);
+            if (ocr.fetalPresentation) obPatch.presentation = ocr.fetalPresentation.toLowerCase();
+            if (ocr.placentaPosition) obPatch.placentaPosition = ocr.placentaPosition;
+            if (ocr.liquorAfi) obPatch.liquorAfi = ocr.liquorAfi;
+            setState((s) => ({ ...s, ob: { ...((s as any).ob ?? {}), ...obPatch } }));
+            toast.success(`OCR → ${Object.keys(obPatch).length} OB fields filled (verify values)`);
+          }
+        }}
       />
 
       {formFDefaults ? (

@@ -45,9 +45,10 @@ export async function ollamaUsgOcr(imageBase64: string, mimeType: string = "imag
           },
         ],
         stream: false,
+        format: "json",
         options: { temperature: 0, num_ctx: 8192 },
       }),
-      signal: AbortSignal.timeout(60000),
+      signal: AbortSignal.timeout(180000),
     });
     if (!res.ok) {
       console.error("[ollama-ocr] HTTP", res.status);
@@ -56,7 +57,7 @@ export async function ollamaUsgOcr(imageBase64: string, mimeType: string = "imag
     const data = await res.json() as any;
     const raw = data?.message?.content ?? "";
     const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) return null;
+    if (!match) { console.error("[ollama-ocr] no JSON in reply:", raw.slice(0, 200)); return null; }
     return JSON.parse(match[0]) as UsgOcrJson;
   } catch (e: any) {
     console.error("[ollama-ocr] failed:", e?.message);

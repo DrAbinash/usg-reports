@@ -7,6 +7,7 @@
  * Composer mode: organ-based whole-abdomen reporting with live preview.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { UsgQuickSelect } from "./UsgQuickSelect";
 import { useStudio } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,6 +62,21 @@ type ComposerPrefill = {
 
 export function UsgStudioView() {
   const [pathologies, setPathologies] = useState<UsgPathologyDef[]>([]);
+
+  const quickSelectPatients = useMemo(() => {
+    const src: any[] = Array.isArray(rows) ? rows : Array.isArray((rows as any)?.rows) ? (rows as any).rows : [];
+    return src.map((r: any) => ({
+      id: r.id ?? r.reportId ?? r.worklistId ?? String(r.patientId ?? ""),
+      name: r.patientName ?? r.name ?? "",
+      age: r.age ?? r.patientAge ?? "",
+      sex: r.sex ?? r.patientSex ?? "",
+      studyDate: r.scanDate ?? r.studyDate ?? r.date ?? "",
+      study: r.studyTitle ?? r.study ?? r.testName ?? "",
+      referrer: r.referredBy ?? r.referringDoctor ?? "",
+      status: r.status ?? "",
+    })).filter((p: any) => p.id);
+  }, [rows]);
+
   const [settings, setSettings] = useState<UsgPrintSettings | null>(null);
   const [normalOverrides, setNormalOverrides] = useState<NormalOverrides>({});
   const [reports, setReports] = useState<UsgReportRow[]>([]);
@@ -378,6 +394,13 @@ export function UsgStudioView() {
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">
+        <div className="px-4 pt-3">
+          <UsgQuickSelect
+            patients={quickSelectPatients}
+            currentPatientId={null}
+            onSelect={(pid) => openReport(pid)}
+          />
+        </div>
         <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading USG studio…
       </div>
     );

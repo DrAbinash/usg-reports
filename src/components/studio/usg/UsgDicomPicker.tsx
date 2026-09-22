@@ -90,7 +90,8 @@ export function UsgDicomPicker({ open, onClose, reportId, studyInstanceUid, onAd
       const reader = new FileReader();
       reader.onloadend = async () => {
         const imageBase64 = reader.result as string;
-        const ocrRes = await fetch("/api/usg/ocr", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imageBase64 }) });
+        const fullResUrl = `/api/usg/dicom/rendered?study=${encodeURIComponent(studyInstanceUid!)}&series=${encodeURIComponent(selectedSeries!.uid)}&sop=${encodeURIComponent(firstSop)}`;
+        const ocrRes = await fetch("/api/usg/ocr", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imageBase64, fullResUrl }) });
         if (ocrRes.ok) {
           const { ocr, engine } = await ocrRes.json();
           if (ocr && onOcrResult) { onOcrResult(ocr); alert(`OCR complete via ${engine} — verify extracted values`); }

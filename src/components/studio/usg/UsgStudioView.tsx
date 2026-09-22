@@ -63,19 +63,34 @@ type ComposerPrefill = {
 export function UsgStudioView() {
   const [pathologies, setPathologies] = useState<UsgPathologyDef[]>([]);
 
-  const quickSelectPatients = useMemo(() => {
-    const src: any[] = Array.isArray(rows) ? rows : Array.isArray((rows as any)?.rows) ? (rows as any).rows : [];
-    return src.map((r: any) => ({
-      id: r.id ?? r.reportId ?? r.worklistId ?? String(r.patientId ?? ""),
-      name: r.patientName ?? r.name ?? "",
-      age: r.age ?? r.patientAge ?? "",
-      sex: r.sex ?? r.patientSex ?? "",
-      studyDate: r.scanDate ?? r.studyDate ?? r.date ?? "",
-      study: r.studyTitle ?? r.study ?? r.testName ?? "",
-      referrer: r.referredBy ?? r.referringDoctor ?? "",
-      status: r.status ?? "",
-    })).filter((p: any) => p.id);
-  }, [rows]);
+  const [quickSelectPatients, setQuickSelectPatients] = useState<any[]>([]);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      for (const url of ["/api/usg/worklist", "/api/usg/reports"]) {
+        try {
+          const r = await fetch(url);
+          if (!r.ok) continue;
+          const d = await r.json();
+          const arr: any[] = Array.isArray(d) ? d : Array.isArray(d?.rows) ? d.rows : Array.isArray(d?.reports) ? d.reports : Array.isArray(d?.items) ? d.items : [];
+          if (alive && arr.length) {
+            setQuickSelectPatients(arr.map((x: any) => ({
+              id: x.id ?? x.reportId ?? x.worklistId ?? String(x.patientId ?? ""),
+              name: x.patientName ?? x.name ?? "",
+              age: x.age ?? x.patientAge ?? "",
+              sex: x.sex ?? x.patientSex ?? "",
+              studyDate: x.scanDate ?? x.studyDate ?? x.date ?? "",
+              study: x.studyTitle ?? x.study ?? x.testName ?? "",
+              referrer: x.referredBy ?? x.referringDoctor ?? "",
+              status: x.status ?? "",
+            })).filter((q: any) => q.id));
+            return;
+          }
+        } catch {}
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   const [settings, setSettings] = useState<UsgPrintSettings | null>(null);
   const [normalOverrides, setNormalOverrides] = useState<NormalOverrides>({});

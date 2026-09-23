@@ -18,6 +18,10 @@ export const BUILTIN_NP_TEMPLATES: Array<{
   { name: "NP Whole Abdomen — Male", studyKey: "wa-male", sortOrder: 2 },
   { name: "NP Whole Abdomen — Child", studyKey: "wa-child", sortOrder: 3 },
   { name: "NP Upper Abdomen", studyKey: "ua", sortOrder: 4 },
+  { name: "NP KUB", studyKey: "kub", sortOrder: 5 },
+  { name: "NP TVS", studyKey: "tvs", sortOrder: 6 },
+  { name: "NP Lower Abdomen — Female", studyKey: "la-female", sortOrder: 7 },
+  { name: "NP Lower Abdomen — Male", studyKey: "la-male", sortOrder: 8 },
 ];
 
 /** Composer state for an NP (no-size) template of the given study. */

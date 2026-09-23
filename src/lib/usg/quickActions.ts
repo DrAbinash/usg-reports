@@ -11,10 +11,22 @@
  * adjusts what changed.
  */
 
-import type { UsgComposerState, UsgOrganDef, UsgStudyDef } from "./types";
-import { selectedPathologies, setOrganVar } from "./composer";
+import type { UsgComposerState, UsgOrganDef, UsgPathologyDef, UsgStudyDef } from "./types";
+import { applyPathologies, selectedPathologies, setOrganVar } from "./composer";
+import { isObStudyKey } from "./orderStudy";
 
 const TOKEN_RE = /\{[a-zA-Z0-9_]+\}/;
+
+/** Peak-time presets applied after rush normals (worklist / composer one-taps). */
+export type RushPreset = "fatty-g1";
+
+export const RUSH_PRESET_PATHOLOGY: Record<RushPreset, { organ: string; pathologyKey: string; label: string }> = {
+  "fatty-g1": {
+    organ: "liver",
+    pathologyKey: "liver-fatty-g1-nosize",
+    label: "NP + Fatty Gr I",
+  },
+};
 
 /**
  * Derive measurement-free normal prose from a measured normal.
@@ -51,11 +63,49 @@ export function organNormalHasMeasurements(def: Pick<UsgOrganDef, "normal" | "va
 
 /** Studies where skipping measurements is clinically unsafe (OB biometry etc.). */
 export function studyAllowsRushNormals(study: Pick<UsgStudyDef, "key" | "group" | "pcpndt">): boolean {
-  // Obstetric biometry / early pregnancy CRL must keep measurement slots.
+  // Obstetric biometry / early pregnancy / combo OB studies must keep slots.
   if (study.pcpndt) return false;
-  if (study.key === "ob" || study.key === "ep" || study.key.startsWith("ob-")) return false;
+  if (isObStudyKey(study.key)) return false;
   if (study.key === "echo" || study.key.startsWith("echo")) return false;
   return true;
+}
+
+/** True when any organ text still has unsubstituted `{tokens}`. */
+export function hasUnfilledTokens(state: UsgComposerState): boolean {
+  return state.organs.some((o) => TOKEN_RE.test(o.text ?? ""));
+}
+
+/**
+ * Clean peak-time finalize: all-normal (or only qualitative ·no-size chips),
+ * no leftover measurement tokens — safe to skip the QC dialog.
+ */
+export function isCleanRushFinalize(state: UsgComposerState): boolean {
+  if (hasUnfilledTokens(state)) return false;
+  return state.organs.every((o) => {
+    if (o.custom) return false;
+    const keys = selectedPathologies(o);
+    if (keys.length === 0) return true;
+    // Only qualitative ·no-size chips are allowed without QC.
+    return keys.every((k) => /-nosize$/.test(k));
+  });
+}
+
+/**
+ * Rush all-normal, then apply one almost-normal pathology (e.g. Fatty Gr I · no size).
+ * Returns null when the study forbids rush normals.
+ */
+export function applyRushPreset(
+  state: UsgComposerState,
+  study: UsgStudyDef,
+  preset: RushPreset,
+  lookup: (key: string) => UsgPathologyDef | undefined,
+): UsgComposerState | null {
+  const rushed = applyRushNormalStudy(state, study);
+  if (!rushed) return null;
+  const spec = RUSH_PRESET_PATHOLOGY[preset];
+  if (!study.organs.some((o) => o.key === spec.organ)) return rushed;
+  if (!lookup(spec.pathologyKey)) return rushed;
+  return applyPathologies(rushed, spec.organ, [spec.pathologyKey], lookup);
 }
 
 /**

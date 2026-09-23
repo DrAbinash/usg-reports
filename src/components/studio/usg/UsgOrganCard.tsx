@@ -31,6 +31,8 @@ export type OrganCardProps = {
   def: UsgOrganDef;
   state: UsgOrganState;
   pathologies: UsgPathologyDef[];
+  /** When true, ·no-size chips sort ahead of measured siblings (peak mode). */
+  preferNoSizeChips?: boolean;
   /** The doctor's saved override for this organ's normal wording (v5). */
   normalOverride?: string | null;
   /** Save a new normal wording (persisted — every future report uses it). */
@@ -55,7 +57,7 @@ function varLabel(defs: UsgVarDef[] | undefined, token: string): { label: string
   return { label: token.replace(/_/g, " ") };
 }
 
-export function UsgOrganCard({ def, state, pathologies, normalOverride, onSaveNormal, onResetNormal, onToggle, onQuickNormal, onVar, onText, onAddCustom }: OrganCardProps) {
+export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, normalOverride, onSaveNormal, onResetNormal, onToggle, onQuickNormal, onVar, onText, onAddCustom }: OrganCardProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(state.text);
   const [showAll, setShowAll] = useState(false);
@@ -82,8 +84,18 @@ export function UsgOrganCard({ def, state, pathologies, normalOverride, onSaveNo
     !!def.normalQuick &&
     state.text.trim() === def.normalQuick.trim();
 
+  // Peak mode: ·no-size chips float to the front of the visible row.
+  const sortedPathologies = useMemo(() => {
+    if (!preferNoSizeChips) return pathologies;
+    return [...pathologies].sort((a, b) => {
+      const an = /-nosize$/.test(a.key) ? 0 : 1;
+      const bn = /-nosize$/.test(b.key) ? 0 : 1;
+      return an - bn;
+    });
+  }, [pathologies, preferNoSizeChips]);
+
   const isKidneySlot = def.key === "kidney_rt" || def.key === "kidney_lt";
-  const visible = showAll ? pathologies : pathologies.slice(0, 6);
+  const visible = showAll ? sortedPathologies : sortedPathologies.slice(0, 6);
 
   // Reset target: the merged wording of the current selection (or normal).
   const selectedText = selected.length ? selected.map((p) => p.text).join("\n\n") : def.normal;

@@ -34,9 +34,13 @@ import {
 import {
   applyOrganQuickNormal,
   applyRushNormalStudy,
+  applyRushPreset,
+  copyForwardMeasurements,
+  isCleanRushFinalize,
   markAllNormal,
   studyAllowsRushNormals,
 } from "@/lib/usg/quickActions";
+import { matchSnippetExact } from "@/lib/usg/textExpansion";
 import { buildUsgReportHtml, formatUsgSerial, type UsgPrintSettings } from "@/lib/usg/print";
 import { lmpSummary, parseLmpInput } from "@/lib/usg/lmp";
 import { toScanDateInput } from "@/lib/usg/dates";
@@ -430,8 +434,12 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [isFinal]);
 
-  // ── Keyboard-first flow: Ctrl+S save · Ctrl+Enter finalize · Ctrl+K study · N rush normal ─
+  // ── Keyboard-first flow: Ctrl+S · Ctrl+Enter · Ctrl+Shift+Enter · Ctrl+P · N · F · P · 1-9 · Space ─
   const persistRef = useRef<((status: "" | "finalize") => Promise<string | null>) | null>(null);
+  const printRefFn = useRef<() => Promise<void>>(async () => {});
+  const finalizeFastRef = useRef<(alsoPrint?: boolean) => Promise<void>>(async () => {});
+  const togglePathologyRef = useRef<(organKey: string, key: string | null) => void>(() => {});
+  const [focusedOrganIdx, setFocusedOrganIdx] = useState(0);
   const rushNormalRef = useRef<() => void>(() => {});
   rushNormalRef.current = () => {
     if (isFinal) return;
@@ -466,6 +474,37 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         return;
       }
 
+      if (!mod && !typing && e.key.toLowerCase() === "f" && !e.altKey) {
+        e.preventDefault();
+        if (!isFinal) setQualityOpen(true);
+        return;
+      }
+
+      if (!mod && !typing && e.key.toLowerCase() === "p" && !e.altKey) {
+        e.preventDefault();
+        void printRefFn.current();
+        return;
+      }
+
+      // Space → next organ card
+      if (!mod && !typing && e.key === " " && !e.altKey) {
+        e.preventDefault();
+        setFocusedOrganIdx((i) => (i + 1) % Math.max(study.organs.length, 1));
+        return;
+      }
+
+      // 1-9 → toggle pathology chips on focused organ
+      if (!mod && !typing && /^[1-9]$/.test(e.key) && !e.altKey) {
+        const organ = study.organs[focusedOrganIdx];
+        if (!organ || isFinal) return;
+        const chips = pathologiesForOrgan(pathologies, organ.key);
+        const chip = chips[Number(e.key) - 1];
+        if (!chip) return;
+        e.preventDefault();
+        togglePathologyRef.current(organ.key, chip.key);
+        return;
+      }
+
       if (!mod) return;
       if (e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -473,16 +512,19 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
       } else if (e.key.toLowerCase() === "s") {
         e.preventDefault();
         if (!isFinal && !busyRef.current) void persistRef.current?.("");
+      } else if (e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        void printRefFn.current();
       } else if (e.key === "Enter") {
         if (!isFinal && !busyRef.current) {
           e.preventDefault();
-          void persistRef.current?.("finalize");
+          void finalizeFastRef.current(e.shiftKey);
         }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [isFinal]);
+  }, [isFinal, study.organs, focusedOrganIdx, pathologies]);
 
   const restoreDraft = () => {
     if (!restoreSnap) return;
@@ -561,6 +603,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
       return applyPathologies(s, organKey, next, lookup, normalOverrides);
     });
   };
+  togglePathologyRef.current = togglePathology;
 
   /** LMP calculator — GA & EDD auto-fill into the pregnancy format tokens
    *  ({gaw}/{gad}/{edd}); typing biometry numbers afterwards still wins. */
@@ -840,6 +883,28 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     }
   };
 
+  /** Peak-time: skip QC dialog when the draft is a clean NP / ·no-size report. */
+  const finalizeFast = async (alsoPrint = false) => {
+    if (isFinal || busyRef.current) return;
+    if (isCleanRushFinalize(state)) {
+      const id = await persist("finalize");
+      if (id && alsoPrint) {
+        // Print after finalize — use live preview (frozen as of finalize).
+        printInIframe(previewHtml);
+      }
+      return;
+    }
+    if (alsoPrint) {
+      // Still open QC when there are warnings/blockers; print after force-finalize.
+      setQualityOpen(true);
+      toast.message("Review quality checklist, then finalize — print after");
+      return;
+    }
+    setQualityOpen(true);
+  };
+  finalizeFastRef.current = finalizeFast;
+  printRefFn.current = print;
+
   const paperLabel = (settings.usgPrintPaper ?? "a4") === "a5" ? "A5" : "A4";
 
   return (
@@ -891,8 +956,9 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
               className="h-7 border-border bg-panel px-2 text-[10px]">
               {busy === "save" ? <Loader2 className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
             </Button>
-            <Button size="sm" onClick={() => setQualityOpen(true)} disabled={busy !== "" || isFinal}
-              className="h-7 bg-emerald-600 px-2 hover:bg-emerald-700">
+            <Button size="sm" onClick={() => void finalizeFast(false)} disabled={busy !== "" || isFinal}
+              className="h-7 bg-emerald-600 px-2 hover:bg-emerald-700"
+              title="Finalize — clean NP skips checklist (Ctrl+Enter). Ctrl+Shift+Enter also prints.">
               {busy === "finalize" ? <Loader2 className="h-3.5 w-3.5" /> : <FileCheck2 className="h-3.5 w-3.5" />}
             </Button>
             <Button size="sm" variant="outline" onClick={print} disabled={busy !== ""}
@@ -1147,7 +1213,25 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
 
         {/* Follow-up diff */}
         {diffSource && !isFinal ? (
-          <UsgDiffPanel source={diffSource} state={state} pathologies={pathologies} />
+          <UsgDiffPanel
+            source={diffSource}
+            state={state}
+            pathologies={pathologies}
+            onCopyForward={() => {
+              try {
+                const prior = JSON.parse(diffSource.stateJson) as UsgComposerState;
+                const { state: next, filledCount } = copyForwardMeasurements(state, prior);
+                setState(next);
+                toast.success(
+                  filledCount > 0
+                    ? `Filled ${filledCount} empty measurement slot(s) from prior scan`
+                    : "No empty slots to fill — already complete",
+                );
+              } catch {
+                toast.error("Could not read prior scan state");
+              }
+            }}
+          />
         ) : null}
 
         {/* Pregnancy timeline */}
@@ -1180,25 +1264,47 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
       {!isFinal && (
         <div className="flex flex-wrap items-center gap-2 px-3 pt-2">
           {studyAllowsRushNormals(study) ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-7 border-amber-200 bg-amber-50 px-2.5 text-[11px] font-semibold text-amber-800 hover:bg-amber-100"
-              title="Peak-time: mark every organ normal with no size measurements (liver/kidney/uterus etc. print qualitative normals)"
-              onClick={() => {
-                const next = applyRushNormalStudy(state, study);
-                if (!next) {
-                  toast.error("This study needs measurements — use organ cards");
-                  return;
-                }
-                setState(next);
-                toast.success("All normal · no sizes — ready to print");
-              }}
-            >
-              <Zap className="mr-1 h-3.5 w-3.5" />
-              Normal · no sizes
-            </Button>
+            <>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 border-amber-200 bg-amber-50 px-2.5 text-[11px] font-semibold text-amber-800 hover:bg-amber-100"
+                title="Peak-time: mark every organ normal with no size measurements"
+                onClick={() => {
+                  const next = applyRushNormalStudy(state, study);
+                  if (!next) {
+                    toast.error("This study needs measurements — use organ cards");
+                    return;
+                  }
+                  setState(next);
+                  toast.success("All normal · no sizes — ready to print");
+                }}
+              >
+                <Zap className="mr-1 h-3.5 w-3.5" />
+                Normal · no sizes
+              </Button>
+              {study.organs.some((o) => o.key === "liver") ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 border-orange-200 bg-orange-50 px-2.5 text-[11px] font-semibold text-orange-800 hover:bg-orange-100"
+                  title="NP + Fatty Gr I · no size — most common almost-normal abdomen"
+                  onClick={() => {
+                    const next = applyRushPreset(state, study, "fatty-g1", (k) => pathologies.find((p) => p.key === k));
+                    if (!next) {
+                      toast.error("This study needs measurements — use organ cards");
+                      return;
+                    }
+                    setState(next);
+                    toast.success("NP + Fatty Gr I · no size — ready to print");
+                  }}
+                >
+                  NP + Fatty
+                </Button>
+              ) : null}
+            </>
           ) : (
             <Button
               type="button"
@@ -1220,6 +1326,14 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
           onApply={(template) => {
             try {
               const savedState = JSON.parse(template.stateJson) as UsgComposerState;
+              const target = getStudy(template.studyKey);
+              if (target) {
+                setStudyKey(template.studyKey);
+                setTechnique(target.technique);
+                if (template.studyKey.includes("child")) setPatientSex(USG_SEX_CHILD);
+                else if (template.studyKey.includes("female") || template.studyKey === "tvs" || template.studyKey === "ob") setPatientSex("F");
+                else if (template.studyKey.includes("male")) setPatientSex("M");
+              }
               setState(savedState);
               toast.success(`Template applied: ${template.name}`);
             } catch {
@@ -1257,26 +1371,43 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
             stays fixed at its natural height; the preview gets flex-1. */}
         <div className="studio-scroll min-h-0 space-y-3 overflow-y-auto pr-1">
           <div className="space-y-3">
-          {study.organs.map((def) => {
+          {study.organs.map((def, organIdx) => {
             const st = state.organs.find((o) => o.organ === def.key);
             if (!st) return null;
             const overrideKey = normalOverrideKey(studyKey, def.key);
             const override = normalOverrides?.[overrideKey] ?? null;
             return (
-              <UsgOrganCard
+              <div
                 key={def.key}
+                onClick={() => setFocusedOrganIdx(organIdx)}
+                className={cn(focusedOrganIdx === organIdx && "rounded-lg ring-2 ring-amber-200/80")}
+              >
+              <UsgOrganCard
                 def={def}
                 state={st}
                 pathologies={pathologiesForOrgan(pathologies, def.key)}
+                preferNoSizeChips={studyAllowsRushNormals(study)}
                 normalOverride={override}
                 onSaveNormal={(text) => saveNormalOverride(def.key, text)}
                 onResetNormal={() => resetNormalOverride(def.key)}
                 onToggle={(k) => togglePathology(def.key, k)}
                 onQuickNormal={() => setState((s) => applyOrganQuickNormal(s, def.key, def))}
                 onVar={(k, v) => setState((s) => setOrganVar(s, def.key, k, v))}
-                onText={(t) => setState((s) => setOrganText(s, def.key, t))}
+                onText={(t) => {
+                  const snip = matchSnippetExact(t);
+                  if (snip) {
+                    const p = pathologies.find((x) => x.key === snip.pathologyKey);
+                    if (p && (p.organ === def.key || (p.organ === "kidney" && def.key.startsWith("kidney")))) {
+                      togglePathology(def.key, snip.pathologyKey);
+                      toast.success(snip.confirm);
+                      return;
+                    }
+                  }
+                  setState((s) => setOrganText(s, def.key, t));
+                }}
                 onAddCustom={(organ) => setDialogOrgan(organ)}
               />
+              </div>
             );
           })}
 

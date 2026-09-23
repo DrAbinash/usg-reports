@@ -413,7 +413,7 @@ export function UsgStudioView() {
           <UsgQuickSelect
             patients={quickSelectPatients}
             currentPatientId={null}
-            onSelect={(pid) => openReport(pid)}
+            onSelect={(pid) => void openReport({ id: pid } as UsgReportRow)}
           />
         </div>
         <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading USG studio…

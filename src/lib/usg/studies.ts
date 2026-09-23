@@ -800,7 +800,13 @@ export const STUDY_GROUPS: { key: string; label: string }[] = [
   { key: "small", label: "Small Parts & Others" },
   { key: "doppler", label: "Doppler & Vascular" },
   { key: "cardiac", label: "Cardiac" },
-  {
+];
+
+/** 4D anomaly + twin anomaly studies (must live on USG_STUDIES so getStudy /
+ *  studyKeyForBillTest resolve them — they were accidentally pasted into
+ *  STUDY_GROUPS on main, which crashed bill-desk routing and typecheck). */
+USG_STUDIES.push(
+{
     key: "ob-tiffa-4d",
     label: "Pregnancy — 4D Anomaly Scan",
     title: "U.S.G OF FOETUS (4D ANOMALY SCAN)",
@@ -921,7 +927,9 @@ export const STUDY_GROUPS: { key: string; label: string }[] = [
       },
     ],
   },
-];
+);
+
+
 
 /** Quick lookup by key. O(1) via a Map built once at module load — the
  *  prior `.find()` scanned the studies array on every call. */

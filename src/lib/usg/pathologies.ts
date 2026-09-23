@@ -123,6 +123,12 @@ export const USG_PATHOLOGIES: UsgPathologyDef[] = [
     vars: [V("size", "Calculus size")],
   }),
   P({
+    key: "gb-calculus-nosize", organ: "gb", label: "GB Calculus · no size", category: "Gall Bladder",
+    text: "Gall bladder is normal in physiological distension. A well defined echogenic structure casting strong distal acoustic shadow is seen in the lumen of the gall bladder, suggestive of calculus. Wall thickness is normal. No pericholecystic collection. Sonographic Murphy's sign negative.",
+    impression: ["Cholelithiasis."],
+    titleFragment: "cholelithiasis",
+  }),
+  P({
     key: "gb-calculus-few", organ: "gb", label: "GB Calculus (Few)", category: "Gall Bladder",
     text: "Gall bladder is normal in physiological distension. Few well defined echogenic structures (largest {size} cm) casting strong distal acoustic shadow are seen in the lumen of the gall bladder, suggestive of calculi. Wall thickness is normal. No pericholecystic collection. Sonographic Murphy's sign negative.",
     impression: ["Cholelithiasis (Few calculi in GB lumen)."],
@@ -199,6 +205,12 @@ export const USG_PATHOLOGIES: UsgPathologyDef[] = [
     vars: [V("len", "Spleen length")],
   }),
   P({
+    key: "spleen-splenomegaly-nosize", organ: "spleen", label: "Splenomegaly · no size", category: "Spleen",
+    text: "Spleen is enlarged in size. Appears normal in morphology and parenchymal echogenicity. No evidence of focal lesion or S.O.L seen. No evidence of splenic collateral vessels.",
+    impression: ["Splenomegaly."],
+    titleFragment: "splenomegaly",
+  }),
+  P({
     key: "spleen-collaterals", organ: "spleen", label: "Splenomegaly + Collaterals", category: "Spleen",
     text: "Spleen is enlarged and measures {len} cm in length. Appears normal in morphology and parenchymal echogenicity. No evidence of focal lesion or S.O.L seen. Evidence of splenic collateral vessels is seen.",
     impression: ["Splenomegaly with splenic collateral vessels."],
@@ -245,6 +257,12 @@ export const USG_PATHOLOGIES: UsgPathologyDef[] = [
     impression: ["{Side} simple renal cortical cyst ({d1} x {d2} cm)."],
     titleFragment: "{side} renal cyst",
     vars: [V("d1", "Cyst L"), V("d2", "Cyst W"), { key: "loc", label: "Location", unit: "cortex / pole" }],
+  }),
+  P({
+    key: "kidney-cyst-nosize", organ: "kidney", label: "Simple Cyst · no size", category: "Kidney",
+    text: "{Side} kidney is normal in shape, size & position. A well defined simple cortical cyst is seen. No evidence of calculus or hydronephrosis is seen.",
+    impression: ["{Side} simple renal cortical cyst."],
+    titleFragment: "{side} renal cyst",
   }),
   P({
     key: "kidney-parapelvic-cyst", organ: "kidney", label: "Parapelvic Cyst", category: "Kidney",
@@ -337,6 +355,12 @@ export const USG_PATHOLOGIES: UsgPathologyDef[] = [
     vars: [V("p1", "L", "cm"), V("p2", "W", "cm"), V("p3", "H", "cm"), V("vol", "Volume", "gms")],
   }),
   P({
+    key: "prostate-enlarged-nosize", organ: "prostate", label: "Prostatomegaly · no size", category: "Prostate",
+    text: "Prostate is enlarged in size. No evidence of focal lesion or S.O.L noted.",
+    impression: ["Prostatomegaly."],
+    titleFragment: "prostatomegaly",
+  }),
+  P({
     key: "prostate-median-lobe", organ: "prostate", label: "Prostatomegaly + Median Lobe", category: "Prostate",
     text: "Prostate is enlarged in size. It measures {p1} x {p2} x {p3} cm, corresponding to {vol} gms with enlarged median lobe protruding {ml} cm at the bladder base.",
     impression: ["Prostatomegaly with enlarged median lobe protruding {ml} cm at the bladder base."],
@@ -358,6 +382,12 @@ export const USG_PATHOLOGIES: UsgPathologyDef[] = [
     impression: ["Bulky uterus with endometrial thickness {et} cm."],
     titleFragment: "bulky uterus",
     vars: [V("u1", "L", "cm"), V("u2", "W", "cm"), V("u3", "H", "cm"), V("et", "Endometrium")],
+  }),
+  P({
+    key: "uterus-bulky-nosize", organ: "uterus", label: "Bulky Uterus · no size", category: "Uterus",
+    text: "Uterus is bulky in size and shape. The uterus is positioned in anteversion with normal endometrial thickness. No focal pathology or abnormalities of outline are noted. The cervical echo is normal.",
+    impression: ["Bulky uterus."],
+    titleFragment: "bulky uterus",
   }),
   P({
     key: "uterus-bulky-hetero", organ: "uterus", label: "Bulky + Heterogenous Myometrium", category: "Uterus",
@@ -416,6 +446,13 @@ export const USG_PATHOLOGIES: UsgPathologyDef[] = [
     impression: ["{Side} adnexal simple cyst."],
     titleFragment: "{side} ovarian cyst",
     vars: [V("d1", "Cyst L"), V("d2", "Cyst W"), { key: "side", label: "Side", unit: "right / left" }],
+  }),
+  P({
+    key: "adnexa-cyst-simple-nosize", organ: "adnexa", label: "Simple Cyst · no size", category: "Adnexa",
+    text: "Ovaries are normally positioned. A well defined simple cystic lesion is seen in the {side} adnexal region arising from the {side} ovary.",
+    impression: ["{Side} adnexal simple cyst."],
+    titleFragment: "{side} ovarian cyst",
+    vars: [{ key: "side", label: "Side", unit: "right / left" }],
   }),
   P({
     key: "adnexa-cyst-complex", organ: "adnexa", label: "Complex Cyst (Septations)", category: "Adnexa",

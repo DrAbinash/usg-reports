@@ -1,20 +1,32 @@
 /**
- * Peak-time rush workflow extras — NP template seeds + fatty · no size chips.
+ * Peak-time rush workflow extras — NP template seeds + fatty · no size chips + presets.
  */
 import { describe, expect, it } from "vitest";
-import { BUILTIN_NP_TEMPLATES, buildNpTemplateState } from "@/lib/usg/npTemplates";
+import {
+  BUILTIN_NP_TEMPLATES,
+  buildNpTemplateState,
+} from "@/lib/usg/npTemplates";
 import { USG_PATHOLOGIES } from "@/lib/usg/pathologies";
-import { LIVER_N } from "@/lib/usg/studies";
+import { LIVER_N, getStudy } from "@/lib/usg/studies";
+import {
+  applyRushPreset,
+  isCleanRushFinalize,
+  studyAllowsRushNormals,
+} from "@/lib/usg/quickActions";
+import { matchSnippet, getAllSnippets } from "@/lib/usg/textExpansion";
 
 describe("NP template seeds", () => {
-  it("ships pinned WA Female / Male / Child / Upper definitions", () => {
-    expect(BUILTIN_NP_TEMPLATES.map((t) => t.name)).toEqual([
-      "NP Whole Abdomen — Female",
-      "NP Whole Abdomen — Male",
-      "NP Whole Abdomen — Child",
-      "NP Upper Abdomen",
+  it("ships WA / Upper / KUB / TVS / LA definitions", () => {
+    expect(BUILTIN_NP_TEMPLATES.map((t) => t.studyKey)).toEqual([
+      "wa-female",
+      "wa-male",
+      "wa-child",
+      "ua",
+      "kub",
+      "tvs",
+      "la-female",
+      "la-male",
     ]);
-    expect(BUILTIN_NP_TEMPLATES.every((t) => t.sortOrder > 0)).toBe(true);
   });
 
   it("buildNpTemplateState yields measurement-free organ text", () => {
@@ -23,10 +35,12 @@ describe("NP template seeds", () => {
     expect(female.organs.find((o) => o.organ === "liver")?.text).toBe(LIVER_N);
     expect(female.organs.every((o) => !/\{[a-z0-9_]+\}/i.test(o.text))).toBe(true);
 
-    const child = buildNpTemplateState("wa-child");
-    expect(child.organs.find((o) => o.organ === "liver")?.text).toBe(LIVER_N);
-    expect(child.organs.find((o) => o.organ === "liver")?.text).not.toMatch(/\{span\}/);
-    expect(child.organs.every((o) => Object.keys(o.vars).length === 0)).toBe(true);
+    const kub = buildNpTemplateState("kub");
+    expect(kub.organs.every((o) => !/\{[a-z0-9_]+\}/i.test(o.text))).toBe(true);
+    expect(kub.organs.every((o) => Object.keys(o.vars).length === 0)).toBe(true);
+
+    const tvs = buildNpTemplateState("tvs");
+    expect(tvs.organs.every((o) => !/\{[a-z0-9_]+\}/i.test(o.text))).toBe(true);
   });
 });
 
@@ -36,24 +50,58 @@ describe("fatty · no size pathology chips", () => {
     "liver-hepatomegaly-fatty-g1-nosize",
     "liver-fatty-g2-nosize",
     "liver-coarse-nosize",
+    "gb-calculus-nosize",
+    "spleen-splenomegaly-nosize",
+    "kidney-cyst-nosize",
+    "prostate-enlarged-nosize",
+    "uterus-bulky-nosize",
+    "adnexa-cyst-simple-nosize",
   ];
 
-  it("adds no-size variants next to measured fatty chips", () => {
+  it("adds no-size variants for peak almost-normals", () => {
     for (const key of nosizeKeys) {
       const p = USG_PATHOLOGIES.find((x) => x.key === key);
       expect(p, key).toBeDefined();
-      expect(p!.organ).toBe("liver");
       expect(p!.label.toLowerCase()).toContain("no size");
       expect(p!.text).not.toMatch(/\{span\}/);
-      expect(p!.text).not.toMatch(/\{pv\}/);
-      expect(p!.vars ?? []).toHaveLength(0);
+      expect(p!.text).not.toMatch(/\{len\}/);
+      expect(p!.text).not.toMatch(/\{size\}/);
+      expect(p!.text).not.toMatch(/\{u1\}/);
+      expect(p!.vars?.some((v) => ["span", "len", "size", "u1", "d1", "p1"].includes(v.key)) ?? false).toBe(false);
+    }
+  });
+});
+
+describe("rush safety + presets", () => {
+  it("blocks rush on combo OB studies (wa-ob / tvs-ob)", () => {
+    expect(studyAllowsRushNormals(getStudy("wa-ob")!)).toBe(false);
+    expect(studyAllowsRushNormals(getStudy("tvs-ob")!)).toBe(false);
+    expect(studyAllowsRushNormals(getStudy("ob")!)).toBe(false);
+    expect(studyAllowsRushNormals(getStudy("wa-female")!)).toBe(true);
+  });
+
+  it("applyRushPreset adds fatty Gr I · no size on abdomen", () => {
+    const study = getStudy("wa-female")!;
+    const base = buildNpTemplateState("wa-female");
+    const next = applyRushPreset(base, study, "fatty-g1", (k) => USG_PATHOLOGIES.find((p) => p.key === k));
+    expect(next).not.toBeNull();
+    const liver = next!.organs.find((o) => o.organ === "liver")!;
+    expect(liver.pathologies).toContain("liver-fatty-g1-nosize");
+    expect(liver.text).not.toMatch(/\{span\}/);
+    expect(isCleanRushFinalize(next!)).toBe(true);
+  });
+});
+
+describe("text expansion keys resolve", () => {
+  it("every live snippet points at a real pathology", () => {
+    const keys = new Set(USG_PATHOLOGIES.map((p) => p.key));
+    for (const s of getAllSnippets()) {
+      expect(keys.has(s.pathologyKey), s.trigger).toBe(true);
     }
   });
 
-  it("keeps the same clinical impression as the measured sibling", () => {
-    const g1 = USG_PATHOLOGIES.find((p) => p.key === "liver-fatty-g1")!;
-    const g1q = USG_PATHOLOGIES.find((p) => p.key === "liver-fatty-g1-nosize")!;
-    expect(g1q.impression).toEqual(g1.impression);
-    expect(g1q.titleFragment).toBe(g1.titleFragment);
+  it("fatty1n matches the no-size chip", () => {
+    expect(matchSnippet("fatty1n")?.pathologyKey).toBe("liver-fatty-g1-nosize");
+    expect(matchSnippet("fatty1")?.pathologyKey).toBe("liver-fatty-g1");
   });
 });

@@ -89,8 +89,8 @@ export async function biometryOcr(imageBase64: string): Promise<{ ocr: UsgOcrJso
 
   // Stage 3: Gemini fallback (cloud, metered, last resort)
   console.log("[biometry-ocr] Stage 3: Gemini fallback");
-  const gemini = await geminiUsgOcr(imageBase64, process.env.GEMINI_API_KEY || "");
-  if (gemini) return { ocr: gemini, engine: "gemini" };
+  const gemini = await geminiUsgOcr(imageBase64, "image/jpeg");
+  if (gemini.ok) return { ocr: gemini.data, engine: "gemini" };
 
   return { ocr: null, engine: "none" };
 }

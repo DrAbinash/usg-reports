@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { ArrowLeft, CalendarDays, ChevronDown, FileCheck2, Loader2, Maximize2, Minimize2, Phone, Printer, Save, Search, Settings2, Zap } from "lucide-react";
 import type { UsgComposerState, UsgPathologyDef } from "@/lib/usg/types";
 import { USG_SEX_CHILD } from "@/lib/usg/types";
-import { USG_STUDIES, STUDY_GROUPS, applyNormalOverrides, getStudy, normalOverrideKey, type NormalOverrides } from "@/lib/usg/studies";
+import { USG_STUDIES, STUDY_GROUPS, applyNormalOverrides, getStudy, normalOverrideKey, studyKeyForBillTest, type NormalOverrides } from "@/lib/usg/studies";
 import { isObStudyKey } from "@/lib/usg/orderStudy";
 import {
   applyPathologies,

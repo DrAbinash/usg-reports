@@ -1,12 +1,10 @@
 /**
  * textExpansion.ts — auto-text expansion for common USG findings.
  *
- * Feature 6: Type `fatty1` → auto-expands to "Fatty liver Grade I" + selects
- * the pathology + fills any measurement slots. The doctor types 6 chars and
- * gets a complete finding with all slots filled.
- *
- * Snippet registry — each snippet maps to a pathology key + default values.
+ * Feature 6: Type `fatty1` → expands to the matching pathology chip.
+ * Triggers map ONLY to keys that exist in pathologies.ts.
  */
+import { USG_PATHOLOGIES } from "./pathologies";
 
 export type SnippetExpansion = {
   trigger: string;
@@ -19,87 +17,75 @@ export type SnippetExpansion = {
 };
 
 /**
- * Registry of text expansion snippets.
- * The trigger is matched case-insensitively at the start of what the
- * doctor types in any finding text box.
+ * Registry of text expansion snippets — keys must exist in USG_PATHOLOGIES.
  */
 const SNIPPETS: SnippetExpansion[] = [
-  // Liver
+  // Liver (peak-time · no size first)
+  { trigger: "fatty1n", pathologyKey: "liver-fatty-g1-nosize", label: "Fatty Gr I · no size", confirm: "Fatty Liver Grade I (no size)" },
   { trigger: "fatty1", pathologyKey: "liver-fatty-g1", label: "Fatty Liver Gr I", confirm: "Fatty Liver Grade I" },
+  { trigger: "fatty2n", pathologyKey: "liver-fatty-g2-nosize", label: "Fatty Gr II · no size", confirm: "Fatty Liver Grade II (no size)" },
   { trigger: "fatty2", pathologyKey: "liver-fatty-g2", label: "Fatty Liver Gr II", confirm: "Fatty Liver Grade II" },
-  { trigger: "fatty3", pathologyKey: "liver-fatty-g3", label: "Fatty Liver Gr III", confirm: "Fatty Liver Grade III" },
-  { trigger: "hepato", pathologyKey: "liver-hepatomegaly", label: "Hepatomegaly", confirm: "Hepatomegaly" },
-  { trigger: "mass", pathologyKey: "liver-mass", label: "Liver Mass", confirm: "Liver mass — characterise with CECT" },
-  { trigger: "haem", pathologyKey: "liver-haemangioma", label: "Haemangioma", confirm: "Haemangioma" },
-  { trigger: "cirr", pathologyKey: "liver-cirrhosis", label: "Cirrhosis", confirm: "Cirrhosis — check portal HTN" },
+  { trigger: "hepato", pathologyKey: "liver-hepatomegaly-fatty-g1-nosize", label: "Hepatomegaly + Fatty Gr I · no size", confirm: "Hepatomegaly with Fatty Gr I" },
+  { trigger: "haem", pathologyKey: "liver-hemangioma", label: "Haemangioma", confirm: "Haemangioma" },
 
   // Gallbladder
-  { trigger: "stone", pathologyKey: "gb_cholelithiasis", label: "Cholelithiasis", confirm: "Gallstones — check CBD" },
-  { trigger: "sludge", pathologyKey: "gb-sludge", label: "GB Sludge", confirm: "Gallbladder sludge" },
-  { trigger: "wall", pathologyKey: "gb-wall-thickening", label: "GB Wall Thickening", confirm: "GB wall thickening" },
+  { trigger: "stonen", pathologyKey: "gb-calculus-nosize", label: "GB Calculus · no size", confirm: "Cholelithiasis (no size)" },
+  { trigger: "stone", pathologyKey: "gb-calculus", label: "Cholelithiasis", confirm: "Gallstones — check CBD" },
   { trigger: "polyp", pathologyKey: "gb-polyp", label: "GB Polyp", confirm: "GB polyp — measure size" },
 
-  // Kidney
+  // Spleen / kidney / prostate
+  { trigger: "splen", pathologyKey: "spleen-splenomegaly-nosize", label: "Splenomegaly · no size", confirm: "Splenomegaly" },
   { trigger: "calc", pathologyKey: "kidney-calculus", label: "Renal Calculus", confirm: "Renal calculus — pick calyx location" },
-  { trigger: "hydro", pathologyKey: "kidney-hydronephrosis-mild", label: "Hydronephrosis Mild", confirm: "Mild hydronephrosis" },
-  { trigger: "hydro2", pathologyKey: "kidney-hydronephrosis-moderate", label: "Hydronephrosis Moderate", confirm: "Moderate hydronephrosis" },
-  { trigger: "hydro3", pathologyKey: "kidney-hydronephrosis-severe", label: "Hydronephrosis Severe", confirm: "Severe hydronephrosis" },
-  { trigger: "cyst", pathologyKey: "kidney-cortical-cyst", label: "Simple Cortical Cyst", confirm: "Simple cortical cyst" },
-
-  // Prostate
+  { trigger: "hydro", pathologyKey: "kidney-hydro-mild", label: "Hydronephrosis Mild", confirm: "Mild hydronephrosis" },
+  { trigger: "cystn", pathologyKey: "kidney-cyst-nosize", label: "Simple Cyst · no size", confirm: "Simple cortical cyst" },
+  { trigger: "cyst", pathologyKey: "kidney-cyst", label: "Simple Cortical Cyst", confirm: "Simple cortical cyst" },
+  { trigger: "prosn", pathologyKey: "prostate-enlarged-nosize", label: "Prostatomegaly · no size", confirm: "Prostatomegaly" },
   { trigger: "pros", pathologyKey: "prostate-enlarged", label: "Prostatomegaly", confirm: "Prostatomegaly — calculate volume" },
 
-  // Thyroid
-  { trigger: "nodule", pathologyKey: "thyroid-nodule-rt", label: "Thyroid Nodule", confirm: "Thyroid nodule — apply TI-RADS" },
-  { trigger: "goitre", pathologyKey: "thyroid-diffuse-goitre", label: "Diffuse Goitre", confirm: "Diffuse goitre — check TFTs" },
-  { trigger: "thyroiditis", pathologyKey: "thyroid-itis", label: "Thyroiditis", confirm: "Thyroiditis — check antibodies" },
-
-  // Uterus
-  { trigger: "fibroid", pathologyKey: "uterine-fibroid", label: "Uterine Fibroid", confirm: "Fibroid — measure and locate" },
-  { trigger: "endo", pathologyKey: "endometrial-thickening", label: "Endometrial Thickening", confirm: "Endometrial thickening — measure ET" },
-
-  // Obstetric
-  { trigger: "iugr", pathologyKey: "ob-iugr", label: "IUGR", confirm: "IUGR — Doppler assessment needed" },
-  { trigger: "poly", pathologyKey: "ob-polyhydramnios", label: "Polyhydramnios", confirm: "Polyhydramnios — check GDM" },
-  { trigger: "oligo", pathologyKey: "ob-oligohydramnios", label: "Oligohydramnios", confirm: "Oligohydramnios — check renal anatomy" },
-  { trigger: "breech", pathologyKey: "ob-breech", label: "Breech", confirm: "Breech presentation" },
-  { trigger: "placenta", pathologyKey: "ob-placenta-previa", label: "Placenta Praevia", confirm: "Placenta praevia — no vaginal delivery" },
-
-  // Breast
-  { trigger: "birmass", pathologyKey: "breast-mass-rt", label: "Breast Mass", confirm: "Breast mass — BI-RADS assessment" },
+  // Uterus / adnexa
+  { trigger: "bulky", pathologyKey: "uterus-bulky-nosize", label: "Bulky Uterus · no size", confirm: "Bulky uterus" },
+  { trigger: "fibroid", pathologyKey: "uterus-fibroid-intramural", label: "Fibroid — Intramural", confirm: "Fibroid — measure and locate" },
+  { trigger: "endo", pathologyKey: "uterus-et-thick", label: "Thickened Endometrium", confirm: "Endometrial thickening — measure ET" },
+  { trigger: "ovcystn", pathologyKey: "adnexa-cyst-simple-nosize", label: "Simple Cyst · no size", confirm: "Simple ovarian cyst" },
+  { trigger: "ovcyst", pathologyKey: "adnexa-cyst-simple", label: "Simple Ovarian Cyst", confirm: "Simple ovarian cyst" },
 ];
+
+/** Drop any snippet whose pathology key is missing (defense in depth). */
+function liveSnippets(): SnippetExpansion[] {
+  const keys = new Set(USG_PATHOLOGIES.map((p) => p.key));
+  return SNIPPETS.filter((s) => keys.has(s.pathologyKey));
+}
 
 /**
  * Check if the typed text matches a snippet trigger.
- * Returns the expansion if matched, null otherwise.
- *
- * Matches are case-insensitive and match at the start of the text.
+ * Exact match preferred; prefix match when ≥3 chars typed.
  */
 export function matchSnippet(text: string): SnippetExpansion | null {
   const lower = text.trim().toLowerCase();
   if (!lower) return null;
+  const list = liveSnippets();
 
-  // Exact match first
-  const exact = SNIPPETS.find((s) => s.trigger === lower);
+  const exact = list.find((s) => s.trigger === lower);
   if (exact) return exact;
 
-  // Prefix match — typed text is a prefix of a trigger
-  const prefix = SNIPPETS.find((s) => s.trigger.startsWith(lower) && lower.length >= 3);
-  if (prefix) return prefix;
-
-  return null;
+  // Prefer longest trigger so fatty1n wins over fatty1 when typing fatty1n
+  const prefix = list
+    .filter((s) => s.trigger.startsWith(lower) && lower.length >= 3)
+    .sort((a, b) => b.trigger.length - a.trigger.length)[0];
+  return prefix ?? null;
 }
 
-/**
- * Get all registered snippets (for the shortcut overlay).
- */
+/** Exact-only match used when the doctor finishes a trigger (space/enter). */
+export function matchSnippetExact(text: string): SnippetExpansion | null {
+  const lower = text.trim().toLowerCase();
+  if (!lower) return null;
+  return liveSnippets().find((s) => s.trigger === lower) ?? null;
+}
+
 export function getAllSnippets(): SnippetExpansion[] {
-  return [...SNIPPETS];
+  return liveSnippets();
 }
 
-/**
- * Format snippet list for the keyboard shortcut overlay.
- */
 export function formatSnippetsForDisplay(): Array<{ trigger: string; label: string }> {
-  return SNIPPETS.map((s) => ({ trigger: s.trigger, label: s.label }));
+  return liveSnippets().map((s) => ({ trigger: s.trigger, label: s.label }));
 }

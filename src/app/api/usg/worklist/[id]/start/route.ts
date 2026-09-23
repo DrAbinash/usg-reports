@@ -7,7 +7,8 @@ import { resolveColumns } from "@/lib/usg/server";
 import { linkPatient, latestKnownDemographics } from "@/lib/usg/patients";
 import { audit } from "@/lib/usg/audit";
 import { guessStudyKey, isObStudyKey, orderSex, testSuggestsChild } from "@/lib/usg/orderStudy";
-import { applyRushNormalStudy, studyAllowsRushNormals } from "@/lib/usg/quickActions";
+import { applyRushNormalStudy, applyRushPreset, studyAllowsRushNormals, type RushPreset } from "@/lib/usg/quickActions";
+import { USG_PATHOLOGIES } from "@/lib/usg/pathologies";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -21,6 +22,8 @@ type Ctx = { params: Promise<{ id: string }> };
  * Body `{ rushNormal: true }` (or `?rush=1`): pre-fill measurement-free
  * NP normals when the study allows it (abdomen/KUB/TVS…). Obstetric/echo
  * ignore the flag and open with measured normals.
+ *
+ * Body `{ rushPreset: "fatty-g1" }`: NP + Fatty Gr I · no size (abdomen studies).
  */
 export async function POST(req: Request, ctx: Ctx) {
   const guard = await requireSession();
@@ -33,9 +36,11 @@ export async function POST(req: Request, ctx: Ctx) {
 
   const url = new URL(req.url);
   const body = await req.json().catch(() => ({} as Record<string, unknown>));
+  const rushPreset = (body.rushPreset === "fatty-g1" ? "fatty-g1" : null) as RushPreset | null;
   const rushNormal =
     body.rushNormal === true ||
     body.rush === true ||
+    !!rushPreset ||
     url.searchParams.get("rush") === "1";
 
   // v6.18 — Orthanc DICOM Fallback for missing demographics
@@ -79,11 +84,22 @@ export async function POST(req: Request, ctx: Ctx) {
 
   let state = normaliseState({}, studyKey);
   let rushApplied = false;
+  let rushPresetApplied: RushPreset | null = null;
   if (rushNormal && studyAllowsRushNormals(study)) {
-    const rushed = applyRushNormalStudy(state, study);
-    if (rushed) {
-      state = rushed;
-      rushApplied = true;
+    const lookup = (key: string) => USG_PATHOLOGIES.find((p) => p.key === key);
+    if (rushPreset) {
+      const next = applyRushPreset(state, study, rushPreset, lookup);
+      if (next) {
+        state = next;
+        rushApplied = true;
+        rushPresetApplied = rushPreset;
+      }
+    } else {
+      const rushed = applyRushNormalStudy(state, study);
+      if (rushed) {
+        state = rushed;
+        rushApplied = true;
+      }
     }
   }
 
@@ -130,8 +146,8 @@ export async function POST(req: Request, ctx: Ctx) {
     action: "report.create",
     reportId: report.id,
     patientName: report.patientName,
-    detail: `started from bill-desk order ${order.accessionNumber ?? `WL ${order.careWorklistId ?? order.id}`} — ${study.label}${rushApplied ? " (NP · no sizes)" : ""}`,
+    detail: `started from bill-desk order ${order.accessionNumber ?? `WL ${order.careWorklistId ?? order.id}`} — ${study.label}${rushPresetApplied === "fatty-g1" ? " (NP + Fatty Gr I)" : rushApplied ? " (NP · no sizes)" : ""}`,
   });
 
-  return Response.json({ report, ob: isObStudyKey(studyKey), rushApplied });
+  return Response.json({ report, ob: isObStudyKey(studyKey), rushApplied, rushPreset: rushPresetApplied });
 }

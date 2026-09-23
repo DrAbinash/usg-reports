@@ -7,7 +7,7 @@
 import { useEffect, useId, useState } from "react";
 import { ChevronDown, Keyboard, Lightbulb } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { COMPOSER_SHORTCUTS, TIP_ROTATE_MS, rotatingTips } from "@/lib/usg/shortcuts";
+import { COMPOSER_SHORTCUTS, TIP_ROTATE_MS, WORKLIST_SHORTCUTS, rotatingTips } from "@/lib/usg/shortcuts";
 import { formatSnippetsForDisplay } from "@/lib/usg/textExpansion";
 import {
   Collapsible,
@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/collapsible";
 
 const TIPS = rotatingTips();
-const CHIP_KEYS = ["Ctrl+S", "Ctrl+↵", "N", "?"] as const;
+const CHIP_KEYS = ["Ctrl+↵", "Ctrl+⇧↵", "N", "?"] as const;
 
 function isTypingTarget(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
@@ -112,7 +112,7 @@ export function UsgTipsRibbon({ className }: { className?: string }) {
       </CollapsibleTrigger>
 
       <CollapsibleContent id={panelId}>
-        <div className="grid gap-3 border-t border-border/60 px-3 pb-2.5 pt-2 sm:grid-cols-2">
+        <div className="grid gap-3 border-t border-border/60 px-3 pb-2.5 pt-2 lg:grid-cols-3">
           <div>
             <h4 className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-faint">
               Composer
@@ -131,9 +131,22 @@ export function UsgTipsRibbon({ className }: { className?: string }) {
 
           <div>
             <h4 className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-faint">
-              Text expansion — type in a finding box
+              Worklist
             </h4>
-            <ul className="studio-scroll max-h-[180px] space-y-1 overflow-y-auto pr-1">
+            <ul className="space-y-1">
+              {WORKLIST_SHORTCUTS.map((s) => (
+                <li key={s.key} className="flex items-center justify-between gap-3 text-[11px]">
+                  <span className="text-muted-foreground">{s.action}</span>
+                  <kbd className="shrink-0 rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[10px] font-bold text-foreground">
+                    {s.key}
+                  </kbd>
+                </li>
+              ))}
+            </ul>
+            <h4 className="mb-1.5 mt-3 text-[10px] font-bold uppercase tracking-wide text-faint">
+              Text expansion
+            </h4>
+            <ul className="studio-scroll max-h-[140px] space-y-1 overflow-y-auto pr-1">
               {snippets.map((s) => (
                 <li key={s.trigger} className="flex items-center justify-between gap-3 text-[11px]">
                   <span className="truncate text-muted-foreground">{s.label}</span>
@@ -143,9 +156,18 @@ export function UsgTipsRibbon({ className }: { className?: string }) {
                 </li>
               ))}
             </ul>
-            <p className="mt-2 text-[10px] text-faint">
+          </div>
+
+          <div className="text-[10px] leading-relaxed text-faint lg:pt-0">
+            <p className="mb-1.5 font-semibold text-muted-foreground">Peak-time tips</p>
+            <ul className="list-disc space-y-1 pl-3.5">
+              <li>Clean NP reports: Ctrl+Enter skips the checklist</li>
+              <li>Ctrl+Shift+Enter finalizes and prints together</li>
+              <li>Type fatty1n / stonen / bulky in a finding box</li>
+            </ul>
+            <p className="mt-3">
               Press <kbd className="rounded border bg-card px-1 font-mono text-[9px]">?</kbd> to
-              toggle this panel · tips rotate while collapsed
+              toggle · tips rotate while collapsed
             </p>
           </div>
         </div>

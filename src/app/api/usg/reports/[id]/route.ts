@@ -6,6 +6,8 @@ import { resolveColumns } from "@/lib/usg/server";
 import { parseScanDate } from "@/lib/usg/dates";
 import { linkPatient } from "@/lib/usg/patients";
 import { audit } from "@/lib/usg/audit";
+import { buildUsgReportHtml } from "@/lib/usg/print";
+import { getSettings } from "@/lib/settings";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -52,7 +54,38 @@ export async function GET(_req: Request, ctx: Ctx) {
       }
     : null;
 
-  return Response.json({ report, order });
+  // v6.22 — rebuild HTML from stateJson for FINALIZED reports
+  let rebuiltHtml: string | null = null;
+  if (report.status === "FINALIZED" && report.stateJson) {
+    try {
+      const settings = await getSettings();
+      const all = await loadAllPathologies();
+      const lookup = makeLookup(all);
+      const overrides = await loadNormalOverrides();
+      const state = normaliseState(JSON.parse(report.stateJson), report.studyKey, overrides);
+      const resolved = resolve(state, lookup, report.technique, overrides);
+      rebuiltHtml = buildUsgReportHtml(
+        { ...settings, usgPrintPaper: settings.usgPrintPaper ?? "a4" },
+        {
+          name: report.patientName,
+          age: report.patientAge,
+          sex: report.patientSex,
+          referredBy: report.referredBy || "—",
+          studyTitle: report.studyTitle || "ULTRASOUND",
+          scanDate: report.scanDate
+            ? new Date(report.scanDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+            : "",
+          patientId: report.patientId || "",
+        },
+        resolved,
+        report.images || [],
+        null
+      );
+    } catch {
+      rebuiltHtml = null;
+    }
+  }
+  return Response.json({ report: { ...report, reportHtml: rebuiltHtml ?? report.reportHtml }, order });
 }
 
 export async function PUT(req: Request, ctx: Ctx) {

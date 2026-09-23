@@ -127,10 +127,25 @@ export async function fetchWorklist(opts?: FetchWorklistOpts) {
   if (opts?.since && !opts?.full) {
     path += `&since=${encodeURIComponent(opts.since)}`;
   }
-  const r = await careFetch<CareWorklistItem[] | { rows: CareWorklistItem[] }>(path);
+  const r = await careFetch<any>(path);
   if (!r.ok) return r;
-  // v6.20 shape-tolerant: bridge returns bare array (legacy) or { rows, meta } (audit suite).
-  const list = Array.isArray(r.data) ? r.data : ((r.data as { rows: CareWorklistItem[] }).rows ?? []);
+  // v6.21 shape-tolerant: bare array (legacy) | { rows, meta } (audit suite) |
+  // incremental envelope { orders, nextCursor, serverTime, truncated } — the
+  // merged ERP shape whenever since/limit/cursor is sent. Parse all three.
+  let list: CareWorklistItem[] = Array.isArray(r.data)
+    ? r.data
+    : (r.data?.rows ?? r.data?.orders ?? []);
+  // Follow the cursor while the ERP signals more pages (incremental path).
+  let cursor: string | null = Array.isArray(r.data) ? null : (r.data?.nextCursor ?? null);
+  let pages = 0;
+  while (cursor && pages < 50) {
+    const nr = await careFetch<any>(`${path}&cursor=${encodeURIComponent(cursor)}`);
+    if (!nr.ok) break;
+    const chunk: CareWorklistItem[] = Array.isArray(nr.data) ? nr.data : (nr.data?.orders ?? []);
+    list = list.concat(chunk);
+    cursor = nr.data?.nextCursor ?? null;
+    pages += 1;
+  }
   return { ok: true as const, data: list };
 }
 

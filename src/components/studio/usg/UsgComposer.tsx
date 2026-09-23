@@ -180,7 +180,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   );
   const [finalizedHere, setFinalizedHere] = useState(report?.status === "FINALIZED");
   const [qualityOpen, setQualityOpen] = useState(false);
-  const [headerCollapsed, setHeaderCollapsed] = useState(false);
+  const [headerCollapsed, setHeaderCollapsed] = useState(true);
   const [fullscreen, setFullscreen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewSrResult, setReviewSrResult] = useState<{ vars: Record<string, Record<string, string>>; extras: Record<string, string>; matchedCount: number } | null>(null);

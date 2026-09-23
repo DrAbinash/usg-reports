@@ -1023,3 +1023,509 @@ export function studyKeyForBillTest(name: string, gender?: string): string | nul
   if (/whole abdomen|kub/.test(n)) return fem ? "wa-female" : "wa-male";
   return null;
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// NEW TEMPLATES (Batch 1-10) — Enhanced, corrected, variable slots added
+// ═══════════════════════════════════════════════════════════════════════
+
+USG_STUDIES.push(
+  // ── Obstetric ──────────────────────────────────────────────────────────
+  {
+    key: 'ob-embryo', label: 'Early Pregnancy / Embryo', title: 'USG EMBRYO', sex: 'F', group: 'ob',
+    technique: 'Transabdominal / Transvaginal sonography performed.',
+    allNormalImpression: ['Intrauterine gestation corresponding to gestational age as per biometry (CRL).', 'Suggested TIFFA scan at 20-22 weeks.'],
+    organs: [
+      { key: 'uterus', label: 'UTERUS & CERVIX', normal: 'Gravid uterus contains a single gestational sac with a live embryo in the uterine cavity. Normal color flow and regular cardiac pulsation seen on M-mode. Internal os is closed. Cervix appears long.' },
+      { key: 'embryo', label: 'EMBRYONIC SURVEY', normal: 'Gestational sac margins are regular. Embryonic pole and activity are present. Cardiac activity present. Fetal heart rate is [ ] bpm.' },
+      { key: 'biometry', label: 'EMBRYONIC BIOMETRY', normal: 'CRL: [ ] mm corresponding to [ ] weeks [ ] days. EDD: [ ].' },
+      { key: 'placenta', label: 'PLACENTA & ADNEXA', normal: 'Placenta is anteriorly located (Grade-0 maturity). Both ovaries are normal in size, shape, and position. No cyst or mass seen.' },
+    ]
+  },
+  {
+    key: 'ob-liquor', label: 'Liquor Scan', title: 'USG LIQUOR', sex: 'F', group: 'ob',
+    technique: 'Transabdominal sonography performed.',
+    allNormalImpression: ['Single live intrauterine fetus in cephalic presentation.', 'Liquor adequate.'],
+    organs: [
+      { key: 'fetus', label: 'FETUS & FHR', normal: 'Single live intrauterine fetus in cephalic presentation with active body movement. Fetal heart beat is seen in real time and corroborated in M-mode study. Fetal heart rate: [ ] B/Min & Regular.' },
+      { key: 'biometry', label: 'BIOMETRY & EDD', normal: 'Liquor: AFI- [ ] cm. E.D.D. as per scan: [ ]. FETAL WT.: [ ] (± [ ] Gms). Gestational Age: [ ] weeks [ ] days.' },
+      { key: 'cord', label: 'CORD & PLACENTA', normal: 'No evidence of umbilical cord around the neck. / Single loop of umbilical cord around the neck.' },
+    ]
+  },
+  {
+    key: 'ob-liquor-twin', label: 'Liquor Scan (Twin)', title: 'USG LIQUOR TWIN', sex: 'F', group: 'ob',
+    technique: 'Transabdominal sonography performed.',
+    allNormalImpression: ['Intrauterine twin pregnancies.', 'Liquor adequate for both fetuses.'],
+    organs: [
+      { key: 'twins', label: 'TWIN A & B SURVEY', normal: 'Intrauterine twin pregnancies are seen. Fetus-A in [ ] and Fetus-B in [ ] presentation. Approximate weight of Fetus-A is [ ] gms (± [ ] gms) and Fetus-B is [ ] gms (± [ ] gms). Normal fetal movement seen.' },
+      { key: 'fhr', label: 'FHR & LIQUOR', normal: 'Fetal heart rate (Fetus-A): [ ] B/Min & Regular. Fetal heart rate (Fetus-B): [ ] B/Min & Regular. Liquor: Adequate.' },
+      { key: 'placenta', label: 'PLACENTA & CORD', normal: 'Fetus-A – Placenta located [ ] (Maturity Grade-[ ]). Fetus-B – Placenta located [ ] (Maturity Grade-[ ]). Three-vessel system seen in umbilical cord. Internal OS closed.' },
+      { key: 'cord_loop', label: 'CORD AROUND NECK', normal: 'Single loop of cord around the fetal neck (Fetal-A). / Single loop of cord at the side of fetal neck (Fetal-B). / No cord around neck.' },
+    ]
+  },
+  {
+    key: 'ob-triplet', label: 'Triplet Pregnancy', title: 'USG TRIPLET', sex: 'F', group: 'ob',
+    technique: 'Transabdominal sonography performed.',
+    allNormalImpression: ['Triamniotic, trichorionic intrauterine pregnancies.', 'No gross fetal congenital anomalies detected.'],
+    organs: [
+      { key: 'intro', label: 'CHORIONICITY', normal: 'Uterine cavity contains triamniotic, trichorionic pregnancies with separate gestational sacs.' },
+      { key: 'triplet_a', label: 'TRIPLET-A', normal: 'FHR: [ ] bpm. Biometry: BPD [ ]mm, HC [ ]mm, AC [ ]mm, FL [ ]mm. Avg age: [ ] weeks [ ] days. Weight: [ ] (± [ ] Gms). Presentation: [ ]. Placenta: [ ] Gr-[ ]. Liquor: Adequate. Movement: Present.' },
+      { key: 'triplet_b', label: 'TRIPLET-B', normal: 'FHR: [ ] bpm. Biometry: BPD [ ]mm, HC [ ]mm, AC [ ]mm, FL [ ]mm. Avg age: [ ] weeks [ ] days. Weight: [ ] (± [ ] Gms). Presentation: [ ]. Placenta: [ ] Gr-[ ]. Liquor: Adequate. Movement: Present.' },
+      { key: 'triplet_c', label: 'TRIPLET-C', normal: 'FHR: [ ] bpm. Biometry: BPD [ ]mm, HC [ ]mm, AC [ ]mm, FL [ ]mm. Avg age: [ ] weeks [ ] days. Weight: [ ] (± [ ] Gms). Presentation: [ ]. Placenta: [ ] Gr-[ ]. Liquor: Adequate. Movement: Present.' },
+      { key: 'conclusion', label: 'CONCLUSION & EDD', normal: 'EDD: [ ]. No gross fetal congenital anomalies detected.' },
+    ]
+  },
+  {
+    key: 'ob-genetic', label: 'Genetic / Anomaly Scan', title: 'GENETIC OBS ANOMALY', sex: 'F', group: 'ob',
+    technique: 'Transabdominal sonography performed.',
+    allNormalImpression: ['Single live intrauterine pregnancy.', 'No gross structural anomalies detected.', 'Repeated anomaly scan after 20-22 weeks.'],
+    organs: [
+      { key: 'biometry', label: 'FETAL BIOMETRY', normal: 'BPD: [ ]mm, HC: [ ]mm, AC: [ ]mm, FL: [ ]mm. Mean GA: [ ] weeks [ ] days. EDD: [ ]. Fetal Weight: [ ] gms.' },
+      { key: 'anatomy', label: 'ANATOMY SURVEY', normal: 'HEAD: Normal thalami, lateral ventricles. FACE: Normal anatomy, nasal bone present. HEART: 4-chamber view normal, outflow tracts normal. SPINE: Intact, no meningocele. ABDOMEN: Stomach, bladder, kidneys normal. LIMBS: Normal dimensions.' },
+      { key: 'placenta_liquor', label: 'PLACENTA & LIQUOR', normal: 'Placenta: [ ] located, Grade-[ ]. Liquor: Adequate. Cord: No loop around neck. / Single loop around neck.' },
+      { key: 'markers', label: 'GENETIC MARKERS', normal: 'Nuchal fold: Normal. Short femur/humerus: None. Pyelectasis: None / Present (R: [ ]mm, L: [ ]mm). Hyperechoic bowel: None. Echogenic intracardiac foci: None. Major abnormality: None.' },
+    ]
+  },
+  {
+    key: 'ob-doppler', label: 'Fetal Doppler', title: 'FETAL DOPPLER', sex: 'F', group: 'ob',
+    technique: 'Transabdominal color Doppler sonography performed.',
+    allNormalImpression: ['Single live intrauterine pregnancy.', 'Color doppler study suggestive of normal feto-placental flow.'],
+    organs: [
+      { key: 'fetus', label: 'FETUS & BIOMETRY', normal: 'Single live intrauterine fetus in [ ] presentation. FHR: [ ] bpm. AFI: [ ] cm (Normal 8-24cm). Biometry: BPD [ ]mm, HC [ ]mm, AC [ ]mm, FL [ ]mm. Mean GA: [ ] weeks. EDD: [ ].' },
+      { key: 'placenta', label: 'PLACENTA & CORD', normal: 'Placenta: [ ] located, Grade-[ ]. Cord: Not surrounding neck. / Single loop around neck. Three-vessel system seen. Internal OS closed.' },
+      { key: 'doppler', label: 'DOPPLER VELOCIMETRY', normal: 'Umbilical Artery: PSV [ ], EDV [ ], S/D [ ], RI [ ], PI [ ]. MCA: PSV [ ], EDV [ ], S/D [ ], RI [ ], PI [ ]. Rt Uterine A: PSV [ ], RI [ ]. Lt Uterine A: PSV [ ], RI [ ].' },
+      { key: 'cpr', label: 'CPR & CONCLUSION', normal: 'Cerebroplacental ratio (MCA PI / UA PI): [ ] (Normal > 1.04). MCA/Umb S/D ratio: [ ] (Normal > 1). Conclusion: Normal feto-placental flow.' },
+    ]
+  },
+  {
+    key: 'ob-doppler-twin', label: 'Fetal Doppler (Twin)', title: 'FETAL DOPPLER TWIN', sex: 'F', group: 'ob',
+    technique: 'Transabdominal color Doppler sonography performed.',
+    allNormalImpression: ['Twin intrauterine pregnancy.', 'Normal fetal doppler study for both fetuses.'],
+    organs: [
+      { key: 'twins', label: 'TWIN A & B SURVEY', normal: 'Twin-A in [ ] presentation, FHR [ ] bpm. Twin-B in [ ] presentation, FHR [ ] bpm. Biometry tables for both fetuses completed.' },
+      { key: 'doppler_a', label: 'DOPPLER TWIN-A', normal: 'Umbilical Artery: S/D [ ], RI [ ], PI [ ]. MCA: S/D [ ], RI [ ], PI [ ]. CPR: [ ] (Normal > 1.04).' },
+      { key: 'doppler_b', label: 'DOPPLER TWIN-B', normal: 'Umbilical Artery: S/D [ ], RI [ ], PI [ ]. MCA: S/D [ ], RI [ ], PI [ ]. CPR: [ ] (Normal > 1.04).' },
+      { key: 'uterine', label: 'UTERINE ARTERIES', normal: 'Rt Uterine A: PSV [ ], RI [ ]. Lt Uterine A: PSV [ ], RI [ ]. No diastolic notch.' },
+    ]
+  },
+  {
+    key: 'ob-fetal-echo', label: 'Fetal Echo', title: 'FETAL ECHOCARDIOGRAPHY', sex: 'F', group: 'ob',
+    technique: 'Transabdominal fetal echocardiography performed.',
+    allNormalImpression: ['Single live intrauterine fetus.', 'No significant cardiac abnormality detected.'],
+    organs: [
+      { key: 'situs', label: 'SITUS & AXIS', normal: 'Viscero-atrial situs solitus. Cardiac apex towards left at approximately [ ] degree axis. Levocardia.' },
+      { key: 'concordance', label: 'CONCORDANCE & CHAMBERS', normal: 'D-looped ventricles. Normally related great vessels. Veno-atrial, atrio-ventricular, and ventriculo-great vessel concordance preserved. Chamber dimensions normal.' },
+      { key: 'structures', label: 'SEPTA & VALVES', normal: 'Foramen ovale visualized with flap opening into left atrium. IVS intact. Ductus arteriosus patent with normal waveform. Cardiac valves normal structurally and functionally.' },
+      { key: 'conclusion', label: 'CONCLUSION & ADVICE', normal: 'No ASD, VSD, PDA. No chamber dilatation. Normal LV/RV function. Advice: Post-natal echocardiography. Note: All cardiac anomalies cannot be detected prenatally.' },
+    ]
+  },
+  {
+    key: 'ob-bpp', label: 'Biophysical Profile', title: 'FETAL BPP SCAN', sex: 'F', group: 'ob',
+    technique: 'Transabdominal sonography performed.',
+    allNormalImpression: ['Single live intrauterine pregnancy.', 'Normal biophysical profile score (10/10).'],
+    organs: [
+      { key: 'fetus', label: 'FETUS & BIOMETRY', normal: 'Single live intrauterine fetus in [ ] presentation. FHR: [ ] bpm. Biometry: BPD [ ]mm, HC [ ]mm, AC [ ]mm, FL [ ]mm. Mean GA: [ ] weeks. EDD: [ ]. Fetal Weight: [ ] gms.' },
+      { key: 'placenta', label: 'PLACENTA & LIQUOR', normal: 'Placenta: [ ] located, Grade-[ ]. Liquor: AFI [ ] cm. Internal OS closed.' },
+      { key: 'bpp', label: 'BIOPHYSICAL SCORE', normal: 'Fetal breathing: 2. Fetal movement: 2. Fetal tone: 2. NST (Reactivity): 2. Amniotic fluid: 2. Total Score: 10/10.' },
+    ]
+  },
+  {
+    key: 'ob-bpp-twin', label: 'Biophysical Profile (Twin)', title: 'FETAL BPP TWIN', sex: 'F', group: 'ob',
+    technique: 'Transabdominal sonography performed.',
+    allNormalImpression: ['Twin intrauterine pregnancy.', 'Normal biophysical profile score for both fetuses.'],
+    organs: [
+      { key: 'twins', label: 'TWIN A & B SURVEY', normal: 'Twin-A in [ ] presentation. Twin-B in [ ] presentation. Biometry and weights calculated for both.' },
+      { key: 'bpp_a', label: 'BPP TWIN-A', normal: 'Fetal breathing: 2. Movement: 2. Tone: 2. NST: 2. AFV: 2. Total: 10/10.' },
+      { key: 'bpp_b', label: 'BPP TWIN-B', normal: 'Fetal breathing: 2. Movement: 2. Tone: 2. NST: 2. AFV: 2. Total: 10/10.' },
+      { key: 'placenta', label: 'PLACENTA & LIQUOR', normal: 'Placenta: [ ] located, Grade-[ ]. Liquor: Adequate. Internal OS closed.' },
+    ]
+  },
+  // ── Gynecology ─────────────────────────────────────────────────────────
+  {
+    key: 'sis-ssg', label: 'Saline Infusion Sonography', title: 'SIS / SSG', sex: 'F', group: 'gyn',
+    technique: 'Transvaginal sonography with saline infusion performed.',
+    allNormalImpression: ['Normal uterine cavity.', 'Free spillage of saline through both tubes.'],
+    organs: [
+      { key: 'uterus', label: 'UTERUS', normal: 'Uterus [ ] anteverted (size [ ] x [ ] x [ ] mm). Endometrium [ ] mm, normal. Cervix normal.' },
+      { key: 'right_tube', label: 'RIGHT TUBE', normal: 'Right fallopian tube normal in caliber. Free peritoneal spillage of saline seen. / No spillage seen.' },
+      { key: 'left_tube', label: 'LEFT TUBE', normal: 'Left fallopian tube normal in caliber. Free peritoneal spillage of saline seen. / No spillage seen. / Could not be evaluated.' },
+      { key: 'pod', label: 'P.O.D', normal: 'No pre-procedure POD collection. Mild collection in post-saline scan.' },
+    ]
+  },
+  {
+    key: 'fibroid-mapping', label: 'Fibroid Mapping', title: 'FIBROID MAPPING', sex: 'F', group: 'gyn',
+    technique: 'Transabdominal / Transvaginal sonography performed.',
+    allNormalImpression: ['Uterus normal in size and echotexture.', 'No fibroids seen.'],
+    organs: [
+      { key: 'uterus', label: 'UTERUS', normal: 'Uterus [ ] anteverted (size [ ] x [ ] x [ ] mm). Endometrial thickness [ ] mm. Cervix normal.' },
+      { key: 'mapping', label: 'FIBROID TABLE', normal: 'S.No | Location & Type | Size | FIGO | Dist. from fundus | Dist. from endometrium. [Repeatable rows for each fibroid].' },
+    ]
+  },
+  {
+    key: 'follicular', label: 'Follicular Monitoring', title: 'FOLLICULAR MONITORING', sex: 'F', group: 'gyn',
+    technique: 'Transvaginal sonography performed.',
+    allNormalImpression: ['Normal follicular growth.', 'Dominant follicle seen.'],
+    organs: [
+      { key: 'tracking', label: 'FOLLICULAR TRACKING', normal: 'Date & Day | Endometrial Thickness | Right Ovary | Left Ovary | P.O.D. [Repeatable rows for each cycle day]. Dominant follicle: [ ] x [ ] mm.' },
+    ]
+  },
+  // ─ MSK / Small Parts (Side-Variable Engine) ───────────────────────────
+  {
+    key: 'inguinal', label: 'Inguinal Region', title: 'USG INGUINAL REGION', sex: 'ANY', group: 'msk',
+    technique: 'High-frequency linear transducer used.',
+    allNormalImpression: ['No significant sonographic abnormality detected.', 'No evidence of inguinal/femoral hernia.'],
+    organs: [
+      { key: 'canal', label: 'INGUINAL CANAL', normal: 'Inguinal canal appears normal in caliber and echotexture.' },
+      { key: 'hernia', label: 'HERNIA', normal: 'No evidence of inguinal or femoral hernia at rest or during Valsalva maneuver.' },
+      { key: 'mass', label: 'MASS & COLLECTION', normal: 'No focal cystic or solid mass lesion. No localized collection or abnormal fluid.' },
+      { key: 'nodes', label: 'LYMPH NODES', normal: 'No significant inguinal lymphadenopathy.' },
+      { key: 'soft_tissue', label: 'SOFT TISSUE', normal: 'Visualized subcutaneous soft tissues and underlying musculature unremarkable.' },
+    ]
+  },
+  {
+    key: 'hip', label: 'Hip Joint', title: 'USG HIP JOINT', sex: 'ANY', group: 'msk',
+    technique: 'High-frequency linear transducer used.',
+    allNormalImpression: ['Unremarkable ultrasound examination of the hip.'],
+    organs: [
+      { key: 'joint', label: 'JOINT & LABRUM', normal: 'Hip joint normal without effusion or synovial hypertrophy. Anterior labrum unremarkable.' },
+      { key: 'iliopsoas', label: 'ILIOPSOAS', normal: 'No iliopsoas bursal distention or snapping iliopsoas tendon on dynamic imaging.' },
+      { key: 'tendons', label: 'ANTERIOR TENDONS', normal: 'Rectus femoris, sartorius, and adductors normal.' },
+      { key: 'lateral', label: 'LATERAL HIP', normal: 'Lateral hip normal. No abnormal bursal distention around greater trochanter.' },
+      { key: 'gluteal', label: 'GLUTEAL TENDONS', normal: 'Gluteus minimus and medius tendons normal. No abnormal snapping on dynamic evaluation.' },
+    ]
+  },
+  {
+    key: 'elbow', label: 'Elbow', title: 'USG ELBOW', sex: 'ANY', group: 'msk',
+    technique: 'High-frequency linear transducer used.',
+    allNormalImpression: ['Normal ultrasound study of the elbow.'],
+    organs: [
+      { key: 'bones', label: 'BONY CONTOURS', normal: 'Distal humerus, proximal radius, and ulna appear normal. Joint space well maintained.' },
+      { key: 'effusion', label: 'EFFUSION', normal: 'No evidence of joint effusion.' },
+      { key: 'tendons', label: 'TENDONS', normal: 'Common flexor/extensor tendons normal. Triceps and biceps tendon insertions normal.' },
+      { key: 'bursa', label: 'BURSA', normal: 'No evidence of bursitis.' },
+      { key: 'neurovascular', label: 'NEUROVASCULAR', normal: 'Neurovascular structures unremarkable.' },
+    ]
+  },
+  {
+    key: 'knee', label: 'Knee', title: 'USG KNEE', sex: 'ANY', group: 'msk',
+    technique: 'High-frequency linear transducer used.',
+    allNormalImpression: ['Unremarkable ultrasound examination of the knee.'],
+    organs: [
+      { key: 'extensor', label: 'EXTENSOR MECHANISM', normal: 'Quadriceps tendon, patella, and patellar tendon normal without bursal abnormalities.' },
+      { key: 'effusion', label: 'EFFUSION', normal: 'No significant joint effusion or synovial hypertrophy.' },
+      { key: 'ligaments', label: 'COLLATERALS', normal: 'Medial and lateral collateral ligaments normal.' },
+      { key: 'lateral', label: 'LATERAL STRUCTURES', normal: 'Iliotibial tract, biceps femoris, popliteus tendon, and common peroneal nerve unremarkable.' },
+      { key: 'posterior', label: 'POSTERIOR', normal: 'No Baker cyst. Limited evaluation of menisci unremarkable.' },
+    ]
+  },
+  {
+    key: 'calf', label: 'Calf', title: 'USG CALF', sex: 'ANY', group: 'msk',
+    technique: 'High-frequency linear transducer with Doppler used.',
+    allNormalImpression: ['Normal study.', 'No DVT or varicosity.'],
+    organs: [
+      { key: 'arteries', label: 'ARTERIES', normal: 'Popliteal artery and dorsalis pedis artery show normal flow pattern and peak systolic velocity.' },
+      { key: 'veins', label: 'VEINS', normal: 'Deep femoral vein shows normal diameter and phasicity.' },
+      { key: 'muscles', label: 'MUSCLES', normal: 'Calf muscles normal in bulk and echogenicity.' },
+      { key: 'pathology', label: 'PATHOLOGY', normal: 'No subcutaneous edema. No focal mass/collection. No DVT or varicosity.' },
+    ]
+  },
+  {
+    key: 'foot', label: 'Foot', title: 'USG FOOT', sex: 'ANY', group: 'msk',
+    technique: 'High-frequency linear transducer used.',
+    allNormalImpression: ['Normal USG study of the foot.'],
+    organs: [
+      { key: 'soft_tissue', label: 'SOFT TISSUE', normal: 'Normal echogenicity, no edema or masses.' },
+      { key: 'tendons', label: 'TENDONS', normal: 'Achilles, flexor/extensor tendons intact, normal fibrillary pattern, no tenosynovitis.' },
+      { key: 'bones', label: 'BONES', normal: 'Cortical surfaces intact, no erosions or periosteal reaction.' },
+      { key: 'joints', label: 'JOINTS', normal: 'No effusion, normal joint spaces. No focal fluid collections or cystic lesions.' },
+    ]
+  },
+  {
+    key: 'thigh', label: 'Thigh', title: 'USG THIGH', sex: 'ANY', group: 'msk',
+    technique: 'High-frequency linear transducer with Doppler used.',
+    allNormalImpression: ['Normal USG study of the thigh.'],
+    organs: [
+      { key: 'subcutis', label: 'SUBCUTIS', normal: 'Normal subcutaneous tissue.' },
+      { key: 'muscles', label: 'MUSCLES', normal: 'Normal muscles of all compartments.' },
+      { key: 'mass', label: 'MASS & FLOW', normal: 'No focal mass or collection. Color Doppler shows normal flow.' },
+    ]
+  },
+  {
+    key: 'arm-forearm', label: 'Arm & Forearm', title: 'USG ARM & FOREARM', sex: 'ANY', group: 'msk',
+    technique: 'High-frequency linear transducer with Doppler used.',
+    allNormalImpression: ['Normal study of arm and forearm.', 'Neurovascular bundles normal.'],
+    organs: [
+      { key: 'skin', label: 'SKIN & SUBCUTIS', normal: 'Normal thickness and echogenicity. No edema, collection, or emphysema.' },
+      { key: 'muscles', label: 'MUSCLES', normal: 'Biceps, triceps, brachialis, and forearm flexor/extensor compartments normal. No hematoma or tear.' },
+      { key: 'tendons', label: 'TENDONS', normal: 'Distal biceps and common flexor/extensor tendons normal. No tendinosis or tenosynovitis.' },
+      { key: 'neurovascular', label: 'NEUROVASCULAR', normal: 'Brachial, radial, ulnar arteries show normal flow. Median, ulnar, radial nerves normal in caliber.' },
+      { key: 'bones', label: 'BONES', normal: 'Cortical outline of humerus, radius, ulna smooth and intact. No periosteal reaction.' },
+    ]
+  },
+  {
+    key: 'wrist', label: 'Wrist', title: 'USG WRIST', sex: 'ANY', group: 'msk',
+    technique: 'High-frequency linear transducer used.',
+    allNormalImpression: ['Unremarkable ultrasound examination of the wrist.'],
+    organs: [
+      { key: 'median_nerve', label: 'MEDIAN NERVE', normal: 'Median nerve unremarkable, measuring [ ] mm² at wrist crease and [ ] mm² at pronator quadratus.' },
+      { key: 'joints', label: 'JOINTS', normal: 'Radiocarpal, midcarpal, distal radioulnar joints normal without effusion.' },
+      { key: 'tendons', label: 'TENDONS', normal: 'Wrist tendons normal without tear or tenosynovitis.' },
+      { key: 'ligaments', label: 'SCAPHOLUNATE', normal: 'Normal dorsal component of scapholunate ligament.' },
+      { key: 'cysts', label: 'GANGLION & GUYON', normal: 'No dorsal or volar ganglion cyst. Unremarkable Guyon canal.' },
+    ]
+  },
+  {
+    key: 'shoulder', label: 'Shoulder', title: 'USG SHOULDER', sex: 'ANY', group: 'msk',
+    technique: 'High-frequency linear transducer used.',
+    allNormalImpression: ['Unremarkable ultrasound examination of the shoulder.', 'No rotator cuff abnormality.'],
+    organs: [
+      { key: 'biceps', label: 'BICEPS TENDON', normal: 'Biceps brachii long head tendon normal without tendinosis, tear, or subluxation.' },
+      { key: 'rotator_cuff', label: 'ROTATOR CUFF', normal: 'Supraspinatus, infraspinatus, subscapularis, teres minor tendons normal.' },
+      { key: 'bursa', label: 'BURSA & IMPINGEMENT', normal: 'No subacromial-subdeltoid bursal abnormality. No impingement on dynamic maneuvers.' },
+      { key: 'labrum', label: 'LABRUM', normal: 'Posterior labrum unremarkable.' },
+    ]
+  },
+  {
+    key: 'scapula', label: 'Scapula', title: 'USG SCAPULA', sex: 'ANY', group: 'msk',
+    technique: 'High-frequency linear transducer used.',
+    allNormalImpression: ['Normal scapular ultrasound.', 'No fracture or bony lesion.'],
+    organs: [
+      { key: 'bone', label: 'BONY CORTEX', normal: 'Scapula cortex continuous and intact. No erosions or periosteal reaction.' },
+      { key: 'muscles', label: 'MUSCLES', normal: 'Supraspinatus, infraspinatus, teres minor, deltoid show normal echogenicity.' },
+      { key: 'collection', label: 'COLLECTION', normal: 'No fluid collection, hematoma, or soft-tissue mass.' },
+      { key: 'joint', label: 'GLENOHUMERAL JOINT', normal: 'Joint space unremarkable; no effusion.' },
+    ]
+  },
+  {
+    key: 'gluteal', label: 'Gluteal Region', title: 'USG GLUTEAL REGION', sex: 'ANY', group: 'msk',
+    technique: 'High-frequency linear transducer used.',
+    allNormalImpression: ['Normal ultrasound examination of the gluteal region.'],
+    organs: [
+      { key: 'soft_tissue', label: 'SOFT TISSUE', normal: 'Homogeneous and symmetrical. No focal lesions, masses, or cysts. Subcutaneous fat normal.' },
+      { key: 'muscles', label: 'GLUTEAL MUSCLES', normal: 'Gluteus maximus, medius, minimus normal in size and echogenicity. Preserved fibrillar pattern.' },
+      { key: 'bone', label: 'BONY CORTEX', normal: 'Iliac wing and femoral greater trochanter show normal acoustic shadowing. No cortical irregularity.' },
+    ]
+  },
+  {
+    key: 'axilla', label: 'Axilla', title: 'USG AXILLA', sex: 'ANY', group: 'msk',
+    technique: 'High-frequency linear transducer with Doppler used.',
+    allNormalImpression: ['Normal axillary ultrasound.', 'No lymphadenopathy.'],
+    organs: [
+      { key: 'nodes', label: 'LYMPH NODES', normal: 'No enlarged nodes; size ≤ 5mm, normal hilar architecture.' },
+      { key: 'vessels', label: 'VESSELS', normal: 'Axillary artery and vein patent, normal Doppler flow.' },
+      { key: 'soft_tissue', label: 'SOFT TISSUE', normal: 'Homogeneous subcutaneous fat, no masses or edema.' },
+      { key: 'adjacent', label: 'ADJACENT STRUCTURES', normal: 'Pectoralis, latissimus dorsi unremarkable.' },
+    ]
+  },
+  {
+    key: 'neck-post', label: 'Back of Neck', title: 'USG BACK OF NECK', sex: 'ANY', group: 'msk',
+    technique: 'High-frequency linear transducer with Doppler used.',
+    allNormalImpression: ['Normal ultrasound of the back of neck.'],
+    organs: [
+      { key: 'mass', label: 'MASS & COLLECTION', normal: 'No focal mass or collection.' },
+      { key: 'skin', label: 'SKIN & SUBCUTIS', normal: 'Normal skin and subcutaneous tissue.' },
+      { key: 'muscles', label: 'MUSCLES', normal: 'Muscles of the back of neck normal.' },
+      { key: 'doppler', label: 'DOPPLER', normal: 'Color Doppler shows normal vascularity.' },
+    ]
+  },
+  {
+    key: 'parotid', label: 'Parotid Gland', title: 'USG PAROTID GLAND', sex: 'ANY', group: 'msk',
+    technique: 'High-frequency linear transducer used.',
+    allNormalImpression: ['Normal ultrasound of the parotid glands.'],
+    organs: [
+      { key: 'glands', label: 'PAROTID GLANDS', normal: 'Bilateral parotid glands of normal size and shape. Homogeneous echotexture.' },
+      { key: 'duct', label: 'DUCT', normal: 'Main parotid duct not dilated; no intraductal calculi.' },
+      { key: 'nodes', label: 'NODES & SOFT TISSUE', normal: 'No periparotid lymphadenopathy or surrounding soft-tissue edema.' },
+    ]
+  },
+  {
+    key: 'ankle', label: 'Ankle', title: 'USG ANKLE', sex: 'ANY', group: 'msk',
+    technique: 'High-frequency linear transducer used.',
+    allNormalImpression: ['Unremarkable ultrasound examination of the ankle.'],
+    organs: [
+      { key: 'anterior', label: 'ANTERIOR COMPARTMENT', normal: 'Tibialis anterior, extensor hallucis longus, extensor digitorum longus normal.' },
+      { key: 'medial', label: 'MEDIAL COMPARTMENT', normal: 'Tibialis posterior, flexor digitorum longus, flexor hallucis longus, tibial nerve, deltoid ligament normal.' },
+      { key: 'lateral', label: 'LATERAL COMPARTMENT', normal: 'Peroneus brevis/longus, ATFL, CFL, anterior tibiofibular ligaments normal.' },
+      { key: 'posterior', label: 'POSTERIOR COMPARTMENT', normal: 'Achilles tendon and plantar fascia normal.' },
+    ]
+  },
+  {
+    key: 'achilles', label: 'Achilles Tendon', title: 'USG ACHILLES TENDON', sex: 'ANY', group: 'msk',
+    technique: 'High-frequency linear transducer used.',
+    allNormalImpression: ['Normal Achilles tendon ultrasound.'],
+    organs: [
+      { key: 'tendon', label: 'TENDON FIBERS', normal: 'Continuous, uniform thickness, normal fibrillary echotexture. No tears or fluid.' },
+      { key: 'thickness', label: 'THICKNESS', normal: 'Proximal: [ ] mm. Mid-portion: [ ] mm. Distal: [ ] mm.' },
+      { key: 'paratenon', label: 'PARATENON & BURSA', normal: 'Unremarkable. No retro-calcaneal or pre-Achilles bursitis.' },
+      { key: 'insertion', label: 'INSERTION', normal: 'Calcaneal insertion intact, no enthesopathy.' },
+    ]
+  },
+  // ─ GU / Head ──────────────────────────────────────────────────────────
+  {
+    key: 'penis', label: 'Penis', title: 'USG PENIS', sex: 'M', group: 'gu',
+    technique: 'High-frequency linear transducer with Doppler used.',
+    allNormalImpression: ['Normal study.'],
+    organs: [
+      { key: 'corpora', label: 'CORPORA', normal: 'Corpus spongiosum and both corpora cavernosa appear normal.' },
+      { key: 'fascia', label: 'TUNICA & FASCIA', normal: 'Tunica albuginea and Buck’s fascia appear normal.' },
+      { key: 'dorsal_vessels', label: 'DORSAL VESSELS', normal: 'Dorsal penile arteries and deep dorsal vein show normal flow and spectral pattern.' },
+      { key: 'cavernosal', label: 'CAVERNOSAL ARTERY', normal: 'Normal flow, velocity, and spectral pattern (flaccid state). PSV: [ ] cm/sec. Diameter R: [ ] cm, L: [ ] cm.' },
+    ]
+  },
+  {
+    key: 'scrotum', label: 'Scrotum', title: 'USG SCROTUM', sex: 'M', group: 'gu',
+    technique: 'High-frequency linear transducer used.',
+    allNormalImpression: ['Normal study.'],
+    organs: [
+      { key: 'right_testis', label: 'RIGHT TESTIS', normal: 'Normal in size (~41 x 22 mm), homogenous echotexture. No hydrocele/varicocele. Epididymis normal. No cyst/calcification.' },
+      { key: 'left_testis', label: 'LEFT TESTIS', normal: 'Normal in size (~41 x 22 mm), homogenous echotexture. No hydrocele/varicocele. Epididymis normal. No cyst/calcification.' },
+      { key: 'wall', label: 'SCROTAL WALL', normal: 'No scrotal wall thickening or collection.' },
+    ]
+  },
+  {
+    key: 'orbit', label: 'Orbit / Eye', title: 'USG ORBIT', sex: 'ANY', group: 'head',
+    technique: 'High-frequency linear transducer with Doppler used.',
+    allNormalImpression: ['Normal ocular ultrasound.'],
+    organs: [
+      { key: 'globe', label: 'GLOBE & ANTERIOR', normal: 'Globe contour regular. Anterior chamber clear. Lens in normal position, no opacities. / Lens opaque (Cataract).' },
+      { key: 'vitreous_retina', label: 'VITREOUS & RETINA', normal: 'Vitreous cavity anechoic. Retina attached throughout; no detachments or tears.' },
+      { key: 'retrobulbar', label: 'RETROBULBAR & NERVE', normal: 'Optic nerve head and retro-bulbar orbital tissues within normal limits.' },
+      { key: 'eom', label: 'EXTRA-OCULAR MUSCLES', normal: 'EOMs show no abnormality. Color Doppler shows normal vascularity.' },
+    ]
+  },
+  {
+    key: 'forehead', label: 'Forehead', title: 'USG FOREHEAD', sex: 'ANY', group: 'head',
+    technique: 'High-frequency linear transducer with Doppler used.',
+    allNormalImpression: ['Normal forehead scan.'],
+    organs: [
+      { key: 'skin', label: 'SKIN & SUBCUTIS', normal: 'Uniform thickness, normal echogenicity. No focal lesions, cysts, or fluid collection.' },
+      { key: 'bone', label: 'FRONTAL BONE', normal: 'Contour intact with normal acoustic shadowing.' },
+      { key: 'doppler', label: 'DOPPLER', normal: 'No abnormal vascularity on color Doppler.' },
+    ]
+  },
+  // ── Vascular Doppler ───────────────────────────────────────────────────
+  {
+    key: 'doppler-liver', label: 'Liver Doppler', title: 'USG LIVER DOPPLER', sex: 'ANY', group: 'vascular',
+    technique: 'Curvilinear and linear transducers with Color/Spectral Doppler used.',
+    allNormalImpression: ['Normal liver Doppler study.'],
+    organs: [
+      { key: 'liver_gs', label: 'LIVER (GREY SCALE)', normal: 'Normal size, echogenicity, echotexture. IHBR not dilated. No perihepatic collection.' },
+      { key: 'portal', label: 'PORTAL VEIN', normal: 'Portal vein measures [ ] mm. Hepatopetal flow. No thrombosis.' },
+      { key: 'hepatic_artery', label: 'HEPATIC ARTERY', normal: 'Normal flow. RI: [ ]. PSV: [ ] cm/s.' },
+      { key: 'ivc_hepatic_vein', label: 'IVC & HEPATIC VEINS', normal: 'IVC: No thrombosis, normal flow. Hepatic veins: Normal flow, no stenosis/kinking.' },
+      { key: 'spleen', label: 'SPLEEN', normal: 'Spleen measures [ ] mm. Splenic vein measures [ ] mm.' },
+    ]
+  },
+  {
+    key: 'doppler-splenoportal', label: 'Splenoportal Doppler', title: 'USG SPLENOPORTAL DOPPLER', sex: 'ANY', group: 'vascular',
+    technique: 'Curvilinear and linear transducers with Color/Spectral Doppler used.',
+    allNormalImpression: ['Normal splenoportal Doppler study.', 'No portal hypertension.'],
+    organs: [
+      { key: 'liver', label: 'LIVER', normal: 'Normal size, echotexture. IHBR not dilated. No perihepatic collection.' },
+      { key: 'portal', label: 'PORTAL VEIN', normal: 'Measures [ ] mm with hepatopetal flow. Mean velocity [ ] cm/s. No thrombosis.' },
+      { key: 'spleen', label: 'SPLEEN & SPLENIC VEIN', normal: 'Spleen measures [ ] mm. Splenic vein measures [ ] mm with hepatopetal flow. No thrombosis.' },
+      { key: 'smv', label: 'SMV', normal: 'Superior mesenteric vein normal in caliber with hepatopetal flow. No thrombosis.' },
+      { key: 'hepatic_veins', label: 'HEPATIC VEINS & IVC', normal: 'Right, middle, left hepatic veins visualized with hepatopetal flow. IVC normal caliber and respiratory variation.' },
+      { key: 'collaterals', label: 'COLLATERALS & ASCITES', normal: 'Collaterals: Absent. No ascites.' },
+    ]
+  },
+  {
+    key: 'doppler-renal', label: 'Renal Arterial Doppler', title: 'USG RENAL DOPPLER', sex: 'ANY', group: 'vascular',
+    technique: 'Curvilinear and linear transducers with Color/Spectral Doppler used.',
+    allNormalImpression: ['Normal renal Doppler study.'],
+    organs: [
+      { key: 'kidney_gs', label: 'KIDNEY MORPHOLOGY', normal: 'Both kidneys normal in size. No pelvicalyceal dilatation. Normal parenchymal echogenicity. Thickness R: [ ] cm, L: [ ] cm.' },
+      { key: 'parenchymal', label: 'PARENCHYMAL FLOW', normal: 'Right and left renal parenchymal flow normal.' },
+      { key: 'segmental', label: 'SEGMENTAL FLOW', normal: 'No damping of flow in either kidney.' },
+      { key: 'arterial', label: 'RENAL ARTERIAL FLOW', normal: 'RI: Normal bilateral waveform. PSV: Normal bilaterally. RAR: Within normal limits. Spectral waveform normal. No AV fistula.' },
+    ]
+  },
+  {
+    key: 'doppler-temporal', label: 'Temporal Artery Doppler', title: 'USG TEMPORAL DOPPLER', sex: 'ANY', group: 'vascular',
+    technique: 'High-frequency linear transducer with Color/Spectral Doppler used.',
+    allNormalImpression: ['No sonographic evidence of Giant Cell Arteritis.'],
+    organs: [
+      { key: 'artery', label: 'TEMPORAL ARTERY', normal: 'Superficial temporal artery and branches visualized along course.' },
+      { key: 'halo', label: 'HALO SIGN', normal: 'No significant mural thickening or concentric hypoechoic periarterial \'Halo sign\'.' },
+      { key: 'lumen', label: 'LUMEN & FLOW', normal: 'No luminal narrowing, stenosis, occlusion, or thrombosis. Color Doppler flow maintained. PSV within normal limit.' },
+      { key: 'aneurysm', label: 'ANEURYSM', normal: 'No focal aneurysmal dilatation. Adjacent soft tissue unremarkable.' },
+    ]
+  },
+  {
+    key: 'kidney-transplant', label: 'Transplant Kidney Doppler', title: 'USG TRANSPLANT KIDNEY', sex: 'ANY', group: 'vascular',
+    technique: 'Curvilinear and linear transducers with Color/Spectral Doppler used.',
+    allNormalImpression: ['Normal renal color Doppler study of transplant kidney.'],
+    organs: [
+      { key: 'native', label: 'NATIVE KIDNEYS', normal: 'Native kidneys are atrophic with increased cortical echogenicity.' },
+      { key: 'graft', label: 'TRANSPLANT KIDNEY', normal: '[Right/Left] lower quadrant transplant kidney identified. Measures [ ] cm with normal cortical thickness and echogenicity. No perinephric fluid or hydronephrosis.' },
+      { key: 'anastomoses', label: 'ANASTOMOSES', normal: 'Arterial and venous anastomoses have no evidence of stenosis. Doppler flow to periphery.' },
+      { key: 'velocities', label: 'VELOCITIES & RI', normal: 'Renal artery PSV: [ ] cm/sec (Normal < 200). Intra-renal RI: [ ] to [ ] (Normal < 0.8).' },
+    ]
+  },
+  // ── Soft Tissue / Other ────────────────────────────────────────────────
+  {
+    key: 'umbilicus', label: 'Umbilicus', title: 'USG UMBILICUS', sex: 'ANY', group: 'soft_tissue',
+    technique: 'High-frequency linear transducer with Doppler used.',
+    allNormalImpression: ['Normal umbilical region.'],
+    organs: [
+      { key: 'history', label: 'HISTORY', normal: 'H/o watery discharge from umbilicus.' },
+      { key: 'mass', label: 'MASS & COLLECTION', normal: 'No focal mass/collection deep to umbilicus.' },
+      { key: 'urachus', label: 'URACHUS', normal: 'No deeper connection / patent urachus seen.' },
+      { key: 'doppler', label: 'DOPPLER', normal: 'No significant vascularity on color Doppler.' },
+    ]
+  },
+  {
+    key: 'perineum', label: 'Perineum', title: 'USG PERINEUM', sex: 'ANY', group: 'soft_tissue',
+    technique: 'High-frequency linear transducer used.',
+    allNormalImpression: ['Normal sonographic appearance of perianal soft tissue.'],
+    organs: [
+      { key: 'echotexture', label: 'SOFT TISSUE', normal: 'Perineal soft tissue shows normal echotexture.' },
+      { key: 'sinus', label: 'SINUS / FISTULA', normal: 'No obvious sinus or fistulous tract seen.' },
+      { key: 'muscles', label: 'MUSCLES', normal: 'Adjacent muscles and soft tissue planes preserved.' },
+      { key: 'calcification', label: 'CALCIFICATION', normal: 'No abnormal calcification / foreign body seen.' },
+    ]
+  },
+  {
+    key: 'rectal', label: 'Rectal USG', title: 'RECTAL USG', sex: 'ANY', group: 'soft_tissue',
+    technique: 'Transrectal ultrasound performed.',
+    allNormalImpression: ['Normal rectal wall layers.', 'No focal mass or collection.'],
+    organs: [
+      { key: 'history', label: 'HISTORY', normal: 'Fresh bleeding P/R along with stool.' },
+      { key: 'wall', label: 'RECTAL WALL', normal: 'All layers (mucosa, submucosa, muscularis propria) intact and normal thickness. No mass, collection, or ulceration.' },
+      { key: 'sphincter', label: 'SPHINCTER', normal: 'Anal sphincter complex appears normal.' },
+      { key: 'perirectal', label: 'PERIRECTAL FAT', normal: 'Homogenous; no abnormal lymph nodes or fluid collection.' },
+      { key: 'doppler', label: 'DOPPLER', normal: 'Color Doppler shows normal vascularity.' },
+    ]
+  },
+  {
+    key: 'elastography', label: 'Fibroscan / Elastography', title: 'US LIVER ELASTOGRAPHY', sex: 'ANY', group: 'other',
+    technique: 'Shear Wave Elastography (SWE) performed.',
+    allNormalImpression: ['No evidence of fibrosis.'],
+    organs: [
+      { key: 'liver_gs', label: 'LIVER (GREY SCALE)', normal: 'Homogeneous echo-texture. No space occupying lesion. Biliary channels and portal venous branches normal. Size: [ ] mm.' },
+      { key: 'swe', label: 'SWE MEASUREMENTS', normal: 'Median: [ ] kPa. IQR: [ ] kPa. IQR/Median: [ ].' },
+      { key: 'conclusion', label: 'CONCLUSION & STAGING', normal: 'Conclusion: No e/o fibrosis. / Suggestive of Fibrosis (F2-F3). / Suggestive of Cirrhosis (F4). Note: 15-20% discordance with histology may occur.' },
+    ]
+  },
+  {
+    key: 'mammo', label: 'Mammogram', title: 'MAMMOGRAM BOTH BREASTS', sex: 'F', group: 'xray',
+    technique: 'CC & MLO views performed.',
+    allNormalImpression: ['No mammographic evidence of malignancy - BI-RADS I (Negative).'],
+    organs: [
+      { key: 'right', label: 'RIGHT MAMMOGRAPHY', normal: 'Breast tissue: Fibro-fatty, normal. Mass/Calcifications/Distortion/Asymmetry/Skin thickening: Not detectable. Axillary nodes: None.' },
+      { key: 'left', label: 'LEFT MAMMOGRAPHY', normal: 'Breast tissue: Fibro-fatty, normal. Mass/Calcifications/Distortion/Asymmetry/Skin thickening: Not detectable. Axillary nodes: None.' },
+      { key: 'birads', label: 'BI-RADS CONCLUSION', normal: 'BI-RADS Category: [ ]. Advice: Self breast exam monthly, follow-up yearly. Note: False negative rate ~10%. Dense breast may obscure neoplasm.' },
+    ]
+  },
+  {
+    key: 'echo-pediatric', label: 'Pediatric Echo', title: 'PEDIATRIC ECHOCARDIOGRAPHY', sex: 'ANY', group: 'other',
+    technique: 'Transthoracic echocardiography with Color Doppler performed.',
+    allNormalImpression: ['No ASD, VSD, PDA.', 'Normal cardiac valves and function.'],
+    organs: [
+      { key: 'situs', label: 'SITUS & CONCORDANCE', normal: 'Viscero-atrial situs solitus. AV and VA concordance. Normally related great arteries and coronary arteries.' },
+      { key: 'septa', label: 'SEPTA', normal: 'No ASD, No VSD, No PDA.' },
+      { key: 'chambers_valves', label: 'CHAMBERS & VALVES', normal: 'No chamber dilatation. Cardiac valves normal structurally and functionally.' },
+      { key: 'aorta', label: 'AORTA', normal: 'No coarctation. Normal arch.' },
+      { key: 'function', label: 'VENTRICULAR FUNCTION', normal: 'Normal LV and RV function. LVEF: [ ]%. No vegetation or effusion.' },
+    ]
+  }
+);

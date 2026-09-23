@@ -240,7 +240,7 @@ describe("textExpansion", () => {
   it("matches 'stone' to Cholelithiasis", () => {
     const match = matchSnippet("stone");
     expect(match).not.toBeNull();
-    expect(match!.pathologyKey).toBe("gb_cholelithiasis");
+    expect(match!.pathologyKey).toBe("gb-calculus");
   });
 
   it("matches case-insensitively", () => {

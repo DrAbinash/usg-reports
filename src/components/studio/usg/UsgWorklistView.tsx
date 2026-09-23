@@ -110,17 +110,20 @@ function SexChip({ sex }: { sex: string }) {
 }
 
 function OrderRow({
-  order, onClick, action,
+  order, onClick, action, focused,
 }: {
   order: Order;
   onClick?: () => void;
   action?: React.ReactNode;
+  focused?: boolean;
 }) {
   return (
     <div
+      data-order-id={order.id}
       className={cn(
         "group flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5 transition-all",
         onClick && "cursor-pointer hover:border-primary/40 hover:shadow-[0_2px_12px_-4px_rgba(46,109,164,0.25)]",
+        focused && "border-amber-300 ring-2 ring-amber-200/80 shadow-[0_2px_12px_-4px_rgba(217,119,6,0.35)]",
       )}
       onClick={onClick}
     >
@@ -309,11 +312,14 @@ export function UsgWorklistView() {
     };
   }, [sync]);
 
-  const startReport = async (order: Order, opts?: { rush?: boolean }) => {
+  const startReport = async (order: Order, opts?: { rush?: boolean; preset?: "fatty-g1" }) => {
     const r = await fetch(`/api/usg/worklist/${order.id}/start`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ rushNormal: !!opts?.rush }),
+      body: JSON.stringify({
+        rushNormal: !!opts?.rush || !!opts?.preset,
+        rushPreset: opts?.preset ?? undefined,
+      }),
     })
       .then((x) => x.json())
       .catch(() => null);
@@ -322,9 +328,11 @@ export function UsgWorklistView() {
       return;
     }
     load();
-    if (opts?.rush && r.rushApplied) {
+    if (opts?.preset && r.rushApplied) {
+      toast.success("Opened as NP + Fatty Gr I · no size");
+    } else if (opts?.rush && r.rushApplied) {
       toast.success("Opened as NP · no sizes");
-    } else if (opts?.rush && !r.rushApplied) {
+    } else if ((opts?.rush || opts?.preset) && !r.rushApplied) {
       toast.message("Opened — this study keeps measurement slots");
     }
     openComposer(r.report.id);
@@ -337,6 +345,15 @@ export function UsgWorklistView() {
     if (isObStudyKey(key)) return false;
     const study = getStudy(key);
     return study ? studyAllowsRushNormals(study) : false;
+  };
+
+  /** Abdomen studies with a liver organ — NP + Fatty Gr I one-tap. */
+  const orderAllowsFattyPreset = (order: Order): boolean => {
+    if (!orderAllowsRush(order)) return false;
+    const child = testSuggestsChild(order.testName ?? "");
+    const key = guessStudyKey(order.testName ?? "", order.patientSex === "M" ? "M" : "F", child);
+    const study = getStudy(key);
+    return !!study?.organs.some((o) => o.key === "liver");
   };
 
   const ignore = async (order: Order) => {
@@ -365,6 +382,55 @@ export function UsgWorklistView() {
   const pending = shown.filter((o) => !o.ignored && (o.status === "PENDING" || o.status === "REPORTING"));
   const reported = shown.filter((o) => !o.ignored && o.status === "REPORTED");
   const hidden = shown.filter((o) => o.ignored);
+
+  const [focusIdx, setFocusIdx] = useState(0);
+  useEffect(() => {
+    setFocusIdx((i) => (pending.length === 0 ? 0 : Math.min(i, pending.length - 1)));
+  }, [pending.length]);
+
+  // Peak-time keyboard: j/k move · Enter start · N = NP · F = NP+Fatty
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const typing =
+        !!target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable);
+      if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (pending.length === 0) return;
+      const key = e.key.toLowerCase();
+      if (key === "j" || key === "arrowdown") {
+        e.preventDefault();
+        setFocusIdx((i) => Math.min(i + 1, pending.length - 1));
+        return;
+      }
+      if (key === "k" || key === "arrowup") {
+        e.preventDefault();
+        setFocusIdx((i) => Math.max(i - 1, 0));
+        return;
+      }
+      const focused = pending[focusIdx];
+      if (!focused) return;
+      if (key === "enter") {
+        e.preventDefault();
+        void startReport(focused);
+        return;
+      }
+      if (key === "n" && orderAllowsRush(focused) && !focused.reportId) {
+        e.preventDefault();
+        void startReport(focused, { rush: true });
+        return;
+      }
+      if (key === "f" && orderAllowsFattyPreset(focused) && !focused.reportId) {
+        e.preventDefault();
+        void startReport(focused, { preset: "fatty-g1" });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pending, focusIdx]);
 
   const banner = data
     ? data.careConfigured || data.orthancConfigured
@@ -447,9 +513,18 @@ export function UsgWorklistView() {
 
       {/* To report */}
       <section>
-        <div className="mb-2 flex items-center gap-2">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
           <CheckCircle2 className="h-4 w-4 text-primary" />
           <SectionLabel>To report · {pending.length}</SectionLabel>
+          {pending.length > 0 ? (
+            <span className="text-[10px] text-faint">
+              <kbd className="rounded border bg-card px-1 font-mono text-[9px]">J</kbd>/
+              <kbd className="rounded border bg-card px-1 font-mono text-[9px]">K</kbd> move ·{" "}
+              <kbd className="rounded border bg-card px-1 font-mono text-[9px]">N</kbd> NP ·{" "}
+              <kbd className="rounded border bg-card px-1 font-mono text-[9px]">F</kbd> NP+Fatty ·{" "}
+              <kbd className="rounded border bg-card px-1 font-mono text-[9px]">Enter</kbd> open
+            </span>
+          ) : null}
         </div>
         <div className="space-y-2">
           {pending.length === 0 ? (
@@ -457,11 +532,15 @@ export function UsgWorklistView() {
               {data?.careConfigured ? "Nothing waiting — the list is clear." : "No orders yet. Sync after configuring the CARE ERP."}
             </div>
           ) : (
-            pending.map((o) => (
+            pending.map((o, idx) => (
               <OrderRow
                 key={o.id}
                 order={o}
-                onClick={() => void startReport(o)}
+                focused={idx === focusIdx}
+                onClick={() => {
+                  setFocusIdx(idx);
+                  void startReport(o);
+                }}
                 action={
                   <div className="flex items-center gap-1">
                     {orderAllowsRush(o) && !o.reportId ? (
@@ -473,10 +552,24 @@ export function UsgWorklistView() {
                           e.stopPropagation();
                           void startReport(o, { rush: true });
                         }}
-                        title="Start report as NP · no sizes (peak-time qualitative normals)"
+                        title="Start report as NP · no sizes (keyboard: N)"
                       >
                         <Zap className="mr-1 h-3 w-3" />
                         NP
+                      </Button>
+                    ) : null}
+                    {orderAllowsFattyPreset(o) && !o.reportId ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 border-orange-200 bg-orange-50 px-2 text-[11px] font-semibold text-orange-800 hover:bg-orange-100"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void startReport(o, { preset: "fatty-g1" });
+                        }}
+                        title="Start as NP + Fatty Gr I · no size (keyboard: F)"
+                      >
+                        NP+F
                       </Button>
                     ) : null}
                     {data?.usgFormFEnabled ? (

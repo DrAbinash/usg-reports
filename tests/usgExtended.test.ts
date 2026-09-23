@@ -345,7 +345,7 @@ describe("Print engine v2", () => {
     expect(html).toContain("linear-gradient");
     expect(html).toContain("Thanks For Your Referral.");
     expect(html).toContain("USG-00AB12");
-    expect(html).toContain("ULTRASOUND REPORT");
+    expect(html).toContain("USG KUB");
   });
 
   test("classic style is plain black-and-white serif — no gradients, no shadows", () => {

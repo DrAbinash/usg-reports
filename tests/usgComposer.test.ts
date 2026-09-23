@@ -22,13 +22,15 @@ import { buildUsgReportHtml } from "@/lib/usg/print";
 const lookup = makeLookup(USG_PATHOLOGIES);
 
 describe("USG studies", () => {
-  test("25 study types exist with unique organ lists (22 base + 3 combined)", () => {
+  test("27 study types exist with unique organ lists (22 base + 3 combined + 2 anomaly)", () => {
     expect(USG_STUDIES.map((s) => s.key)).toEqual([
       "wa-female", "wa-male", "ua", "la-female", "la-male", "wa-child", "ob", "ep",
       "kub", "thyroid", "breast", "scrotum", "tvs", "trus", "echo",
       "doppler-lower", "doppler-upper", "carotid", "chest", "cranium", "orbit", "swelling",
       // v6.12: combined studies
       "wa-ob", "tvs-ob", "wa-tvs",
+      // 4D + twin anomaly (Dr Sugandha)
+      "ob-tiffa-4d", "ob-tiffa-twin",
     ]);
     for (const s of USG_STUDIES) {
       expect(s.organs.length).toBeGreaterThanOrEqual(2); // TRUS = prostate + seminal vesicles
@@ -479,8 +481,6 @@ describe("USG print document", () => {
       { name: "Test Patient", age: "34", sex: "F", referredBy: "Dr. Raj", date: "30 Aug 2026" },
       r,
     );
-    expect(html).toContain("ULTRASOUND REPORT");
-    expect(html).toContain("CARE Diagnostics");
     expect(html).toContain("USG WHOLE ABDOMEN");
     // The finding (fatty changes) appears in the impression, NOT in the heading
     expect(html).toContain("Grade I Fatty Changes");

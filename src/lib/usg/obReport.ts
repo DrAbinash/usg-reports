@@ -51,7 +51,7 @@ export function computeObSummary(ob: ObState): ObSummary {
   const perParamGa = perParameterGa(biometry);
   const mean = meanGa(biometry);
   const efwResult = hadlockEfw(biometry).best;
-  const efw = efwResult ? { grams: efwResult.value, tolerance: efwTolerance(efwResult.value) } : null;
+  const efw = efwResult ? { grams: efwResult.efw, tolerance: efwTolerance(efwResult.efw) } : null;
   const gaWeeks = mean ? mean.weeks : undefined;
   const edd = mean ? eddFromGa(mean.weeks, mean.days, ob.scanDate ?? new Date()) : null;
   const afi = afiLabel(ob.liquorAfi, gaWeeks);

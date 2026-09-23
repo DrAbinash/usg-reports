@@ -22,9 +22,11 @@ export type UsgDiffPanelProps = {
   source: DiffSource;
   state: UsgComposerState;
   pathologies: UsgPathologyDef[];
+  /** Fill empty measurement slots from the previous scan. */
+  onCopyForward?: () => void;
 };
 
-export function UsgDiffPanel({ source, state, pathologies }: UsgDiffPanelProps) {
+export function UsgDiffPanel({ source, state, pathologies, onCopyForward }: UsgDiffPanelProps) {
   const [open, setOpen] = useState(true);
 
   const diff: UsgReportDiff | null = useMemo(() => {
@@ -56,6 +58,16 @@ export function UsgDiffPanel({ source, state, pathologies }: UsgDiffPanelProps) 
           Δ vs previous scan{source.serial ? ` — ${source.serial}` : ""} · {source.date}
           <ChevronDown className={cn("h-3 w-3 transition-transform", open && "rotate-180")} />
         </button>
+        {onCopyForward ? (
+          <button
+            type="button"
+            onClick={onCopyForward}
+            className="rounded-full bg-white px-2.5 py-0.5 text-[10.5px] font-semibold text-violet-700 ring-1 ring-violet-200 hover:bg-violet-50"
+            title="Copy empty measurement slots from the previous scan"
+          >
+            Fill empty slots from prior
+          </button>
+        ) : null}
         {total === 0 ? (
           <span className="rounded-full bg-white px-2.5 py-0.5 text-[10.5px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
             no changes yet — identical to the last scan

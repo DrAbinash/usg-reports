@@ -61,12 +61,12 @@ export async function shareReportPdf(
 export function downloadReportPdf(params: {
   reportId: string;
   patientName: string;
-  serial?: number;
+  serial?: number | string;
   date?: string;
 }): void {
   if (!params.reportId) { alert("Save the report first before downloading"); return; }
   const safeName = (params.patientName || "report").replace(/[^a-z0-9]+/gi, "-").slice(0, 30);
-  const serialPart = params.serial ? `${params.serial}-` : "";
+  const serialPart = params.serial != null && params.serial !== "" ? `${params.serial}-` : "";
   const datePart = params.date ? `-${params.date.replace(/\//g, "-")}` : "";
   const a = document.createElement("a");
   a.href = `/api/usg/reports/${params.reportId}/pdf`;

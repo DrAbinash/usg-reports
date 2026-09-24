@@ -737,9 +737,22 @@ export const USG_PATHOLOGIES: UsgPathologyDef[] = [
 // Part 2 catalog (thyroid, breast, scrotum, echo, doppler, chest, cranium,
 // orbit, swelling, TVS/TRUS extras) — merged so every consumer sees one set.
 import { USG_PATHOLOGIES_EXTRA } from "./pathologies-extra";
+import { adviceForPathology } from "./pathologyAdvice";
+
+/** Attach catalog / suggestions advice onto defs that lack `advice[]`. */
+function withCatalogAdvice(list: UsgPathologyDef[]): UsgPathologyDef[] {
+  return list.map((p) => {
+    if (p.advice?.length) return p;
+    const advice = adviceForPathology(p.key, p);
+    return advice.length ? { ...p, advice } : p;
+  });
+}
 
 /** The complete builtin catalog: abdomen/obstetric + extended studies. */
-export const USG_PATHOLOGIES_ALL: UsgPathologyDef[] = [...USG_PATHOLOGIES, ...USG_PATHOLOGIES_EXTRA];
+export const USG_PATHOLOGIES_ALL: UsgPathologyDef[] = withCatalogAdvice([
+  ...USG_PATHOLOGIES,
+  ...USG_PATHOLOGIES_EXTRA,
+]);
 
 /** Quick lookup by key. O(1) via a Map built once at module load — every
  *  call site that does getPathology(key) was a linear scan over ~80

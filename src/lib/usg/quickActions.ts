@@ -191,6 +191,40 @@ export function isAllNormal(state: UsgComposerState): boolean {
 }
 
 /**
+ * Feature 3b: Copy findings from a prior FINALIZED report — merge organs
+ * state (pathologies + vars + rows) only. Impression triad ownership stays
+ * on the current draft (dismiss/edit/addendum are not overwritten).
+ */
+export function copyForwardFindings(
+  currentState: UsgComposerState,
+  priorState: UsgComposerState,
+): { state: UsgComposerState; mergedOrgans: number } {
+  const priorByOrgan = new Map(priorState.organs.map((o) => [o.organ, o]));
+  let mergedOrgans = 0;
+  const organs = currentState.organs.map((cur) => {
+    const prior = priorByOrgan.get(cur.organ);
+    if (!prior) return cur;
+    const hasFinding =
+      selectedPathologies(prior).length > 0 ||
+      prior.custom ||
+      (prior.rows && prior.rows.length > 0) ||
+      Object.keys(prior.vars ?? {}).length > 0;
+    if (!hasFinding) return cur;
+    mergedOrgans++;
+    return {
+      ...cur,
+      pathology: prior.pathology,
+      pathologies: prior.pathologies ? [...prior.pathologies] : prior.pathology ? [prior.pathology] : [],
+      custom: prior.custom,
+      text: prior.text,
+      vars: { ...prior.vars },
+      ...(prior.rows ? { rows: prior.rows.map((r) => ({ id: r.id, cells: { ...r.cells } })) } : {}),
+    };
+  });
+  return { state: { ...currentState, organs }, mergedOrgans };
+}
+
+/**
  * Feature 3: Smart copy-forward — fill all measurement slots from a prior scan.
  *
  * Takes the prior report's state and copies every {variable} value into the

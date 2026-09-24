@@ -37,11 +37,14 @@ import {
   applyOrganQuickNormal,
   applyRushNormalStudy,
   applyRushPreset,
+  copyForwardFindings,
   copyForwardMeasurements,
   isCleanRushFinalize,
   markAllNormal,
   studyAllowsRushNormals,
 } from "@/lib/usg/quickActions";
+import { pathologyOverrideKey, type PathologyWordingOverrides } from "@/lib/usg/triad";
+import { UsgTriadZones } from "./UsgTriadZones";
 import { matchSnippetExact } from "@/lib/usg/textExpansion";
 import { buildUsgReportHtml, formatUsgSerial, type UsgPrintSettings } from "@/lib/usg/print";
 import { lmpSummary, parseLmpInput } from "@/lib/usg/lmp";
@@ -127,6 +130,9 @@ export type UsgComposerProps = {
   diffSource?: DiffSource | null;
   /** The doctor's normal-wording overrides (v5) — builtin normals retuned. */
   normalOverrides?: NormalOverrides | null;
+  /** Clinic-wide pathology impression/advice wording defaults. */
+  pathologyWording?: PathologyWordingOverrides | null;
+  onPathologyWordingChange?: (next: PathologyWordingOverrides) => void;
   /** v6: the bill-desk order behind this report (banner, PACS pull, Form F). */
   order?: ReportOrderLite | null;
   /** v6: settings needed for the Form F fixed details. */
@@ -142,7 +148,7 @@ function fmtPrintDate(iso: string): string {
     : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-export function UsgComposer({ pathologies, settings, report, prefill, diffSource, normalOverrides, order, formFDefaults, onBack, onSaved }: UsgComposerProps) {
+export function UsgComposer({ pathologies, settings, report, prefill, diffSource, normalOverrides, pathologyWording, onPathologyWordingChange, order, formFDefaults, onBack, onSaved }: UsgComposerProps) {
   const studyKey0 = report?.studyKey ?? studyKeyForBillTest((report as any)?.testName ?? (prefill as any)?.testName ?? "", (report as any)?.sex ?? (report as any)?.gender ?? (report as any)?.patientGender ?? "") ?? "wa-female";
 
   const initial = useMemo(() => {
@@ -202,6 +208,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const [reviewSrResult, setReviewSrResult] = useState<{ vars: Record<string, Record<string, string>>; extras: Record<string, string>; matchedCount: number } | null>(null);
   const [reviewSrMeasurements, setReviewSrMeasurements] = useState<Array<{ conceptName: string; value: string; unit: string; path?: string }>>([]);
   const [patientReports, setPatientReports] = useState<Array<{ id: number; scanDate: string | null; stateJson: string | null; studyKey: string | null; status: string }>>([]);
+  const [priorFinalized, setPriorFinalized] = useState<Array<{ id: string; scanDate: string | null; stateJson: string | null; studyKey: string | null }>>([]);
   const [dialogOrgan, setDialogOrgan] = useState<string | null>(null);
   const printRef = useRef<HTMLIFrameElement>(null);
 
@@ -306,7 +313,10 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   };
 
   const lookup = useMemo(() => makeLookup(pathologies), [pathologies]);
-  const resolved = useMemo(() => resolve(state, lookup, technique, normalOverrides), [state, lookup, technique, normalOverrides]);
+  const resolved = useMemo(
+    () => resolve(state, lookup, technique, normalOverrides, pathologyWording),
+    [state, lookup, technique, normalOverrides, pathologyWording],
+  );
 
   /** Retune one organ's builtin normal (v5) — the composer's own wording
    *  resets to it when the organ is still showing its normal text. */
@@ -387,6 +397,27 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
       .catch(() => {});
     return () => { cancelled = true; };
   }, [patientName, state.studyKey]);
+
+  // Prior FINALIZED reports for this phone — "Copy findings from [date]"
+  useEffect(() => {
+    const phone = patientPhone.trim();
+    if (!phone || phone.length < 6) {
+      setPriorFinalized([]);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/usg/reports?patientPhone=${encodeURIComponent(phone)}&status=FINALIZED&limit=8`)
+      .then((r) => (r.ok ? r.json() : { reports: [] }))
+      .then((d) => {
+        if (cancelled) return;
+        const rows = ((d.reports ?? []) as Array<{ id: string; scanDate: string | null; stateJson: string | null; studyKey: string | null; status: string }>)
+          .filter((r) => r.status === "FINALIZED" && r.stateJson && r.id !== report?.id)
+          .slice(0, 5);
+        setPriorFinalized(rows);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [patientPhone, report?.id]);
 
   const normName = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
   const onNameChange = (v: string) => {
@@ -1501,28 +1532,22 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
               value={birads}
               onChange={(v) => {
                 setBirads(v);
-                // Append the BI-RADS impression line to the impression.
+                // Append the BI-RADS impression line via addendum / override.
                 const line = biradsImpressionLine(v);
-                const current = impressionManual ? (state.impressionOverride ?? "") : resolved.impression.join("\n");
-                if (!line) {
-                  // Cleared — leave impression as-is.
-                  return;
-                }
-                // Replace any existing BI-RADS line; append if none.
-                const withoutBirads = current
-                  .split("\n")
-                  .filter((l) => !/^BI-RADS\s/i.test(l.trim()))
-                  .join("\n")
-                  .trim();
-                const next = withoutBirads ? `${withoutBirads}\n${line}` : line;
-                setImpressionManual(true);
-                setState((s) => ({ ...s, impressionOverride: next }));
-                // Suggest a follow-up for BI-RADS 3.
+                if (!line) return;
+                setState((s) => {
+                  const current = (s.impressionAddendum ?? "")
+                    .split("\n")
+                    .filter((l) => !/^BI-RADS\s/i.test(l.trim()))
+                    .join("\n")
+                    .trim();
+                  const next = current ? `${current}\n${line}` : line;
+                  return { ...s, impressionAddendum: next };
+                });
                 const followDays = biradsFollowUpDays(v);
                 if (followDays && savedIdRef.current) {
                   const d = new Date();
                   d.setDate(d.getDate() + followDays);
-                  // Best-effort: set the follow-up via the API. Silent on failure.
                   fetch(`/api/usg/reports/${savedIdRef.current}/follow-up`, {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json" },
@@ -1532,16 +1557,177 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
                     }),
                   }).then(
                     () => toast.success(`BI-RADS 3 follow-up set for ${d.toLocaleDateString("en-IN")}`),
-                    () => {/* silent — the impression line still landed */},
+                    () => {},
                   );
                 }
               }}
             />
           ) : null}
-          <div className="rounded-xl border border-border bg-card p-3.5 shadow-sm">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-[12px] font-bold tracking-wide">IMPRESSION</span>
-              {impressionManual ? (
+
+          {!isFinal && priorFinalized.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {priorFinalized.slice(0, 2).map((p) => {
+                const label = p.scanDate
+                  ? new Date(p.scanDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+                  : "prior scan";
+                return (
+                  <Button
+                    key={p.id}
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 border-emerald-200 bg-emerald-50/60 px-2.5 text-[10px] font-semibold text-emerald-800 hover:bg-emerald-100"
+                    title="Merge organ findings (pathologies, measurements, grid rows) from this finalized report"
+                    onClick={() => {
+                      try {
+                        const prior = JSON.parse(p.stateJson ?? "{}") as UsgComposerState;
+                        const { state: next, mergedOrgans } = copyForwardFindings(state, prior);
+                        setState(next);
+                        toast.success(
+                          mergedOrgans > 0
+                            ? `Copied findings from ${label} (${mergedOrgans} organ${mergedOrgans === 1 ? "" : "s"})`
+                            : `No findings to copy from ${label}`,
+                        );
+                      } catch {
+                        toast.error("Could not read prior report");
+                      }
+                    }}
+                  >
+                    Copy findings from {label}
+                  </Button>
+                );
+              })}
+            </div>
+          ) : null}
+
+          <UsgTriadZones
+            impressionLines={resolved.impressionLines ?? resolved.impression.map((t) => ({ text: t, pathologyKey: "", edited: false, legacy: !!state.impressionOverride }))}
+            adviceLines={resolved.adviceLines ?? (resolved.advice ?? resolved.suggestions).map((t) => ({ text: t, pathologyKey: "", edited: false }))}
+            disabled={isFinal}
+            impressionAddendum={state.impressionAddendum}
+            onDismissImpression={(text) =>
+              setState((s) => ({
+                ...s,
+                dismissedImpressions: [...new Set([...(s.dismissedImpressions ?? []), text])],
+              }))
+            }
+            onDismissAdvice={(text) =>
+              setState((s) => ({
+                ...s,
+                dismissedAdvice: [...new Set([...(s.dismissedAdvice ?? []), text])],
+              }))
+            }
+            onEditImpression={(pk, text) => {
+              if (!pk) {
+                // Legacy badge edit → impressionOverride
+                setImpressionManual(true);
+                setState((s) => ({ ...s, impressionOverride: text }));
+                return;
+              }
+              setState((s) => ({
+                ...s,
+                impressionEdits: { ...(s.impressionEdits ?? {}), [pk]: text },
+              }));
+            }}
+            onEditAdvice={(pk, text) => {
+              if (!pk) return;
+              setState((s) => ({
+                ...s,
+                adviceEdits: { ...(s.adviceEdits ?? {}), [pk]: text },
+              }));
+            }}
+            onResetImpressionEdit={(pk) =>
+              setState((s) => {
+                const next = { ...(s.impressionEdits ?? {}) };
+                delete next[pk];
+                return { ...s, impressionEdits: next };
+              })
+            }
+            onResetAdviceEdit={(pk) =>
+              setState((s) => {
+                const next = { ...(s.adviceEdits ?? {}) };
+                delete next[pk];
+                return { ...s, adviceEdits: next };
+              })
+            }
+            onAddendum={(text) => setState((s) => ({ ...s, impressionAddendum: text }))}
+            onSaveImpressionDefault={async (pk, text) => {
+              const organ = state.organs.find((o) => selectedPathologies(o).includes(pk))?.organ;
+              if (!organ) return;
+              const res = await fetch("/api/usg/pathology-wording", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ studyKey, organKey: organ, pathologyKey: pk, kind: "impression", text }),
+              });
+              if (!res.ok) {
+                toast.error("Could not save impression default");
+                return;
+              }
+              const key = pathologyOverrideKey(studyKey, organ, pk);
+              onPathologyWordingChange?.({
+                impressions: { ...(pathologyWording?.impressions ?? {}), [key]: text },
+                advice: { ...(pathologyWording?.advice ?? {}) },
+              });
+              toast.success("Impression wording saved as clinic default");
+            }}
+            onSaveAdviceDefault={async (pk, text) => {
+              const organ = state.organs.find((o) => selectedPathologies(o).includes(pk))?.organ;
+              if (!organ) return;
+              const res = await fetch("/api/usg/pathology-wording", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ studyKey, organKey: organ, pathologyKey: pk, kind: "advice", text }),
+              });
+              if (!res.ok) {
+                toast.error("Could not save advice default");
+                return;
+              }
+              const key = pathologyOverrideKey(studyKey, organ, pk);
+              onPathologyWordingChange?.({
+                impressions: { ...(pathologyWording?.impressions ?? {}) },
+                advice: { ...(pathologyWording?.advice ?? {}), [key]: text },
+              });
+              toast.success("Advice wording saved as clinic default");
+            }}
+            onResetImpressionDefault={async (pk) => {
+              const organ = state.organs.find((o) => selectedPathologies(o).includes(pk))?.organ;
+              if (!organ) return;
+              await fetch(
+                `/api/usg/pathology-wording?studyKey=${encodeURIComponent(studyKey)}&organKey=${encodeURIComponent(organ)}&pathologyKey=${encodeURIComponent(pk)}&kind=impression`,
+                { method: "DELETE" },
+              );
+              const key = pathologyOverrideKey(studyKey, organ, pk);
+              const nextImp = { ...(pathologyWording?.impressions ?? {}) };
+              delete nextImp[key];
+              onPathologyWordingChange?.({
+                impressions: nextImp,
+                advice: { ...(pathologyWording?.advice ?? {}) },
+              });
+              toast.success("Impression default cleared");
+            }}
+            onResetAdviceDefault={async (pk) => {
+              const organ = state.organs.find((o) => selectedPathologies(o).includes(pk))?.organ;
+              if (!organ) return;
+              await fetch(
+                `/api/usg/pathology-wording?studyKey=${encodeURIComponent(studyKey)}&organKey=${encodeURIComponent(organ)}&pathologyKey=${encodeURIComponent(pk)}&kind=advice`,
+                { method: "DELETE" },
+              );
+              const key = pathologyOverrideKey(studyKey, organ, pk);
+              const nextAdv = { ...(pathologyWording?.advice ?? {}) };
+              delete nextAdv[key];
+              onPathologyWordingChange?.({
+                impressions: { ...(pathologyWording?.impressions ?? {}) },
+                advice: nextAdv,
+              });
+              toast.success("Advice default cleared");
+            }}
+          />
+
+          {/* Legacy free-text override escape hatch */}
+          {impressionManual && state.impressionOverride != null && !isFinal ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-2">
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-[9px] font-bold uppercase text-amber-700">Legacy impression override</span>
                 <button
                   className="text-[10px] font-bold text-rose-500 underline"
                   onClick={() => {
@@ -1549,30 +1735,17 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
                     setState((s) => ({ ...s, impressionOverride: null }));
                   }}
                 >
-                  auto
+                  back to auto triad
                 </button>
-              ) : null}
-            </div>
-            <Textarea
-              value={impressionManual ? (state.impressionOverride ?? "") : resolved.impression.join("\n")}
-              onChange={(e) => {
-                setImpressionManual(true);
-                setState((s) => ({ ...s, impressionOverride: e.target.value }));
-              }}
-              disabled={isFinal}
-              rows={4}
-              placeholder="Impression auto-generates from findings — type to override"
-              className="resize-y text-[12px] leading-relaxed"
-            />
-            {resolved.suggestions?.length ? (
-              <div className="mt-2 space-y-0.5">
-                <span className="text-[9px] font-bold uppercase text-faint">Suggestions</span>
-                {resolved.suggestions.map((s, i) => (
-                  <p key={i} className="text-[10.5px] text-muted-foreground">• {s}</p>
-                ))}
               </div>
-            ) : null}
-          </div>
+              <Textarea
+                value={state.impressionOverride ?? ""}
+                onChange={(e) => setState((s) => ({ ...s, impressionOverride: e.target.value }))}
+                rows={3}
+                className="resize-y text-[12px] leading-relaxed"
+              />
+            </div>
+          ) : null}
 
           {/* Declaration line (if set in settings) */}
           {settings.usgDeclarationLine?.trim() && !isFinal ? (

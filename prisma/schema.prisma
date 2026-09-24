@@ -318,6 +318,23 @@ model UsgNormalOverride {
   @@index([clinicId])
 }
 
+// ── USG Studio — pathology impression/advice wording overrides ─────────
+// Same pencil pattern as UsgNormalOverride, keyed by study+organ+pathology.
+model UsgPathologyWordingOverride {
+  id           String   @id @default(cuid())
+  clinicId     String   @default("default")
+  studyKey     String
+  organKey     String
+  pathologyKey String
+  kind         String   // "impression" | "advice"
+  text         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([clinicId, studyKey, organKey, pathologyKey, kind])
+  @@index([clinicId])
+}
+
 // ── USG Studio — user-added custom pathologies ──────────────────────────
 // Builtin pathology entries live in code (src/lib/usg/pathologies.ts);
 // anything the doctor adds in the UI is persisted here and merged at runtime.

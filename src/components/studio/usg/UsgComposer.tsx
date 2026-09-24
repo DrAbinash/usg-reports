@@ -157,7 +157,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     (report?.patientSex ?? prefill?.patientSex ?? "F") as "F" | "M" | typeof USG_SEX_CHILD,
   );
   const [patients, setPatients] = useState<PatientSuggestion[]>([]);
-  const [referredBy, setReferredBy] = useState(report?.referredBy ?? prefill?.referredBy ?? "");
+  const [referredBy, setReferredBy] = useState(report?.referredBy ?? prefill?.referredBy ?? (typeof window !== "undefined" ? localStorage.getItem("usg:lastReferredBy") ?? "" : ""));
   const [studyKey, setStudyKey] = useState(studyKey0);
   const study = useMemo(
     () => applyNormalOverrides(getStudy(studyKey) ?? USG_STUDIES[0], normalOverrides),
@@ -168,6 +168,13 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     () => initial ?? { studyKey: studyKey0, organs: study.organs.map((o) => ({ organ: o.key, pathology: null, pathologies: [], custom: false, text: o.normal, vars: {} })), impressionOverride: null },
   );
   const [scanDate, setScanDate] = useState(() => toScanDateInput(report?.scanDate ? new Date(report.scanDate) : null));
+
+  // v6.25: persist last-used referrer to seed next report
+  useEffect(() => {
+    if (referredBy && referredBy.length > 2 && typeof window !== "undefined") {
+      try { localStorage.setItem("usg:lastReferredBy", referredBy); } catch {}
+    }
+  }, [referredBy]);
   const [lmp, setLmp] = useState("");
   const [impressionManual, setImpressionManual] = useState(!!initial?.impressionOverride);
   const [showTechnique, setShowTechnique] = useState(false);
@@ -487,10 +494,21 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         return;
       }
 
-      // Space → next organ card
+      // Space → next organ card + auto-focus first actionable slot
       if (!mod && !typing && e.key === " " && !e.altKey) {
         e.preventDefault();
-        setFocusedOrganIdx((i) => (i + 1) % Math.max(study.organs.length, 1));
+        setFocusedOrganIdx((i) => {
+          const next = (i + 1) % Math.max(study.organs.length, 1);
+          // Defer DOM focus until React finishes rendering the new highlight
+          setTimeout(() => {
+            const wrapper = document.querySelector(`[data-organ-idx="${next}"]`);
+            if (wrapper) {
+              const focusable = wrapper.querySelector('input:not([type="hidden"]), select, textarea, button') as HTMLElement;
+              if (focusable) focusable.focus();
+            }
+          }, 50);
+          return next;
+        });
         return;
       }
 

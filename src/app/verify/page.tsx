@@ -4,7 +4,7 @@
  * (it opens this page with ?d=…) or paste the payload text from the sheet:
  * the studio confirms the signature and the register entry.
  */
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,11 +21,12 @@ type VerifyResult = {
 
 function VerifyInner() {
   const params = useSearchParams();
-  const [payload, setPayload] = useState(params.get("d") ?? "");
+  const qrData = params.get("d") ?? "";
+  const [payload, setPayload] = useState(qrData);
   const [result, setResult] = useState<VerifyResult | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const check = async (raw: string) => {
+  const check = useCallback(async (raw: string) => {
     if (!raw.trim()) return;
     setBusy(true);
     try {
@@ -36,13 +37,13 @@ function VerifyInner() {
     } finally {
       setBusy(false);
     }
-  };
+  }, []);
 
-  // Auto-check when opened from a QR (?d=…).
+  // Auto-check when opened from a QR (?d=…). Depend only on the payload string
+  // so the effect does not re-fire every render (params object / check identity).
   useEffect(() => {
-    const d = params.get("d");
-    if (d) void check(d);
-  }, [params, check]);
+    if (qrData) void check(qrData);
+  }, [qrData, check]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-rose-50 via-white to-violet-50 p-4">

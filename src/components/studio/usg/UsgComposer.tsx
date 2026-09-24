@@ -211,6 +211,10 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const [priorFinalized, setPriorFinalized] = useState<Array<{ id: string; scanDate: string | null; stateJson: string | null; studyKey: string | null }>>([]);
   const [dialogOrgan, setDialogOrgan] = useState<string | null>(null);
   const printRef = useRef<HTMLIFrameElement>(null);
+  /** Frozen FINALIZED reportHtml from the finalize API / DB re-fetch — never print the live provisional preview after finalize. */
+  const frozenHtmlRef = useRef<string | null>(
+    report?.status === "FINALIZED" && report.reportHtml ? report.reportHtml : null,
+  );
 
   // Machine stills (v5): server rows + locally buffered ones (before the
   // first save creates the report row they belong to).
@@ -759,9 +763,16 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
       if (status === "finalize" && id) {
         const res = await fetch(`/api/usg/reports/${id}/finalize`, { method: "POST" });
         if (!res.ok) throw new Error("Finalize failed");
-        const body = (await res.json()) as { serialNo?: number };
+        const body = (await res.json()) as { serialNo?: number; html?: string; report?: UsgReportRow };
         if (typeof body.serialNo === "number") setSerial(formatUsgSerial(body.serialNo));
         setFinalizedHere(true);
+        // Keep the frozen snapshot on hand so rush-print never falls back to
+        // the live PROVISIONAL preview closure.
+        if (typeof body.html === "string" && body.html.trim()) {
+          frozenHtmlRef.current = body.html;
+        } else if (body.report?.reportHtml) {
+          frozenHtmlRef.current = body.report.reportHtml;
+        }
         dirtyRef.current = false;
         clearDraft(dKey);
         toast.success(`Report finalized — register no. ${formatUsgSerial(body.serialNo ?? 0)} frozen for reprint`);
@@ -910,6 +921,23 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     });
   };
 
+  /** Re-fetch the finalized row and print its frozen reportHtml (no PROVISIONAL watermark). */
+  const printFrozenReport = async (id: string): Promise<boolean> => {
+    if (frozenHtmlRef.current && !/PROVISIONAL/i.test(frozenHtmlRef.current)) {
+      printInIframe(frozenHtmlRef.current);
+      return true;
+    }
+    const res = await fetch(`/api/usg/reports/${id}`, { method: "GET" });
+    if (!res.ok) return false;
+    const row = (await res.json()).report as UsgReportRow | null;
+    if (row?.status === "FINALIZED" && row.reportHtml) {
+      frozenHtmlRef.current = row.reportHtml;
+      printInIframe(row.reportHtml);
+      return true;
+    }
+    return false;
+  };
+
   const print = async () => {
     if (!patientName.trim()) {
       toast.error("Patient name is required");
@@ -920,16 +948,24 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
       // Finalized reports print their frozen snapshot; drafts print the live
       // preview — stamped PROVISIONAL so it can't be filed as the record.
       if (report?.status === "FINALIZED" && report.reportHtml) {
+        frozenHtmlRef.current = report.reportHtml;
         printInIframe(report.reportHtml);
-      } else if (finalizedHere) {
-        // Finalized moments ago in this session — the live preview IS the snapshot.
-        printInIframe(previewHtml);
+      } else if (finalizedHere || frozenHtmlRef.current) {
+        const id = savedIdRef.current ?? report?.id;
+        if (id) {
+          const ok = await printFrozenReport(id);
+          if (!ok && frozenHtmlRef.current) printInIframe(frozenHtmlRef.current);
+          else if (!ok) toast.error("Could not load the finalized snapshot for print");
+        } else if (frozenHtmlRef.current) {
+          printInIframe(frozenHtmlRef.current);
+        }
       } else {
         const id = await persist("");
         if (id) {
           const res = await fetch(`/api/usg/reports/${id}`, { method: "GET" });
           const row = res.ok ? ((await res.json()).report as UsgReportRow) : null;
           if (row?.status === "FINALIZED" && row.reportHtml) {
+            frozenHtmlRef.current = row.reportHtml;
             printInIframe(row.reportHtml);
           } else {
             printInIframe(previewHtml);
@@ -958,8 +994,10 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     if (isCleanRushFinalize(state)) {
       const id = await persist("finalize");
       if (id && alsoPrint) {
-        // Print after finalize — use live preview (frozen as of finalize).
-        printInIframe(previewHtml);
+        // Medico-legal: never print the stale live preview (PROVISIONAL).
+        // Re-fetch the DB row and print the frozen reportHtml snapshot.
+        const ok = await printFrozenReport(id);
+        if (!ok) toast.error("Finalized, but could not load the print snapshot");
       }
       return;
     }

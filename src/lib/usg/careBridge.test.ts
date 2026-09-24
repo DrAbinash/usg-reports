@@ -158,24 +158,24 @@ describe("measurementReview", () => {
 
 describe("criticalFindings", () => {
   it("identifies a critical pathology", () => {
-    expect(isCriticalPathology("ob-ectopic")).toBe(true);
+    expect(isCriticalPathology("adnexa-ectopic")).toBe(true);
     expect(isCriticalPathology("liver-fatty-g1")).toBe(false);
   });
 
   it("returns severity for a critical pathology", () => {
-    expect(getCriticalSeverity("ob-ectopic")).toBe("critical");
-    expect(getCriticalSeverity("ob-iugr")).toBe("urgent");
+    expect(getCriticalSeverity("adnexa-ectopic")).toBe("critical");
+    expect(getCriticalSeverity("kidney-hydro-gross")).toBe("urgent");
     expect(getCriticalSeverity("liver-fatty-g1")).toBeNull();
   });
 
   it("scans selected pathologies for critical findings", () => {
     const selected = [
       { key: "liver-fatty-g1", label: "Fatty Liver Gr I", organ: "liver" },
-      { key: "ob-ectopic", label: "Ectopic Pregnancy", organ: "ob_uterus" },
+      { key: "adnexa-ectopic", label: "Ectopic Pregnancy", organ: "adnexa" },
     ];
     const alerts = scanForCriticalFindings(selected);
     expect(alerts).toHaveLength(1);
-    expect(alerts[0]!.pathologyKey).toBe("ob-ectopic");
+    expect(alerts[0]!.pathologyKey).toBe("adnexa-ectopic");
     expect(alerts[0]!.severity).toBe("critical");
     expect(alerts[0]!.message).toContain("Ectopic");
     expect(alerts[0]!.recommendation).toContain("Notify");
@@ -199,7 +199,7 @@ describe("criticalFindings", () => {
 
   it("builds an audit payload for critical findings", () => {
     const alerts = [
-      { pathologyKey: "ob-ectopic", pathologyLabel: "Ectopic", organ: "ob_uterus", severity: "critical" as const, message: "test", recommendation: "test rec" },
+      { pathologyKey: "adnexa-ectopic", pathologyLabel: "Ectopic", organ: "adnexa", severity: "critical" as const, message: "test", recommendation: "test rec" },
     ];
     const payload = criticalAuditPayload(alerts);
     expect(payload.action).toBe("critical_finding_detected");
@@ -368,6 +368,7 @@ describe("qualityCheck", () => {
       title: "USG",
       sections: [{ organ: "liver", label: "LIVER", text: "Normal" }],
       impression: [],
+      advice: [],
       suggestions: [],
       technique: "USG",
     };
@@ -387,6 +388,7 @@ describe("qualityCheck", () => {
       title: "USG",
       sections: [{ organ: "liver", label: "LIVER", text: "Normal" }],
       impression: ["Normal study."],
+      advice: [],
       suggestions: [],
       technique: "USG",
     };

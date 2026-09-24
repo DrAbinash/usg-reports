@@ -29,6 +29,7 @@ import type { UsgPathologyDef } from "@/lib/usg/types";
 import type { UsgPrintSettings } from "@/lib/usg/print";
 import { formatUsgSerial } from "@/lib/usg/print";
 import { normalOverrideKey, type NormalOverrides } from "@/lib/usg/studies";
+import type { PathologyWordingOverrides } from "@/lib/usg/triad";
 import { UsgComposer, type UsgReportRow, type ReportOrderLite } from "./UsgComposer";
 import type { FormFDefaults } from "./UsgFormFDialog";
 import type { DiffSource } from "./UsgDiffPanel";
@@ -94,6 +95,10 @@ export function UsgStudioView() {
 
   const [settings, setSettings] = useState<UsgPrintSettings | null>(null);
   const [normalOverrides, setNormalOverrides] = useState<NormalOverrides>({});
+  const [pathologyWording, setPathologyWording] = useState<PathologyWordingOverrides>({
+    impressions: {},
+    advice: {},
+  });
   const [reports, setReports] = useState<UsgReportRow[]>([]);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"" | "DRAFT" | "FINALIZED">("");
@@ -125,11 +130,12 @@ export function UsgStudioView() {
   const [deleting, setDeleting] = useState(false);
 
   const loadAll = useCallback(async () => {
-    const [pRes, sRes, rRes, nRes] = await Promise.all([
+    const [pRes, sRes, rRes, nRes, wRes] = await Promise.all([
       fetch("/api/usg/pathologies"),
       fetch("/api/settings"),
       fetch("/api/usg/reports"),
       fetch("/api/usg/normals"),
+      fetch("/api/usg/pathology-wording"),
     ]);
     if (pRes.ok) setPathologies(((await pRes.json()).pathologies ?? []) as UsgPathologyDef[]);
     if (nRes.ok) {
@@ -139,6 +145,13 @@ export function UsgStudioView() {
         if (r.text.trim()) map[normalOverrideKey(r.studyKey, r.organKey)] = r.text.trim();
       }
       setNormalOverrides(map);
+    }
+    if (wRes.ok) {
+      const body = await wRes.json().catch(() => ({}));
+      setPathologyWording({
+        impressions: (body.impressions ?? {}) as Record<string, string>,
+        advice: (body.advice ?? {}) as Record<string, string>,
+      });
     }
     if (sRes.ok) {
       const s = (await sRes.json()).settings ?? {};
@@ -445,6 +458,8 @@ export function UsgStudioView() {
           prefill={prefill}
           diffSource={diffSource}
           normalOverrides={normalOverrides}
+          pathologyWording={pathologyWording}
+          onPathologyWordingChange={setPathologyWording}
           order={order}
           formFDefaults={formFDefaults}
           onBack={() => {

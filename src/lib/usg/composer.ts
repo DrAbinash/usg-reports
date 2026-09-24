@@ -19,6 +19,13 @@ import { getTokenType } from "./tokenTypes";
 import { getStudy, getStudyWithOverrides, initialState, USG_STUDIES, type NormalOverrides } from "./studies";
 import { perParameterGa, meanGa, hadlockEfw, efwTolerance, eddFromGa } from "./biometry";
 import { formatEdd } from "./lmp";
+import {
+  deriveAdvice,
+  deriveImpressions,
+  type PathologyWordingOverrides,
+} from "./triad";
+
+export type { PathologyWordingOverrides };
 
 /** Tokens auto-derived from an organ key (kidney_rt → right/Right). */
 export const ORGAN_SIDE: Record<string, { side: string; Side: string }> = {
@@ -163,11 +170,27 @@ export function normaliseState(
     }
     return baseOrgan;
   });
+  const strArr = (v: unknown): string[] | undefined =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : undefined;
+  const strMap = (v: unknown): Record<string, string> | undefined => {
+    if (!v || typeof v !== "object" || Array.isArray(v)) return undefined;
+    const out: Record<string, string> = {};
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+      if (typeof val === "string") out[k] = val;
+    }
+    return Object.keys(out).length ? out : undefined;
+  };
   return {
     studyKey: study.key,
     organs,
     impressionOverride:
       typeof obj.impressionOverride === "string" ? obj.impressionOverride : null,
+    dismissedImpressions: strArr(obj.dismissedImpressions),
+    dismissedAdvice: strArr(obj.dismissedAdvice),
+    impressionEdits: strMap(obj.impressionEdits),
+    adviceEdits: strMap(obj.adviceEdits),
+    impressionAddendum:
+      typeof obj.impressionAddendum === "string" ? obj.impressionAddendum : undefined,
   };
 }
 
@@ -201,6 +224,11 @@ export function switchStudy(
       };
     }),
     impressionOverride: state.impressionOverride,
+    dismissedImpressions: state.dismissedImpressions,
+    dismissedAdvice: state.dismissedAdvice,
+    impressionEdits: state.impressionEdits,
+    adviceEdits: state.adviceEdits,
+    impressionAddendum: state.impressionAddendum,
   };
 }
 
@@ -372,23 +400,17 @@ export function pathologiesForOrgan(all: UsgPathologyDef[], organKey: string): U
   return all.filter((p) => pathologyAppliesTo(p.organ, organKey));
 }
 
-/** The upper-abdomen organ prefix used for the "Normal scan of upper abdomen." rule. */
-const UPPER_KEYS = ["liver", "gb", "cbd", "pancreas", "spleen", "kidney_rt", "kidney_lt"];
-
 /** Resolve the full printable report from a state. */
 export function resolve(
   state: UsgComposerState,
   lookup: PathologyLookup,
   technique: string,
   overrides?: NormalOverrides | null,
+  pathologyWording?: PathologyWordingOverrides | null,
 ): UsgResolved {
   const study = getStudyWithOverrides(state.studyKey, overrides) ?? getStudyWithOverrides("wa-female", overrides)!;
   const sections: UsgResolved["sections"] = [];
-  const pathologyLines: string[] = [];
-  const trailingLines: string[] = [];
-  const suggestions: string[] = [];
   const fragments: string[] = [];
-  let anyPathology = false;
 
   // Obstetric impressions quote values typed on OTHER cards (mean GA lives on
   // the biometry card, the presentation line lives on the fetus card), so
@@ -448,65 +470,22 @@ export function resolve(
       sections.push({ organ: o.organ, label: def.label, text, kind: def.kind === "grid" ? "rows" : def.kind });
     }
 
-    // Combined findings: every selected pathology contributes its impression
-    // lines, suggestions and title fragment — in click order, deduplicated.
+    // Title fragments only — impression / advice come from the triad helpers.
     const selected = selectedPathologies(o)
       .map((k) => lookup(k))
       .filter((p): p is UsgPathologyDef => !!p);
-    if (selected.length) {
-      const lineVars = { ...mergedVars, ...o.vars };
-      for (const p of selected) {
-        // A wording variant with no impression lines and no title fragment is a
-        // cosmetic swap (e.g. "No gross fetal congenital anomalies detected.") —
-        // it must not turn a normal report into a pathological one.
-        const cosmetic = p.impression.length === 0 && !p.titleFragment;
-        if (!cosmetic) anyPathology = true;
-        for (const line of p.impression) {
-          const s = substitute(line, lineVars, o.organ);
-          if (!pathologyLines.includes(s)) pathologyLines.push(s);
-        }
-        for (const s of p.suggestions ?? []) {
-          const sub = substitute(s, lineVars, o.organ);
-          if (!suggestions.includes(sub)) suggestions.push(sub);
-        }
-        if (p.titleFragment) {
-          const f = substitute(p.titleFragment, lineVars, o.organ);
-          if (!fragments.includes(f)) fragments.push(f);
-        }
+    for (const p of selected) {
+      if (p.titleFragment) {
+        const f = substitute(p.titleFragment, { ...mergedVars, ...o.vars }, o.organ);
+        if (!fragments.includes(f)) fragments.push(f);
       }
-    } else if (def.normalImpression) {
-      trailingLines.push(substitute(def.normalImpression, mergedVars));
     }
   }
 
-  // Impression rule (the doctor's pattern): pathology lines first in organ
-  // order, then the trailing normal-summary lines; all-normal reports use the
-  // study's normal impression; a fully-normal upper group in an otherwise
-  // abnormal whole-abdomen report opens with "Normal scan of upper abdomen.".
-  // Obstetric family (normalImpressionFirst): the leading normal line ("A
-  // single live intrauterine fetus at 28 wk 05 days…") prints FIRST.
-  let autoLines: string[];
-  if (!anyPathology) {
-    autoLines = study.allNormalImpression.map((l) => substitute(l, mergedVars));
-  } else {
-    autoLines = study.normalImpressionFirst
-      ? [...trailingLines, ...pathologyLines]
-      : [...pathologyLines];
-    if (study.upperGroupNormalLine) {
-      const upperAllNormal = study.organs
-        .filter((d) => UPPER_KEYS.includes(d.key))
-        .every((d) => selectedPathologies(state.organs.find((o) => o.organ === d.key) ?? { pathology: null }).length === 0);
-      const hasNonUpper = study.organs.some((d) => !UPPER_KEYS.includes(d.key));
-      if (upperAllNormal && hasNonUpper) autoLines.unshift(study.upperGroupNormalLine);
-    }
-    if (!study.normalImpressionFirst) autoLines.push(...trailingLines);
-  }
-
-  const impression = state.impressionOverride?.trim()
-    ? state.impressionOverride.split(/\n+/).map((l) => l.trim()).filter(Boolean)
-    : autoLines;
-
-  const finalSuggestions = anyPathology ? suggestions : study.defaultSuggestions ?? [];
+  const impressionLines = deriveImpressions(state, study, lookup, pathologyWording, mergedVars);
+  const adviceLines = deriveAdvice(state, study, lookup, pathologyWording, mergedVars);
+  const impression = impressionLines.map((l) => l.text);
+  const advice = adviceLines.map((l) => l.text);
 
   // The study heading on the printed report stays as the study's own title
   // (e.g. "USG Whole Abdomen") — pathology findings (fatty changes,
@@ -515,5 +494,15 @@ export function resolve(
   // and search) but is NOT appended to the title.
   const title = study.title;
 
-  return { study, title, sections, impression, suggestions: finalSuggestions, technique };
+  return {
+    study,
+    title,
+    sections,
+    impression,
+    advice,
+    suggestions: advice,
+    technique,
+    impressionLines,
+    adviceLines,
+  };
 }

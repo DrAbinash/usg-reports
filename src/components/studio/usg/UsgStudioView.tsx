@@ -180,6 +180,9 @@ export function UsgStudioView() {
         enableAiDraft: s.enableAiDraft !== false,
         enableBirads: s.enableBirads !== false,
         enableDicomSr: s.enableDicomSr !== false,
+        studyTechniqueDefaults: (s as { studyTechniqueDefaults?: Record<string, string> }).studyTechniqueDefaults ?? {},
+        machineLineByStudio: (s as { machineLineByStudio?: Record<string, string> }).machineLineByStudio ?? {},
+        studioId: String((s as { clinicId?: string }).clinicId ?? "default"),
       });
     }
     if (rRes.ok) setReports(((await rRes.json()).reports ?? []) as UsgReportRow[]);

@@ -56,9 +56,42 @@ export type UsgOrganDef = {
    * Print layout: "rows" (default) = label + prose row in the findings
    * table; "table" = each line of the text becomes a bordered measurement
    * row (label : value + normal range) — used by echocardiography M-mode
-   * dimensions and any fixed measurement panel.
+   * dimensions and any fixed measurement panel; "grid" = structured
+   * repeatable-row table (BPP score, future follicular / fibroid maps).
    */
-  kind?: "rows" | "table";
+  kind?: "rows" | "table" | "grid";
+  /** Column + fixed-row schema when kind === "grid". */
+  grid?: UsgGridSchema;
+};
+
+/** One column in a grid organ (BPP Score, follicular day-table, …). */
+export type UsgGridColumn = {
+  key: string;
+  label: string;
+  type: "select" | "text";
+  options?: { value: string; label: string }[];
+};
+
+/** Fixed clinical row for score-style grids (BPP components). */
+export type UsgGridFixedRow = {
+  id: string;
+  label: string;
+  normalDesc?: string;
+  abnormalDesc?: string;
+};
+
+/** Schema attached to a grid organ definition. */
+export type UsgGridSchema = {
+  columns: UsgGridColumn[];
+  fixedRows?: UsgGridFixedRow[];
+  /** When set, print a bold Total row derived from this score column. */
+  scoreTotal?: { columnKey: string; max: number };
+};
+
+/** One data row in a grid organ — cells keyed by column key. */
+export type UsgGridRow = {
+  id: string;
+  cells: Record<string, string>;
 };
 
 /** A study type = ordered organ list + technique + impression defaults. */
@@ -66,7 +99,7 @@ export type UsgStudyDef = {
   key: string; // "wa-female"
   label: string; // "Whole Abdomen (Female)"
   title: string; // printed heading "USG WHOLE ABDOMEN"
-  sex?: "F" | "M"; // default patient sex when picked
+  sex?: "F" | "M" | "ANY"; // default patient sex when picked ("ANY" = MSK / non-sexed)
   /** Dropdown grouping (STUDY_GROUPS key) — keeps 22 studies scannable. */
   group?: string;
   technique: string;
@@ -116,6 +149,12 @@ export type UsgOrganState = {
   text: string;
   /** Filled variable values by token key. */
   vars: Record<string, string>;
+  /**
+   * Structured grid rows when the organ def has kind === "grid".
+   * Absent on legacy prose saves — UI shows a read-only legacy banner;
+   * FINALIZED reports are never rewritten on open.
+   */
+  rows?: UsgGridRow[];
 };
 
 /** Complete composer state persisted as UsgReport.stateJson. */
@@ -130,7 +169,20 @@ export type UsgComposerState = {
 export type UsgResolved = {
   study: UsgStudyDef;
   title: string; // composed study title with pathology fragments
-  sections: { organ: string; label: string; text: string; kind?: "rows" | "table" }[];
+  sections: {
+    organ: string;
+    label: string;
+    text: string;
+    kind?: "rows" | "table" | "grid";
+    /** Structured grid payload for print (BPP etc.). */
+    grid?: {
+      columns: UsgGridColumn[];
+      rows: UsgGridRow[];
+      /** Derived total — never stored in stateJson. */
+      total?: { value: number; max: number };
+      twinLabel?: string;
+    };
+  }[];
   impression: string[];
   suggestions: string[];
   technique: string;

@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, CalendarDays, ChevronDown, FileCheck2, Loader2, Maximize2, Minimize2, Phone, Printer, Save, Search, Settings2, Zap } from "lucide-react";
+import { ArrowLeft, CalendarDays, Check, ChevronDown, FileCheck2, Loader2, Maximize2, Minimize2, Phone, Printer, Save, Search, Settings2, Zap } from "lucide-react";
 import type { UsgComposerState, UsgPathologyDef } from "@/lib/usg/types";
 import { USG_SEX_CHILD } from "@/lib/usg/types";
 import { USG_STUDIES, STUDY_GROUPS, applyNormalOverrides, getStudy, initialState as freshComposerState, normalOverrideKey, studyKeyForBillTest, type NormalOverrides } from "@/lib/usg/studies";
@@ -677,6 +677,30 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     });
   };
   togglePathologyRef.current = togglePathology;
+
+  /**
+   * One-click "All Normal" — same as tapping the Normal chip on every organ
+   * that still has no pathology selected. Abnormals are left untouched; grid
+   * organs (BPP etc.) are skipped. Goes through togglePathology so the triad
+   * fills exactly as it would from manual Normal clicks.
+   */
+  const applyAllNormalMacro = () => {
+    if (isFinal) return;
+    let applied = 0;
+    for (const def of study.organs) {
+      if (isGridOrgan(def)) continue;
+      if (!def.normal?.trim()) continue;
+      const organState = state.organs.find((o) => o.organ === def.key);
+      if (!organState) continue;
+      // Already marked abnormal — never overwrite.
+      if (selectedPathologies(organState).length > 0) continue;
+      // Normal chip key is null (UsgOrganCard onToggle(null)).
+      togglePathology(def.key, null);
+      applied += 1;
+    }
+    if (applied > 0) toast.success(`All Normal — ${applied} organ(s)`);
+    else toast.message("Abnormals preserved — nothing left to set normal");
+  };
 
   /** LMP calculator — GA & EDD auto-fill into the pregnancy format tokens
    *  ({gaw}/{gad}/{edd}); typing biometry numbers afterwards still wins. */
@@ -1425,9 +1449,20 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
               }}
             >
               <Zap className="mr-1 h-3.5 w-3.5" />
-              All normal
+              Clear all
             </Button>
           )}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 border-emerald-300 bg-emerald-50 px-2.5 text-[11px] font-semibold text-emerald-900 hover:bg-emerald-100"
+            title="Fill every unset organ with its normal finding (leaves abnormals untouched)"
+            onClick={applyAllNormalMacro}
+          >
+            <Check className="mr-1 h-3.5 w-3.5" />
+            All Normal
+          </Button>
           <UsgFormatsLibrary organs={state.organs} onApply={(organs, imp) => setState((p) => ({ ...p, organs, impressionOverride: imp ?? p.impressionOverride }))} />
           <UsgTemplateBar
           onApply={(template) => {

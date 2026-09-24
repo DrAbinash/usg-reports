@@ -337,6 +337,7 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
   ctx.y -= gap(4);
 
   if (resolved.suggestions.length) {
+    section("Advice", n++);
     for (const s of resolved.suggestions) {
       for (const l of wrap(S(s), fonts.bold, base - (a5 ? 0.5 : 1), contentW)) {
         ensure(ctx, base);

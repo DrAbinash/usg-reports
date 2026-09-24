@@ -181,6 +181,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const [finalizedHere, setFinalizedHere] = useState(report?.status === "FINALIZED");
   const [qualityOpen, setQualityOpen] = useState(false);
   const [headerCollapsed, setHeaderCollapsed] = useState(true);
+  const [focusMode, setFocusMode] = useState<'workspace' | 'preview' | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewSrResult, setReviewSrResult] = useState<{ vars: Record<string, Record<string, string>>; extras: Record<string, string>; matchedCount: number } | null>(null);
@@ -1351,9 +1352,10 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
           Was fixed at 460px max; now starts at 460px but grows to 55% on wide
           screens. On narrow screens (< lg), stacks vertically (organ cards
           on top, impression + preview below). */}
-      <div onClick={(e) => { const g = e.currentTarget; const r = g.getBoundingClientRect(); const left = e.clientX < r.left + r.width / 2; g.classList.remove("usg-focus-edit", "usg-focus-preview"); g.classList.add(left ? "usg-focus-edit" : "usg-focus-preview"); }} onDoubleClick={(e) => { e.currentTarget.classList.remove("usg-focus-edit", "usg-focus-preview"); }} title="Click left: widen workspace · Click right: widen preview · Double-click: reset" className={`grid min-h-0 flex-1 gap-4 overflow-hidden p-4 ${images.length > 0 ? "lg:grid-cols-[minmax(360px,1fr)_minmax(0,2fr)] xl:grid-cols-[minmax(400px,1fr)_minmax(0,2fr)]" : "lg:grid-cols-1"}`}>
+      <div className={`grid min-h-0 flex-1 gap-4 overflow-hidden p-4 ${focusMode === 'preview' ? "lg:grid-cols-[minmax(0,2fr)_minmax(360px,1fr)] xl:grid-cols-[minmax(0,2fr)_minmax(400px,1fr)]" : "lg:grid-cols-[minmax(360px,1fr)_minmax(0,2fr)] xl:grid-cols-[minmax(400px,1fr)_minmax(0,2fr)]"}`}>
         {/* Left column: organ cards + images */}
-        <div className="flex min-h-0 flex-col gap-3 overflow-hidden pr-1">
+        <div className="relative flex min-h-0 flex-col gap-3 overflow-hidden pr-1" onDoubleClick={(e) => { e.stopPropagation(); setFocusMode(null); }}>
+          {focusMode !== 'preview' && (<div className="absolute inset-0 z-10 cursor-pointer" onClick={(e) => { e.stopPropagation(); setFocusMode('preview'); }} title="Click to enlarge viewer & letterpad" />)}
           {orderUid && <UsgViewerSidebar studyInstanceUid={orderUid} />}
           <div className="flex-1 min-h-0 rounded-lg border border-border bg-white shadow-sm overflow-hidden">
             <iframe
@@ -1369,7 +1371,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
             v6.15: flex column (not overflow-y-auto) so the preview iframe
             can grow to fill available vertical space. The impression box
             stays fixed at its natural height; the preview gets flex-1. */}
-        <div className="studio-scroll min-h-0 space-y-3 overflow-y-auto pr-1">
+        <div className="studio-scroll min-h-0 space-y-3 overflow-y-auto pr-1 cursor-pointer" onClick={(e) => { e.stopPropagation(); setFocusMode('workspace'); }} onDoubleClick={(e) => { e.stopPropagation(); setFocusMode(null); }} title="Click to focus workspace · Double-click to reset">
           <div className="space-y-3">
           {study.organs.map((def, organIdx) => {
             const st = state.organs.find((o) => o.organ === def.key);

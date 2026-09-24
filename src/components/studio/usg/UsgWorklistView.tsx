@@ -182,7 +182,7 @@ export function UsgWorklistView() {
 
   // v6.14: date range filter state
   type DatePreset = "all" | "today" | "yesterday" | "week" | "custom";
-  const [datePreset, setDatePreset] = useState<DatePreset>("all");
+  const [datePreset, setDatePreset] = useState<DatePreset>("today");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
 

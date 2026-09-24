@@ -23,9 +23,15 @@ export type UsgPathologyDef = {
   text: string;
   /** Impression line(s) contributed when selected. May contain {variable} tokens. */
   impression: string[];
+  /**
+   * Advice / suggested next-step lines when this pathology is selected
+   * (e.g. "Suggest Fibroscan", "Correlate with LFT"). Falls back to
+   * `suggestions` when absent so older catalog entries keep working.
+   */
+  advice?: string[];
   /** Optional fragment for the composed study title ("grade i fatty changes"). */
   titleFragment?: string;
-  /** Extra suggestion lines printed under the impression ("Suggested: Serum PSA"). */
+  /** @deprecated Prefer `advice` — kept for older catalog entries. */
   suggestions?: string[];
   vars?: UsgVarDef[];
   /** Builtins ship in code; customs are rows in the UsgPathology table. */
@@ -161,8 +167,35 @@ export type UsgOrganState = {
 export type UsgComposerState = {
   studyKey: string;
   organs: UsgOrganState[];
-  /** Manual impression override (null = auto-compose). */
+  /**
+   * Legacy free-text impression override (null = auto-compose from triad).
+   * Old reports may only have this field — UI shows it as one "legacy" badge.
+   */
   impressionOverride: string | null;
+  /** Exact impression lines the doctor dismissed (X on badge). */
+  dismissedImpressions?: string[];
+  /** Exact advice lines the doctor dismissed. */
+  dismissedAdvice?: string[];
+  /** Per-pathology impression wording edits (keyed by pathology key). */
+  impressionEdits?: Record<string, string>;
+  /** Per-pathology advice wording edits (keyed by pathology key). */
+  adviceEdits?: Record<string, string>;
+  /** Free-form conclusion lines appended under derived impressions. */
+  impressionAddendum?: string;
+};
+
+/** One derived triad line (impression or advice) with ownership metadata. */
+export type UsgTriadLine = {
+  /** Display text after edits / substitution. */
+  text: string;
+  /** Pathology key that contributed this line (empty for study-normal / addendum / legacy). */
+  pathologyKey: string;
+  /** True when text comes from impressionEdits / adviceEdits. */
+  edited: boolean;
+  /** True when this is the legacy impressionOverride blob. */
+  legacy?: boolean;
+  /** True for impressionAddendum lines. */
+  addendum?: boolean;
 };
 
 /** Resolved report ready for printing. */
@@ -184,6 +217,12 @@ export type UsgResolved = {
     };
   }[];
   impression: string[];
+  /** Advice / next-step lines (print ADVICE section; omit when empty). */
+  advice: string[];
+  /** @deprecated Alias of advice for older print/PDF callers. */
   suggestions: string[];
   technique: string;
+  /** Rich triad lines for the composer badge UI. */
+  impressionLines?: UsgTriadLine[];
+  adviceLines?: UsgTriadLine[];
 };

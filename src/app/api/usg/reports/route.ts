@@ -23,6 +23,10 @@ export async function GET(req: Request) {
   const q = (url.searchParams.get("q") ?? "").trim();
   const status = url.searchParams.get("status") ?? "";
   const statusFilter = status === "DRAFT" || status === "FINALIZED" ? status : null;
+  const patientPhone = (url.searchParams.get("patientPhone") ?? "").trim();
+  const patientName = (url.searchParams.get("patientName") ?? "").trim();
+  const limitRaw = Number(url.searchParams.get("limit") ?? "500");
+  const take = Number.isFinite(limitRaw) ? Math.min(Math.max(1, limitRaw), 500) : 500;
 
   if (q) {
     // Push the search into SQL so we only fetch rows that match — not the
@@ -58,10 +62,19 @@ export async function GET(req: Request) {
 
   const where: Prisma.UsgReportWhereInput = { clinicId };
   if (statusFilter) where.status = statusFilter;
+  if (patientPhone) {
+    where.OR = [
+      { patient: { phone: patientPhone } },
+      // Denormalized phone may live on linked patient only — also match name+phone via patient relation
+    ];
+  }
+  if (patientName) {
+    where.patientName = { contains: patientName };
+  }
   const reports = await db.usgReport.findMany({
     where,
     orderBy: { createdAt: "desc" },
-    take: 500,
+    take,
     include: { patient: true },
   });
   return Response.json({ reports });

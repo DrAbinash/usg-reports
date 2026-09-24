@@ -309,6 +309,9 @@ const PREMIUM_CSS = `
 
   .suggestions { margin-top: 7px; font-weight: 700; color: #143E6E; }
   .suggestions p { margin: 3px 0; }
+  .advice-box { margin-top: 8px; page-break-inside: avoid; }
+  .advice-box .advice-h { font-size: 9pt; font-weight: 800; letter-spacing: 1.2px; color: #143E6E; text-transform: uppercase; margin-bottom: 3px; }
+  .advice-box p { margin: 3px 0; font-weight: 700; color: #143E6E; }
 
   .sig-block { margin-top: 16px; display: flex; justify-content: flex-end; page-break-inside: avoid; }
   .sig { text-align: center; min-width: 62mm; }
@@ -385,6 +388,8 @@ const CLASSIC_CSS = `
 
   .suggestions { margin-top: 7px; font-weight: 700; }
   .suggestions p { margin: 3px 0; }
+  .advice-box { margin-top: 8px; page-break-inside: avoid; }
+  .advice-box .advice-h { font-size: 9pt; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; margin-bottom: 3px; }
 
   .sig-block { margin-top: 16px; display: flex; justify-content: flex-end; page-break-inside: avoid; }
   .sig { text-align: center; min-width: 62mm; }
@@ -662,8 +667,14 @@ export function buildUsgReportHtml(
         .join("")}</ol></div>`
     : "";
 
-  const suggestionsHtml = resolved.suggestions.length
-    ? `<div class="suggestions">${resolved.suggestions.map((s) => `<p>${esc(s)}</p>`).join("")}</div>`
+  const adviceLines =
+    (resolved.advice?.length ? resolved.advice : null) ??
+    resolved.suggestions ??
+    [];
+  const suggestionsHtml = adviceLines.length
+    ? `<div class="advice-box"><div class="advice-h">Advice</div><div class="suggestions">${adviceLines
+        .map((s) => `<p>${esc(s)}</p>`)
+        .join("")}</div></div>`
     : "";
 
   const doctor = settings.usgDoctorName?.trim() || "Sonologist";
@@ -1086,10 +1097,14 @@ function buildSidebarReportHtml(
       </div>`
     : "";
 
-  // Suggestions
-  const suggestionsHtml = resolved.suggestions?.length
-    ? `<div class="section"><div class="section-body" style="font-size:8.5pt;color:#64748b;">
-        ${resolved.suggestions.map((s) => `• ${esc(s)}`).join("<br>")}</div></div>`
+  // Advice / suggested next steps
+  const adviceLines =
+    (resolved.advice?.length ? resolved.advice : null) ??
+    resolved.suggestions ??
+    [];
+  const suggestionsHtml = adviceLines.length
+    ? `<div class="section"><div class="section-header">Advice</div><div class="section-body" style="font-size:8.5pt;color:#64748b;">
+        ${adviceLines.map((s) => `• ${esc(s)}`).join("<br>")}</div></div>`
     : "";
 
   // Signature
@@ -1226,6 +1241,14 @@ export function buildPremiumReportHtml(settings: any, patient: any, resolved: an
     if (ro.impression) impression += String(ro.impression);
   }
   if (!impression) impression = String(p.impression ?? "");
+  const adviceArr: string[] = Array.isArray((resolved as any)?.advice)
+    ? ((resolved as any).advice as string[]).filter(Boolean)
+    : Array.isArray((resolved as any)?.suggestions)
+      ? ((resolved as any).suggestions as string[]).filter(Boolean)
+      : [];
+  const adviceHtml = adviceArr.length
+    ? `<div class="psec">ADVICE</div><div class="pimp" style="margin-top:1mm;"><ul style="margin:0;padding-left:4.5mm;">${adviceArr.map((l) => `<li>${e(l)}</li>`).join("")}</ul></div>`
+    : "";
   const sig = s.usgSignatureUrl ? `<img class="psig-img" src="${e(s.usgSignatureUrl)}" alt="signature" />` : `<span class="psig-line"></span>`;
   const qrHtml = qr?.dataUrl ? `<span class="pqr"><img src="${e(qr.dataUrl)}" alt="verification QR" /><span>scan to verify</span></span>` : "";
   const rail = imgs.length ? `
@@ -1308,6 +1331,7 @@ ${rail}
   ${sections.map((sec) => `<div class="psec" style="font-size:9.5pt;">${e(sec.label)}</div><p class="pbody">${e(sec.text)}</p>`).join("")}
   ${impression ? `<div class="psec">IMPRESSION</div>
   <div class="pimp" style="margin-top:1mm;"><ol class="pimp-list">${impression.split(/\n+/).filter(Boolean).map((l) => `<li>${e(l)}</li>`).join("")}</ol></div>` : ""}
+  ${adviceHtml}
   <p class="pdisc">${e(s.usgDeclarationLine || "This report is based on the images and clinical information provided. Kindly correlate clinically.")}</p>
   <div class="psig"><div class="psig-box">${sig}<div class="nm">${e(s.usgDoctorName || "")}</div><div class="ql">${e(s.usgDoctorQual || "MBBS, MD (Radiology)")}<br/>RADIOLOGIST${s.usgDoctorRegNo ? ` · Reg. No: ${e(s.usgDoctorRegNo)}` : ""}</div></div></div>
   <div class="pfoot">Thank you for choosing ${e(s.hospitalName || "CARE DIAGNOSTICS")}</div>

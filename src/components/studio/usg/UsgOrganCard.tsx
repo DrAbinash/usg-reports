@@ -233,17 +233,17 @@ export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, norma
       ) : null}
 
       {/* Pathology chips — multi-select toggles */}
-      <div className="mb-2.5 flex flex-wrap gap-1.5">
+      <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
         <button
           onClick={() => {
             setEditing(false);
             onToggle(null);
           }}
           className={cn(
-            "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
+            "rounded-full border px-3.5 py-1.5 text-[12px] font-bold transition-colors shadow-sm",
             !anySelected && !state.custom && !usingQuickNormal
-              ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-              : "border-border bg-muted/40 text-muted-foreground hover:border-emerald-200 hover:text-emerald-700",
+              ? "border-emerald-500 bg-emerald-500 text-white ring-2 ring-emerald-200"
+              : "border-emerald-300 bg-emerald-50 text-emerald-800 hover:border-emerald-400 hover:bg-emerald-100",
           )}
           title={def.vars?.length ? "Normal with measurement slots" : "Normal"}
         >
@@ -358,47 +358,57 @@ export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, norma
         <UsgSuggestionsPanel selectedPathologyKeys={selectedKeys} />
       )}
 
-      {/* Finding text */}
+      {/* Finding text + mic (always available; feature-detect inside DictationButton) */}
       {editing ? (
         <div>
-          <Textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={() => {
-              setEditing(false);
-              if (draft !== state.text) onText(draft);
-            }}
-            rows={5}
-            className="resize-y text-[12px] leading-relaxed"
-            placeholder="Finding text…"
-          />
-          <div className="mt-1 flex items-center gap-1">
+          <div className="flex items-start gap-1.5">
+            <Textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={() => {
+                setEditing(false);
+                if (draft !== state.text) onText(draft);
+              }}
+              rows={5}
+              className="resize-y flex-1 text-[12px] leading-relaxed"
+              placeholder="Finding text…"
+            />
             <DictationButton
               onText={(t) => setDraft((prev) => appendTranscript(prev, t))}
               title="Dictate this finding — recognised speech appends to the text"
+              className="mt-0.5"
             />
-            <span className="text-[10px] text-faint">dictate into this finding</span>
           </div>
         </div>
       ) : (
-        <p
-          className={cn(
-            "cursor-text rounded-lg bg-panel px-2.5 py-2 text-[12px] leading-relaxed text-muted-foreground",
-            anySelected || state.custom ? "text-foreground" : "",
-          )}
-          onClick={() => {
-            setDraft(state.text);
-            setEditing(true);
-          }}
-          title="Click to edit"
-        >
-          {state.text}
-          {state.text.includes("{") ? (
-            <span className="ml-1 inline-flex items-center gap-1 text-[10px] font-semibold text-rose-500">
-              <Stethoscope className="h-3 w-3" /> fill measurements above
-            </span>
-          ) : null}
-        </p>
+        <div className="flex items-start gap-1.5">
+          <p
+            className={cn(
+              "min-w-0 flex-1 cursor-text rounded-lg bg-panel px-2.5 py-2 text-[12px] leading-relaxed text-muted-foreground",
+              anySelected || state.custom ? "text-foreground" : "",
+            )}
+            onClick={() => {
+              setDraft(state.text);
+              setEditing(true);
+            }}
+            title="Click to edit"
+          >
+            {state.text}
+            {state.text.includes("{") ? (
+              <span className="ml-1 inline-flex items-center gap-1 text-[10px] font-semibold text-rose-500">
+                <Stethoscope className="h-3 w-3" /> fill measurements above
+              </span>
+            ) : null}
+          </p>
+          <DictationButton
+            onText={(t) => {
+              const next = appendTranscript(state.text, t);
+              onText(next);
+            }}
+            title="Dictate this finding — recognised speech appends to the text"
+            className="mt-0.5"
+          />
+        </div>
       )}
 
       {/* Impression preview — every selected pathology's lines */}

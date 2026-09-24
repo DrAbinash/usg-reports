@@ -1045,7 +1045,8 @@ USG_STUDIES.push(
   {
     key: 'ob-embryo', label: 'Early Pregnancy / Embryo', title: 'USG EMBRYO', sex: 'F', group: 'ob',
     technique: 'Transabdominal / Transvaginal sonography performed.',
-    allNormalImpression: ['Intrauterine gestation corresponding to gestational age as per biometry (CRL).', 'Suggested TIFFA scan at 20-22 weeks.'],
+    allNormalImpression: ['Intrauterine gestation corresponding to gestational age as per biometry (CRL).'],
+    defaultSuggestions: ['Suggested TIFFA scan at 20-22 weeks.'],
     organs: [
       { key: 'uterus', label: 'UTERUS & CERVIX', normal: 'Gravid uterus contains a single gestational sac with a live embryo in the uterine cavity. Normal color flow and regular cardiac pulsation seen on M-mode. Internal os is closed. Cervix appears long.' },
       { key: 'embryo', label: 'EMBRYONIC SURVEY', normal: 'Gestational sac margins are regular. Embryonic pole and activity are present. Cardiac activity present. Fetal heart rate is [ ] bpm.' },
@@ -1401,27 +1402,8 @@ USG_STUDIES.push(
       { key: 'cavernosal', label: 'CAVERNOSAL ARTERY', normal: 'Normal flow, velocity, and spectral pattern (flaccid state). PSV: [ ] cm/sec. Diameter R: [ ] cm, L: [ ] cm.' },
     ]
   },
-  {
-    key: 'scrotum', label: 'Scrotum', title: 'USG SCROTUM', sex: 'M', group: 'gu',
-    technique: 'High-frequency linear transducer used.',
-    allNormalImpression: ['Normal study.'],
-    organs: [
-      { key: 'right_testis', label: 'RIGHT TESTIS', normal: 'Normal in size (~41 x 22 mm), homogenous echotexture. No hydrocele/varicocele. Epididymis normal. No cyst/calcification.' },
-      { key: 'left_testis', label: 'LEFT TESTIS', normal: 'Normal in size (~41 x 22 mm), homogenous echotexture. No hydrocele/varicocele. Epididymis normal. No cyst/calcification.' },
-      { key: 'wall', label: 'SCROTAL WALL', normal: 'No scrotal wall thickening or collection.' },
-    ]
-  },
-  {
-    key: 'orbit', label: 'Orbit / Eye', title: 'USG ORBIT', sex: 'ANY', group: 'head',
-    technique: 'High-frequency linear transducer with Doppler used.',
-    allNormalImpression: ['Normal ocular ultrasound.'],
-    organs: [
-      { key: 'globe', label: 'GLOBE & ANTERIOR', normal: 'Globe contour regular. Anterior chamber clear. Lens in normal position, no opacities. / Lens opaque (Cataract).' },
-      { key: 'vitreous_retina', label: 'VITREOUS & RETINA', normal: 'Vitreous cavity anechoic. Retina attached throughout; no detachments or tears.' },
-      { key: 'retrobulbar', label: 'RETROBULBAR & NERVE', normal: 'Optic nerve head and retro-bulbar orbital tissues within normal limits.' },
-      { key: 'eom', label: 'EXTRA-OCULAR MUSCLES', normal: 'EOMs show no abnormality. Color Doppler shows normal vascularity.' },
-    ]
-  },
+
+
   {
     key: 'forehead', label: 'Forehead', title: 'USG FOREHEAD', sex: 'ANY', group: 'head',
     technique: 'High-frequency linear transducer with Doppler used.',

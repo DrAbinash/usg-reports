@@ -1529,3 +1529,30 @@ USG_STUDIES.push(
     ]
   }
 );
+
+// ══ NT multi-fetus templates (her wording, corrected & slotted) ══════════
+USG_STUDIES.push(
+  {
+    key: 'ob-nt-twin', label: 'NT Scan (Twin)', title: 'NT SCAN (TWIN)', sex: 'F', group: 'ob',
+    technique: 'Transabdominal sonography performed. Normal color flow and regular cardiac pulsation studied by M-mode.',
+    allNormalImpression: ['Twin intrauterine pregnancies, both live.', 'Anomaly scan to be done at 20-22 weeks of gestational age.'],
+    organs: [
+      { key: 'chorionicity', label: 'SACS & CHORIONICITY', normal: 'Two intrauterine fetuses seen in uterine cavity with separate gestational sacs. Chorionicity: [dichorionic diamniotic / monochorionic diamniotic]. Sac margins appear regular.' },
+      { key: 'twin_a', label: 'FETUS SURVEY (TWIN-A)', normal: 'Gestational sac seen. Fetal pole seen. Fetal activity and cardiac activity present. FHR: [ ] bpm. CRL: [ ] mm corresponding to [ ] weeks [ ] days. EDD: [ ].' },
+      { key: 'markers_a', label: 'ANEUPLOIDY MARKERS (TWIN-A)', normal: 'Nuchal translucency (size ~ [ ] mm) is normal. Nasal bone (size ~ [ ] mm) is normal. Ductus venosus flow is normal.' },
+      { key: 'twin_b', label: 'FETUS SURVEY (TWIN-B)', normal: 'Gestational sac seen. Fetal pole seen. Fetal activity and cardiac activity present. FHR: [ ] bpm. CRL: [ ] mm corresponding to [ ] weeks [ ] days. EDD: [ ].' },
+      { key: 'markers_b', label: 'ANEUPLOIDY MARKERS (TWIN-B)', normal: 'Nuchal translucency (size ~ [ ] mm) is normal. Nasal bone (size ~ [ ] mm) is normal. Ductus venosus flow is normal.' },
+    ]
+  },
+  {
+    key: 'ob-nt-triplet', label: 'NT Scan (Triplet)', title: 'NT SCAN (TRIPLET)', sex: 'F', group: 'ob',
+    technique: 'Transabdominal sonography performed. Normal color flow and regular cardiac pulsation studied by M-mode.',
+    allNormalImpression: ['Triplet intrauterine pregnancies, all live.', 'Anomaly scan to be done at 20-22 weeks of gestational age.'],
+    organs: [
+      { key: 'chorionicity', label: 'SACS & CHORIONICITY', normal: 'Three intrauterine fetuses seen in uterine cavity. Chorionicity: [Triplet I & II monoamniotic monochorionic / Triplet III monochorionic diamniotic — edit as per scan]. Sac margins appear regular.' },
+      { key: 'triplet_i', label: 'FETUS SURVEY (TRIPLET-I)', normal: 'Gestational sac seen. Fetal pole seen. Fetal activity and cardiac activity present. FHR: [ ] bpm. CRL: [ ] mm corresponding to [ ] weeks [ ] days. EDD: [ ]. NT (size ~ [ ] mm) normal. Nasal bone (size ~ [ ] mm) normal.' },
+      { key: 'triplet_ii', label: 'FETUS SURVEY (TRIPLET-II)', normal: 'Gestational sac seen. Fetal pole seen. Fetal activity and cardiac activity present. FHR: [ ] bpm. CRL: [ ] mm corresponding to [ ] weeks [ ] days. EDD: [ ]. NT (size ~ [ ] mm) normal. Nasal bone (size ~ [ ] mm) normal. [Pathology if any: generalized subcutaneous edema / fetal ascites / pleural effusion — else delete this bracket].' },
+      { key: 'triplet_iii', label: 'FETUS SURVEY (TRIPLET-III)', normal: 'Gestational sac seen. Fetal pole seen. Fetal activity and cardiac activity present. FHR: [ ] bpm. CRL: [ ] mm corresponding to [ ] weeks [ ] days. EDD: [ ]. NT (size ~ [ ] mm) normal. Nasal bone (size ~ [ ] mm) normal.' },
+    ]
+  }
+);

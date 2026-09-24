@@ -1,87 +1,54 @@
 "use client";
 /**
- * USG composer — the doctor's whole-abdomen workflow:
- *   patient strip (incl. back-datable scan date + LMP calculator on pregnancy
- *   studies) → organ cards (quick-select pathologies that swap ONE organ's
- *   finding, several at once for combined findings) → auto impression →
- *   live letterhead preview (PROVISIONAL while a draft) → print.
+ * USG composer — orchestrator. Owns all state/data-flow; UI lives in
+ * composer/{OrganCard,ChipRow,ComposerToolbar,ImpressionZone,PreviewZone}.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-import { ArrowLeft, CalendarDays, Check, ChevronDown, FileCheck2, Loader2, Maximize2, Minimize2, Phone, Printer, Save, Search, Settings2, Zap } from "lucide-react";
 import type { UsgComposerState, UsgPathologyDef } from "@/lib/usg/types";
 import { USG_SEX_CHILD } from "@/lib/usg/types";
-import { USG_STUDIES, STUDY_GROUPS, applyNormalOverrides, getStudy, initialState as freshComposerState, normalOverrideKey, studyKeyForBillTest, type NormalOverrides } from "@/lib/usg/studies";
+import { USG_STUDIES, applyNormalOverrides, getStudy, initialState as freshComposerState, normalOverrideKey, studyKeyForBillTest, type NormalOverrides } from "@/lib/usg/studies";
 import { isObStudyKey } from "@/lib/usg/orderStudy";
 import {
   applyPathologies,
   makeLookup,
   normaliseState,
-  pathologiesForOrgan,
   resolve,
   selectedPathologies,
-  setOrganRows,
-  setOrganText,
   setOrganVar,
   switchStudy,
 } from "@/lib/usg/composer";
-import { defaultBppRows, isGridOrgan } from "@/lib/usg/gridOrgans";
-import {
-  applyOrganQuickNormal,
-  applyRushNormalStudy,
-  applyRushPreset,
-  copyForwardFindings,
-  copyForwardMeasurements,
-  isCleanRushFinalize,
-  markAllNormal,
-  studyAllowsRushNormals,
-} from "@/lib/usg/quickActions";
-import { pathologyOverrideKey, type PathologyWordingOverrides } from "@/lib/usg/triad";
-import { UsgTriadZones } from "./UsgTriadZones";
-import { matchSnippetExact } from "@/lib/usg/textExpansion";
+import { studyAllowsRushNormals } from "@/lib/usg/quickActions";
+import { type PathologyWordingOverrides } from "@/lib/usg/triad";
 import { buildUsgReportHtml, formatUsgSerial, type UsgPrintSettings } from "@/lib/usg/print";
 import { lmpSummary, parseLmpInput } from "@/lib/usg/lmp";
 import { toScanDateInput } from "@/lib/usg/dates";
-import { UsgOrganCard } from "./UsgOrganCard";
-import { UsgGridOrganCard } from "./UsgGridOrganCard";
-import { UsgPathologyDialog } from "./UsgPathologyDialog";
-import { UsgDiffPanel, type DiffSource } from "./UsgDiffPanel";
-import { UsgBiometryCalc } from "./UsgBiometryCalc";
-import { UsgCalculators } from "./UsgCalculators";
 import { UsgImagesCard, type ImageRow, type PendingImage } from "./UsgImagesCard";
 import { UsgDicomPicker } from "./UsgDicomPicker";
-import { UsgViewerSidebar } from "./UsgViewerSidebar";
-import { UsgObAntenatalPanel } from "./UsgObAntenatalPanel";
-
 import { UsgFormFDialog, type FormFDefaults, type FormFOrderLite } from "./UsgFormFDialog";
-import { DictationButton } from "./DictationButton";
+import { UsgPathologyDialog } from "./UsgPathologyDialog";
 import { UsgStudyPicker } from "./UsgStudyPicker";
-import { UsgTipsRibbon } from "./UsgTipsRibbon";
-import { UsgGrowthChart } from "./UsgGrowthChart";
-import { UsgTemplateBar } from "./UsgTemplateBar";
-import { UsgFormatsLibrary } from "./UsgFormatsLibrary";
-import { UsgDoctorAutocomplete } from "./UsgDoctorAutocomplete";
-import { UsgCriticalCommDialog } from "./UsgCriticalCommDialog";
-import { UsgAiDraftPanel } from "./UsgAiDraftPanel";
-import { UsgBiradsPicker } from "./UsgBiradsPicker";
-import { scanForCriticalFindings } from "@/lib/usg/criticalFindings";
-import { biradsImpressionLine, biradsFollowUpDays, type BiradsCategory } from "@/lib/usg/birads";
-import { UsgCriticalBanner } from "./UsgCriticalBanner";
 import { UsgQualityChecklist } from "./UsgQualityChecklist";
 import { UsgMeasurementReviewDialog } from "./UsgMeasurementReviewDialog";
-import { UsgPregnancyTimeline } from "./UsgPregnancyTimeline";
-import { buildPregnancyTimeline } from "@/lib/usg/pregnancyTimeline";
-import { appendTranscript } from "@/lib/usg/dictation";
+import { UsgCriticalCommDialog } from "./UsgCriticalCommDialog";
+import { UsgAiDraftPanel } from "./UsgAiDraftPanel";
 import { clearDraft, draftKey, loadDraft, saveDraft, snapshotDiffers, type DraftSnapshot } from "@/lib/usg/drafts";
-import { downloadReportPdf, shareReportPdf } from "./sharePdf";
-import { FileDown, MessageCircle, FileCheck2 as FileCheck2Icon, ScanLine, Link2 } from "lucide-react";
+import { type BiradsCategory } from "@/lib/usg/birads";
+import { ComposerToolbar, ComposerHotkeys, pullFromMachine as pullFromMachineFn } from "./composer/ComposerToolbar";
+import { OrganCard, saveNormalOverride, resetNormalOverride } from "./composer/OrganCard";
+import { ImpressionZone } from "./composer/ImpressionZone";
+import {
+  PreviewZone,
+  addImage,
+  setCaption,
+  removeImage,
+  moveImage,
+  persistReport,
+  printReport,
+  finalizeFastReport,
+  ComposerDialogs,
+} from "./composer/PreviewZone";
+import type { DiffSource } from "./UsgDiffPanel";
 
 /** v6: the bill-desk order a report came from (banner, PACS, Form F). */
 export type ReportOrderLite = FormFOrderLite & {
@@ -105,37 +72,25 @@ export type UsgReportRow = {
   status: string;
   reportHtml: string | null;
   createdAt: string;
-  /** Register number — stamped at first finalization, never renumbered. */
   serialNo?: number | null;
-  /** Scan date as performed (back-datable), ISO-ish yyyy-mm-dd or null. */
   scanDate?: string | null;
-  /** Registry patient (v5) — phone travels with the report row. */
   patient?: { id: string; name: string; phone: string } | null;
-  /** Machine stills attached to the report (v5). */
   images?: ImageRow[];
-  /** Bill-desk order this report was started from (v6). */
   order?: ReportOrderLite | null;
 };
 
-/** Registry autocomplete entry from /api/usg/patients. */
 type PatientSuggestion = { id: string; name: string; phone: string; scanCount: number };
 
 export type UsgComposerProps = {
   pathologies: UsgPathologyDef[];
   settings: UsgPrintSettings;
   report: UsgReportRow | null; // existing draft to continue, or null = new
-  /** "New scan for patient" prefill from the registry (report stays null). */
   prefill?: { patientName?: string; patientPhone?: string; patientAge?: string; patientSex?: string; referredBy?: string } | null;
-  /** Previous-scan snapshot for the follow-up diff panel (follow-up drafts). */
   diffSource?: DiffSource | null;
-  /** The doctor's normal-wording overrides (v5) — builtin normals retuned. */
   normalOverrides?: NormalOverrides | null;
-  /** Clinic-wide pathology impression/advice wording defaults. */
   pathologyWording?: PathologyWordingOverrides | null;
   onPathologyWordingChange?: (next: PathologyWordingOverrides) => void;
-  /** v6: the bill-desk order behind this report (banner, PACS pull, Form F). */
   order?: ReportOrderLite | null;
-  /** v6: settings needed for the Form F fixed details. */
   formFDefaults?: FormFDefaults | null;
   onBack: () => void;
   onSaved: () => void; // refresh list
@@ -183,7 +138,6 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   );
   const [scanDate, setScanDate] = useState(() => toScanDateInput(report?.scanDate ? new Date(report.scanDate) : null));
 
-  // v6.25: persist last-used referrer to seed next report
   useEffect(() => {
     if (referredBy && referredBy.length > 2 && typeof window !== "undefined") {
       try { localStorage.setItem("usg:lastReferredBy", referredBy); } catch {}
@@ -193,9 +147,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const [impressionManual, setImpressionManual] = useState(!!initial?.impressionOverride);
   const [showTechnique, setShowTechnique] = useState(false);
   const [busy, setBusy] = useState<"" | "save" | "finalize" | "print">("");
-  /** Id learned from the first POST — later saves PUT the same row (no duplicates). */
   const savedIdRef = useRef<string | null>(report?.id ?? null);
-  /** Register serial — from the report row (already finalized) or the finalize response. */
   const [serial, setSerial] = useState<string | undefined>(
     report?.serialNo != null ? formatUsgSerial(report.serialNo) : undefined,
   );
@@ -211,18 +163,15 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const [priorFinalized, setPriorFinalized] = useState<Array<{ id: string; scanDate: string | null; stateJson: string | null; studyKey: string | null }>>([]);
   const [dialogOrgan, setDialogOrgan] = useState<string | null>(null);
   const printRef = useRef<HTMLIFrameElement>(null);
-  /** Frozen FINALIZED reportHtml from the finalize API / DB re-fetch — never print the live provisional preview after finalize. */
   const frozenHtmlRef = useRef<string | null>(
     report?.status === "FINALIZED" && report.reportHtml ? report.reportHtml : null,
   );
 
-  // Machine stills (v5): server rows + locally buffered ones (before the
   // first save creates the report row they belong to).
   const [images, setImages] = useState<ImageRow[]>(report?.images ?? []);
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
   const captionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Crash recovery (v5): a local snapshot newer than the saved row is offered
   // for restore; a debounced autosave keeps the snapshot fresh.
   const dKey = useMemo(() => draftKey(report?.id ?? null), [report]);
   const [restoreSnap, setRestoreSnap] = useState<DraftSnapshot | null>(null);
@@ -232,89 +181,29 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   busyRef.current = busy;
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  // v6 — CARE order integration: PACS key images, SR measurement pull, Form F.
   const [dicomOpen, setDicomOpen] = useState(false);
   const [formFOpen, setFormFOpen] = useState(false);
   const [pulling, setPulling] = useState(false);
   const [pullSummary, setPullSummary] = useState<{ source: string; matchedCount: number; extras: Record<string, string> } | null>(null);
 
-  // v6.9 — Critical findings communication log dialog.
   const [commOpen, setCommOpen] = useState(false);
 
-  // v6.10 — BI-RADS assessment category (breast studies only).
   const [birads, setBirads] = useState<BiradsCategory | null>(null);
 
   const orderUid = order?.studyInstanceUid ?? null;
   const reportIdForPacs = savedIdRef.current ?? report?.id ?? null;
 
-  /** Pull machine measurements (DICOM SR first, Vision OCR fallback) into
-   *  the study's variable slots — the typist-less biometry path. */
-  const pullFromMachine = async () => {
-    const rid = savedIdRef.current ?? report?.id ?? null;
-    if (!rid) {
-      toast.info("Save the draft once — then pull the machine's measurements");
-      return;
-    }
-    setPulling(true);
-    try {
-      const r = await fetch("/api/usg/dicom/measurements", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ reportId: rid }),
-      }).then((x) => x.json());
-      if (r?.error) {
-        toast.error(r.error);
-        return;
-      }
-      // If SR measurements were found, show the review dialog before applying
-      if (r.source === "sr" && (r.matchedCount ?? 0) > 0) {
-        const srResult = {
-          vars: (r.vars ?? {}) as Record<string, Record<string, string>>,
-          extras: (r.extras ?? {}) as Record<string, string>,
-          matchedCount: r.matchedCount ?? 0,
-        };
-        // Build mock SrMeasurement array from the vars for confidence scoring
-        const srMeasurements = Object.entries(srResult.vars).flatMap(([organ, kv]) =>
-          Object.entries(kv).map(([k, v]) => ({ conceptName: `${organ}.${k}`, value: v, unit: "" })),
-        );
-        setReviewSrResult(srResult);
-        setReviewSrMeasurements(srMeasurements);
-        setReviewOpen(true);
-        setPullSummary({ source: r.source ?? "none", matchedCount: r.matchedCount ?? 0, extras: srResult.extras });
-        return;
-      }
-      // Non-SR (OCR or none): apply directly as before
-      const vars = (r.vars ?? {}) as Record<string, Record<string, string>>;
-      let applied = 0;
-      setState((s) => {
-        let next = s;
-        for (const [organ, kv] of Object.entries(vars)) {
-          for (const [k, v] of Object.entries(kv)) {
-            if (v === undefined || v === "") continue;
-            next = setOrganVar(next, organ, k, String(v));
-            applied++;
-          }
-        }
-        return next;
-      });
-      setPullSummary({ source: r.source ?? "none", matchedCount: r.matchedCount ?? 0, extras: (r.extras ?? {}) as Record<string, string> });
-      if ((r.matchedCount ?? 0) > 0) {
-        toast.success(
-          r.source === "sr"
-            ? `Machine SR → ${r.matchedCount} measurement slot(s) filled`
-            : `OCR → ${r.matchedCount} measurement slot(s) filled (verify values)`,
-        );
-      } else if (r.ocrNote) {
-        toast.info(r.ocrNote);
-      } else {
-        toast.info("No measurements found in the PACS study for this study type");
-      }
-    } catch {
-      toast.error("Pull failed — Orthanc unreachable");
-    } finally {
-      setPulling(false);
-    }
-  };
+  const pullFromMachine = async () =>
+    pullFromMachineFn({
+      savedId: savedIdRef.current,
+      reportId: report?.id,
+      setPulling,
+      setState,
+      setReviewSrResult,
+      setReviewSrMeasurements,
+      setReviewOpen,
+      setPullSummary,
+    });
 
   const lookup = useMemo(() => makeLookup(pathologies), [pathologies]);
   const resolved = useMemo(
@@ -322,53 +211,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     [state, lookup, technique, normalOverrides, pathologyWording],
   );
 
-  /** Retune one organ's builtin normal (v5) — the composer's own wording
-   *  resets to it when the organ is still showing its normal text. */
-  const saveNormalOverride = async (organKey: string, text: string) => {
-    const res = await fetch("/api/usg/normals", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ studyKey, organKey, text }),
-    });
-    if (!res.ok) {
-      toast.error((await res.json().catch(() => ({}))).error ?? "Could not save the wording");
-      return;
-    }
-    const newText = text.trim();
-    setState((s) => ({
-      ...s,
-      organs: s.organs.map((o) =>
-        o.organ === organKey && !selectedPathologies(o).length && !o.custom
-          ? { ...o, text: newText }
-          : o,
-      ),
-    }));
-    toast.success("Normal wording saved — every future report uses it");
-  };
-
-  const resetNormalOverride = async (organKey: string) => {
-    const res = await fetch(`/api/usg/normals?studyKey=${encodeURIComponent(studyKey)}&organKey=${encodeURIComponent(organKey)}`, {
-      method: "DELETE",
-    });
-    if (!res.ok) {
-      toast.error("Could not reset the wording");
-      return;
-    }
-    const builtin = getStudy(studyKey)?.organs.find((o) => o.key === organKey)?.normal ?? "";
-    setState((s) => ({
-      ...s,
-      organs: s.organs.map((o) =>
-        o.organ === organKey && !selectedPathologies(o).length && !o.custom
-          ? { ...o, text: builtin }
-          : o,
-      ),
-    }));
-    toast.success("Back to the builtin wording");
-  };
-
-  // Registry autocomplete — known patients appear under the name box; picking
   // one fills the phone (and links this report into her history on save).
-  // For obstetric studies, also loads the patient's prior obstetric reports
   // to build the pregnancy timeline.
   useEffect(() => {
     let cancelled = false;
@@ -383,7 +226,6 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     };
   }, []);
 
-  // Load patient's prior reports for the pregnancy timeline (obstetric only)
   useEffect(() => {
     if (!patientName.trim() || !isObStudyKey(state.studyKey)) {
       setPatientReports([]);
@@ -402,7 +244,6 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     return () => { cancelled = true; };
   }, [patientName, state.studyKey]);
 
-  // Prior FINALIZED reports for this phone — "Copy findings from [date]"
   useEffect(() => {
     const phone = patientPhone.trim();
     if (!phone || phone.length < 6) {
@@ -433,7 +274,6 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const isPregnancyStudy = studyKey === "ob" || studyKey === "ep";
   const isFinal = report?.status === "FINALIZED" || finalizedHere;
 
-  // ── Crash recovery: detect a local snapshot ahead of the saved row ──────
   const initialSnap = useMemo(
     () => ({
       patientName,
@@ -450,14 +290,12 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     [],
   );
 
-
   useEffect(() => {
     if (isFinal) return;
     const snap = loadDraft(dKey);
     if (snap && snapshotDiffers(snap, initialSnap)) setRestoreSnap(snap);
   }, [dKey, initialSnap]);
 
-  // ── Debounced autosave of the composer snapshot ────────────────────────
   const currentSnap = useMemo<DraftSnapshot>(
     () => ({ savedAt: Date.now(), ...initialSnap, patientName, patientPhone, patientAge, patientSex, referredBy, studyKey, technique, scanDate, state }),
     [initialSnap, patientName, patientPhone, patientAge, patientSex, referredBy, studyKey, technique, scanDate, state],
@@ -473,7 +311,6 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     return () => clearTimeout(t);
   }, [dKey, currentSnap, isFinal, initialSnap]);
 
-  // ── Unsaved-changes guard on tab close / reload ──────────────────────
   useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       if (dirtyRef.current && !isFinal) {
@@ -485,108 +322,11 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [isFinal]);
 
-  // ── Keyboard-first flow: Ctrl+S · Ctrl+Enter · Ctrl+Shift+Enter · Ctrl+P · N · F · P · 1-9 · Space ─
   const persistRef = useRef<((status: "" | "finalize") => Promise<string | null>) | null>(null);
   const printRefFn = useRef<() => Promise<void>>(async () => {});
   const finalizeFastRef = useRef<(alsoPrint?: boolean) => Promise<void>>(async () => {});
   const togglePathologyRef = useRef<(organKey: string, key: string | null) => void>(() => {});
   const [focusedOrganIdx, setFocusedOrganIdx] = useState(0);
-  const rushNormalRef = useRef<() => void>(() => {});
-  rushNormalRef.current = () => {
-    if (isFinal) return;
-    if (studyAllowsRushNormals(study)) {
-      const next = applyRushNormalStudy(state, study);
-      if (!next) {
-        toast.error("This study needs measurements — use organ cards");
-        return;
-      }
-      setState(next);
-      toast.success("All normal · no sizes — ready to print");
-    } else {
-      setState((s) => markAllNormal(s, study));
-      toast.success("All organs set to normal");
-    }
-  };
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey;
-      const target = e.target as HTMLElement | null;
-      const typing =
-        !!target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.tagName === "SELECT" ||
-          target.isContentEditable);
-
-      // Peak-time: bare "N" → Normal · no sizes (skipped while typing in a field)
-      if (!mod && !typing && e.key.toLowerCase() === "n" && !e.altKey) {
-        e.preventDefault();
-        rushNormalRef.current();
-        return;
-      }
-
-      if (!mod && !typing && e.key.toLowerCase() === "f" && !e.altKey) {
-        e.preventDefault();
-        if (!isFinal) setQualityOpen(true);
-        return;
-      }
-
-      if (!mod && !typing && e.key.toLowerCase() === "p" && !e.altKey) {
-        e.preventDefault();
-        void printRefFn.current();
-        return;
-      }
-
-      // Space → next organ card + auto-focus first actionable slot
-      if (!mod && !typing && e.key === " " && !e.altKey) {
-        e.preventDefault();
-        setFocusedOrganIdx((i) => {
-          const next = (i + 1) % Math.max(study.organs.length, 1);
-          // Defer DOM focus until React finishes rendering the new highlight
-          setTimeout(() => {
-            const wrapper = document.querySelector(`[data-organ-idx="${next}"]`);
-            if (wrapper) {
-              const focusable = wrapper.querySelector('input:not([type="hidden"]), select, textarea, button') as HTMLElement;
-              if (focusable) focusable.focus();
-            }
-          }, 50);
-          return next;
-        });
-        return;
-      }
-
-      // 1-9 → toggle pathology chips on focused organ
-      if (!mod && !typing && /^[1-9]$/.test(e.key) && !e.altKey) {
-        const organ = study.organs[focusedOrganIdx];
-        if (!organ || isFinal) return;
-        const chips = pathologiesForOrgan(pathologies, organ.key);
-        const chip = chips[Number(e.key) - 1];
-        if (!chip) return;
-        e.preventDefault();
-        togglePathologyRef.current(organ.key, chip.key);
-        return;
-      }
-
-      if (!mod) return;
-      if (e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        if (!isFinal) setPickerOpen(true);
-      } else if (e.key.toLowerCase() === "s") {
-        e.preventDefault();
-        if (!isFinal && !busyRef.current) void persistRef.current?.("");
-      } else if (e.key.toLowerCase() === "p") {
-        e.preventDefault();
-        void printRefFn.current();
-      } else if (e.key === "Enter") {
-        if (!isFinal && !busyRef.current) {
-          e.preventDefault();
-          void finalizeFastRef.current(e.shiftKey);
-        }
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [isFinal, study.organs, focusedOrganIdx, pathologies]);
 
   const restoreDraft = () => {
     if (!restoreSnap) return;
@@ -628,12 +368,8 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     const target = getStudy(k);
     if (!target) return;
     const prevStudy = getStudy(studyKey);
-    const prevDefault =
-      settings.studyTechniqueDefaults?.[studyKey]?.trim() ||
-      prevStudy?.technique?.trim() ||
-      "";
-    const nextDefault =
-      settings.studyTechniqueDefaults?.[k]?.trim() || target.technique;
+    const prevDefault = settings.studyTechniqueDefaults?.[studyKey]?.trim() || prevStudy?.technique?.trim() || "";
+    const nextDefault = settings.studyTechniqueDefaults?.[k]?.trim() || target.technique;
     setStudyKey(k);
     setTechnique((cur) => {
       const t = cur.trim();
@@ -641,29 +377,9 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
       return cur;
     });
     setState((s) => switchStudy(s, k, normalOverrides));
-    // Study drives patient type: pregnancy studies are female, the child
-    // scaffold switches the strip to the Child profile.
     if (k === "wa-child") setPatientSex(USG_SEX_CHILD);
     else if (target.sex === "F" || target.sex === "M") setPatientSex(target.sex);
   };
-
-  const changeSex = (sex: "F" | "M" | typeof USG_SEX_CHILD) => {
-    setPatientSex(sex);
-    // Follow the doctor's convention: whole/lower abdomen track patient sex;
-    // Child swaps to the paediatric scaffold; picking M/F on the child study
-    // only changes what prints in the Sex box (the scaffold stays paediatric).
-    const adultSexStudy =
-      studyKey === "wa-female" || studyKey === "wa-male" || studyKey === "la-female" || studyKey === "la-male";
-    if (sex === USG_SEX_CHILD) {
-      if (adultSexStudy) pickStudy("wa-child");
-    } else if (sex === "M" && (studyKey === "wa-female" || studyKey === "la-female")) {
-      pickStudy(studyKey === "wa-female" ? "wa-male" : "la-male");
-    } else if (sex === "F" && (studyKey === "wa-male" || studyKey === "la-male")) {
-      pickStudy(studyKey === "wa-male" ? "wa-female" : "la-female");
-    }
-  };
-
-  const printedSex = patientSex === USG_SEX_CHILD ? "Child" : patientSex;
 
   const abnormalCount = state.organs.filter((o) => selectedPathologies(o).length).length;
 
@@ -678,1283 +394,248 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   };
   togglePathologyRef.current = togglePathology;
 
-  /**
-   * One-click "All Normal" — same as tapping the Normal chip on every organ
-   * that still has no pathology selected. Abnormals are left untouched; grid
-   * organs (BPP etc.) are skipped. Goes through togglePathology so the triad
-   * fills exactly as it would from manual Normal clicks.
-   */
-  const applyAllNormalMacro = () => {
-    if (isFinal) return;
-    let applied = 0;
-    for (const def of study.organs) {
-      if (isGridOrgan(def)) continue;
-      if (!def.normal?.trim()) continue;
-      const organState = state.organs.find((o) => o.organ === def.key);
-      if (!organState) continue;
-      // Already marked abnormal — never overwrite.
-      if (selectedPathologies(organState).length > 0) continue;
-      // Normal chip key is null (UsgOrganCard onToggle(null)).
-      togglePathology(def.key, null);
-      applied += 1;
-    }
-    if (applied > 0) toast.success(`All Normal — ${applied} organ(s)`);
-    else toast.message("Abnormals preserved — nothing left to set normal");
-  };
-
-  /** LMP calculator — GA & EDD auto-fill into the pregnancy format tokens
-   *  ({gaw}/{gad}/{edd}); typing biometry numbers afterwards still wins. */
-  const applyLmp = (v: string) => {
-    setLmp(v);
-    const d = parseLmpInput(v);
-    if (!d) return;
-    const { weeks, days, edd } = lmpSummary(d);
-    const target = state.studyKey === "ob" ? "biometry" : "gravid-uterus";
-    setState((s) => {
-      let next = s;
-      next = setOrganVar(next, target, "gaw", String(weeks));
-      next = setOrganVar(next, target, "gad", String(days));
-      next = setOrganVar(next, target, "edd", edd);
-      return next;
-    });
-    toast.success(`GA ${weeks} wk ${days} d · EDD ${edd} filled from LMP`);
-  };
-
   const lmpInfo = useMemo(() => {
     const d = parseLmpInput(lmp);
     return d ? lmpSummary(d) : null;
   }, [lmp]);
 
-  /** Toggle browser fullscreen mode — the doctor presses a button, not F11. */
-  const toggleFullscreen = async () => {
-    try {
-      if (!document.fullscreenElement) {
-        await document.documentElement.requestFullscreen();
-        setFullscreen(true);
-      } else {
-        await document.exitFullscreen();
-        setFullscreen(false);
-      }
-    } catch {
-      // Some browsers/contexts block fullscreen — silently ignore
-      setFullscreen((v) => !v);
-    }
-  };
-
-  /** Listen for native fullscreen changes (Esc key exits fullscreen). */
-  useEffect(() => {
-    const onFsChange = () => setFullscreen(!!document.fullscreenElement);
-    document.addEventListener("fullscreenchange", onFsChange);
-    return () => document.removeEventListener("fullscreenchange", onFsChange);
-  }, []);
-
-  const persist = async (status: "" | "finalize"): Promise<string | null> => {
-    if (!patientName.trim()) {
-      toast.error("Patient name is required");
-      return null;
-    }
-    setBusy(status === "finalize" ? "finalize" : "save");
-    try {
-      const payload = {
-        patientName: patientName.trim(),
-        patientPhone: patientPhone.trim(),
-        patientAge: patientAge.trim(),
-        patientSex,
-        referredBy: referredBy.trim(),
-        studyKey,
-        technique,
-        state,
-        scanDate,
-      };
-      let id = savedIdRef.current;
-      if (id) {
-        const res = await fetch(`/api/usg/reports/${id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Save failed");
-      } else {
-        const res = await fetch("/api/usg/reports", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Save failed");
-        id = (await res.json()).report.id as string;
-        savedIdRef.current = id;
-      }
-      if (status === "finalize" && id) {
-        const res = await fetch(`/api/usg/reports/${id}/finalize`, { method: "POST" });
-        if (!res.ok) throw new Error("Finalize failed");
-        const body = (await res.json()) as { serialNo?: number; html?: string; report?: UsgReportRow };
-        if (typeof body.serialNo === "number") setSerial(formatUsgSerial(body.serialNo));
-        setFinalizedHere(true);
-        // Keep the frozen snapshot on hand so rush-print never falls back to
-        // the live PROVISIONAL preview closure.
-        if (typeof body.html === "string" && body.html.trim()) {
-          frozenHtmlRef.current = body.html;
-        } else if (body.report?.reportHtml) {
-          frozenHtmlRef.current = body.report.reportHtml;
-        }
-        dirtyRef.current = false;
-        clearDraft(dKey);
-        toast.success(`Report finalized — register no. ${formatUsgSerial(body.serialNo ?? 0)} frozen for reprint`);
-      } else {
-        dirtyRef.current = false;
-        toast.success("Draft saved");
-      }
-      onSaved();
-      if (id) await flushPendingImages(id);
-      return id;
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Save failed");
-      return null;
-    } finally {
-      setBusy("");
-    }
-  };
+  const persistDeps = () => ({
+    patientName, patientPhone, patientAge, patientSex, referredBy, studyKey, technique, state, scanDate,
+    savedIdRef, frozenHtmlRef, dirtyRef, dKey, pendingImages, setPendingImages, setImages,
+    setBusy, setSerial, setFinalizedHere, onSaved,
+  });
+  const persist = async (status: "" | "finalize") => persistReport(status, persistDeps());
   persistRef.current = persist;
 
-  /** Upload pending stills once the report row exists (called after save). */
-  const flushPendingImages = async (id: string) => {
-    if (!pendingImages.length) return;
-    const queue = [...pendingImages];
-    setPendingImages([]);
-    for (const p of queue) {
-      const res = await fetch(`/api/usg/reports/${id}/images`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(p),
-      });
-      if (res.ok) {
-        const { image } = (await res.json()) as { image: ImageRow };
-        setImages((prev) => [...prev, image]);
-      } else {
-        toast.error((await res.json().catch(() => ({}))).error ?? "Could not attach an image");
-      }
-    }
-  };
-
-  /** v6: reload attached stills from the server (after a PACS pick). */
-  const reloadImages = async () => {
-    const rid = savedIdRef.current ?? report?.id ?? null;
-    if (!rid) return;
-    const res = await fetch(`/api/usg/reports/${rid}`);
-    if (!res.ok) return;
-    const fresh = (await res.json()).report as UsgReportRow;
-    if (Array.isArray(fresh.images)) setImages(fresh.images);
-  };
-
-  const addImage = (dataUrl: string) => {
-    if (isFinal) {
-      toast.error("Finalized reports keep their images frozen");
-      return;
-    }
-    if (savedIdRef.current) {
-      void (async () => {
-        const res = await fetch(`/api/usg/reports/${savedIdRef.current}/images`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ dataUrl }),
-        });
-        if (res.ok) {
-          const { image } = (await res.json()) as { image: ImageRow };
-          setImages((prev) => [...prev, image]);
-        } else {
-          toast.error((await res.json().catch(() => ({}))).error ?? "Could not attach the image");
-        }
-      })();
-    } else {
-      setPendingImages((prev) => [...prev, { dataUrl, caption: "" }]);
-      toast.info("Still attached — saves with the draft (Save to keep it permanently)");
-    }
-  };
-
-  const setCaption = (kind: "server" | "pending", key: string, caption: string) => {
-    if (kind === "pending") {
-      setPendingImages((prev) => prev.map((p, i) => (String(i) === key ? { ...p, caption } : p)));
-      return;
-    }
-    setImages((prev) => prev.map((p) => (p.id === key ? { ...p, caption } : p)));
-    if (captionTimer.current) clearTimeout(captionTimer.current);
-    captionTimer.current = setTimeout(() => {
-      // Audit #6 — silently swallowed fetch failures meant a caption edit
-      // looked saved but never reached the server. Surface the failure.
-      fetch(`/api/usg/reports/${savedIdRef.current}/images/${key}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ caption }),
-      }).then(
-        (res) => {
-          if (!res.ok) toast.error(`Caption save failed (${res.status})`);
-        },
-        (err) => toast.error(`Caption save failed — ${err?.message ?? "network error"}`),
-      );
-    }, 600);
-  };
-
-  const removeImage = (kind: "server" | "pending", key: string) => {
-    if (kind === "pending") {
-      setPendingImages((prev) => prev.filter((_, i) => String(i) !== key));
-      return;
-    }
-    setImages((prev) => prev.filter((p) => p.id !== key));
-    fetch(`/api/usg/reports/${savedIdRef.current}/images/${key}`, { method: "DELETE" }).then(
-      (res) => {
-        if (!res.ok) toast.error(`Remove failed (${res.status}) — refresh the page`);
-      },
-      (err) => toast.error(`Remove failed — ${err?.message ?? "network error"}`),
-    );
-  };
-
-  const moveImage = (kind: "server" | "pending", key: string, dir: -1 | 1) => {
-    if (kind === "pending") {
-      setPendingImages((prev) => {
-        const i = Number(key);
-        const j = i + dir;
-        if (j < 0 || j >= prev.length) return prev;
-        const next = [...prev];
-        [next[i], next[j]] = [next[j], next[i]];
-        return next;
-      });
-      return;
-    }
-    setImages((prev) => {
-      const i = prev.findIndex((p) => p.id === key);
-      const j = i + dir;
-      if (i < 0 || j < 0 || j >= prev.length) return prev;
-      const next = [...prev];
-      [next[i], next[j]] = [next[j], next[i]];
-      // Persist the new order (positions are 1-based × 10).
-      for (const [idx, img] of next.entries()) {
-        if (idx === i || idx === j) {
-          fetch(`/api/usg/reports/${savedIdRef.current}/images/${img.id}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sortOrder: (idx + 1) * 10 }),
-          }).then(
-            (res) => {
-              if (!res.ok) toast.error(`Order save failed (${res.status})`);
-            },
-            (err) => toast.error(`Order save failed — ${err?.message ?? "network error"}`),
-          );
-        }
-      }
-      return next.map((img, idx) => (idx === i || idx === j ? { ...img, sortOrder: (idx + 1) * 10 } : img));
+  const print = async () =>
+    printReport({
+      patientName, setBusy, report, finalizedHere, frozenHtmlRef, savedIdRef, printRef, previewHtml, persist,
     });
-  };
-
-  /** Re-fetch the finalized row and print its frozen reportHtml (no PROVISIONAL watermark). */
-  const printFrozenReport = async (id: string): Promise<boolean> => {
-    if (frozenHtmlRef.current && !/PROVISIONAL/i.test(frozenHtmlRef.current)) {
-      printInIframe(frozenHtmlRef.current);
-      return true;
-    }
-    const res = await fetch(`/api/usg/reports/${id}`, { method: "GET" });
-    if (!res.ok) return false;
-    const row = (await res.json()).report as UsgReportRow | null;
-    if (row?.status === "FINALIZED" && row.reportHtml) {
-      frozenHtmlRef.current = row.reportHtml;
-      printInIframe(row.reportHtml);
-      return true;
-    }
-    return false;
-  };
-
-  const print = async () => {
-    if (!patientName.trim()) {
-      toast.error("Patient name is required");
-      return;
-    }
-    setBusy("print");
-    try {
-      // Finalized reports print their frozen snapshot; drafts print the live
-      // preview — stamped PROVISIONAL so it can't be filed as the record.
-      if (report?.status === "FINALIZED" && report.reportHtml) {
-        frozenHtmlRef.current = report.reportHtml;
-        printInIframe(report.reportHtml);
-      } else if (finalizedHere || frozenHtmlRef.current) {
-        const id = savedIdRef.current ?? report?.id;
-        if (id) {
-          const ok = await printFrozenReport(id);
-          if (!ok && frozenHtmlRef.current) printInIframe(frozenHtmlRef.current);
-          else if (!ok) toast.error("Could not load the finalized snapshot for print");
-        } else if (frozenHtmlRef.current) {
-          printInIframe(frozenHtmlRef.current);
-        }
-      } else {
-        const id = await persist("");
-        if (id) {
-          const res = await fetch(`/api/usg/reports/${id}`, { method: "GET" });
-          const row = res.ok ? ((await res.json()).report as UsgReportRow) : null;
-          if (row?.status === "FINALIZED" && row.reportHtml) {
-            frozenHtmlRef.current = row.reportHtml;
-            printInIframe(row.reportHtml);
-          } else {
-            printInIframe(previewHtml);
-          }
-        }
-      }
-    } finally {
-      setBusy("");
-    }
-  };
-
-  const printInIframe = (html: string) => {
-    const frame = printRef.current;
-    if (!frame) return;
-    frame.srcdoc = html;
-    const win = frame.contentWindow;
-    if (win) {
-      win.focus();
-      setTimeout(() => win.print(), 150);
-    }
-  };
-
-  /** Peak-time: skip QC dialog when the draft is a clean NP / ·no-size report. */
-  const finalizeFast = async (alsoPrint = false) => {
-    if (isFinal || busyRef.current) return;
-    if (isCleanRushFinalize(state)) {
-      const id = await persist("finalize");
-      if (id && alsoPrint) {
-        // Medico-legal: never print the stale live preview (PROVISIONAL).
-        // Re-fetch the DB row and print the frozen reportHtml snapshot.
-        const ok = await printFrozenReport(id);
-        if (!ok) toast.error("Finalized, but could not load the print snapshot");
-      }
-      return;
-    }
-    if (alsoPrint) {
-      // Still open QC when there are warnings/blockers; print after force-finalize.
-      setQualityOpen(true);
-      toast.message("Review quality checklist, then finalize — print after");
-      return;
-    }
-    setQualityOpen(true);
-  };
+  const finalizeFast = async (alsoPrint = false) =>
+    finalizeFastReport({
+      isFinal, busyRef, state, persist, frozenHtmlRef, printRef, setQualityOpen, alsoPrint,
+    });
   finalizeFastRef.current = finalizeFast;
   printRefFn.current = print;
 
   const paperLabel = (settings.usgPrintPaper ?? "a4") === "a5" ? "A5" : "A4";
 
+  
+  const onAddImage = (dataUrl: string) =>
+    addImage(dataUrl, { isFinal, savedId: savedIdRef.current, setImages, setPendingImages });
+  const onCaption = (kind: "server" | "pending", key: string, caption: string) =>
+    setCaption(kind, key, caption, { setImages, setPendingImages, captionTimer, savedIdRef });
+  const onRemoveImage = (kind: "server" | "pending", key: string) =>
+    removeImage(kind, key, { setImages, setPendingImages, savedIdRef });
+  const onMoveImage = (kind: "server" | "pending", key: string, dir: -1 | 1) =>
+    moveImage(kind, key, dir, { setImages, setPendingImages, savedIdRef });
+
+  const onSaveNormal = useCallback(
+    (organKey: string, text: string) => void saveNormalOverride(studyKey, organKey, text, setState),
+    [studyKey],
+  );
+  const onResetNormal = useCallback(
+    (organKey: string) => void resetNormalOverride(studyKey, organKey, setState),
+    [studyKey],
+  );
+  const onTogglePathology = useCallback(
+    (organKey: string, key: string | null) => togglePathology(organKey, key),
+    // togglePathology closes over lookup/normalOverrides via setState updater
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lookup, normalOverrides],
+  );
+  const onFocusOrgan = useCallback((idx: number) => setFocusedOrganIdx(idx), []);
+  const onAddCustom = useCallback((organKey: string) => setDialogOrgan(organKey), []);
+  const lookupPathology = useCallback((key: string) => pathologies.find((p) => p.key === key), [pathologies]);
+  const onEnlargePreview = useCallback(() => setFocusMode("preview"), []);
+  const onResetFocus = useCallback(() => setFocusMode(null), []);
+  const onWorkspaceFocus = useCallback(() => setFocusMode("workspace"), []);
+
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* ══ v6.8 COMPACT HEADER ════════════════════════════════════════════ */}
-      <div className="shrink-0 border-b border-border bg-card/95 backdrop-blur">
-        {/* ── Row 1: compact patient line + fullscreen + actions ─────────── */}
-        <div
-          className={cn("flex items-center gap-2 px-3 py-1.5 cursor-pointer select-none", headerCollapsed ? "hover:bg-muted/40" : "")}
-          onClick={() => setHeaderCollapsed((v) => !v)}
-          title={headerCollapsed ? "Click to expand patient details" : "Click to collapse — start reporting"}
-        >
-          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onBack(); }} className="h-7 w-7 p-0 text-muted-foreground shrink-0">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-
-          {headerCollapsed ? (
-            <div className="flex min-w-0 flex-1 items-center gap-2 text-[12px]">
-              <span className="truncate font-bold text-foreground">{patientName || "New report"}</span>
-              {patientAge ? <span className="text-muted-foreground shrink-0">{patientAge}y</span> : null}
-              <span className="text-muted-foreground shrink-0">{patientSex === USG_SEX_CHILD ? "Child" : patientSex}</span>
-              {referredBy ? <span className="truncate text-faint hidden sm:inline">· {referredBy}</span> : null}
-              <span className="text-faint shrink-0 hidden md:inline">{resolved.study.label}</span>
-              {abnormalCount ? (
-                <span className="shrink-0 rounded-full bg-rose-50 px-1.5 py-0.5 text-[9px] font-bold text-rose-700">{abnormalCount} organ{abnormalCount > 1 ? "s" : ""}</span>
-              ) : (
-                <span className="shrink-0 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">All normal</span>
-              )}
-              {serial ? <span className="shrink-0 rounded-full bg-sky-50 px-1.5 py-0.5 text-[9px] font-bold text-sky-700">{serial}</span> : null}
-              {isFinal ? <span className="shrink-0 text-[10px] font-bold text-amber-600">FINAL</span> : null}
-            </div>
-          ) : (
-            <div className="flex min-w-0 flex-1 items-center gap-2">
-              <span className="truncate text-[13px] font-bold text-foreground">{patientName || "New report"}</span>
-              <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground rotate-180" />
-            </div>
-          )}
-
-          {/* Fullscreen toggle — always visible at center-top */}
-          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); void toggleFullscreen(); }}
-            className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground shrink-0"
-            title={fullscreen ? "Exit fullscreen (Esc)" : "Enter fullscreen — hides browser tabs"}>
-            {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-          </Button>
-
-          {/* Quick actions — always visible */}
-          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-            <Button size="sm" variant="outline" onClick={() => persist("")} disabled={busy !== "" || isFinal}
-              className="h-7 border-border bg-panel px-2 text-[10px]">
-              {busy === "save" ? <Loader2 className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
-            </Button>
-            <Button size="sm" onClick={() => void finalizeFast(false)} disabled={busy !== "" || isFinal}
-              className="h-7 bg-emerald-600 px-2 hover:bg-emerald-700"
-              title="Finalize — clean NP skips checklist (Ctrl+Enter). Ctrl+Shift+Enter also prints.">
-              {busy === "finalize" ? <Loader2 className="h-3.5 w-3.5" /> : <FileCheck2 className="h-3.5 w-3.5" />}
-            </Button>
-            <Button size="sm" variant="outline" onClick={print} disabled={busy !== ""}
-              className="h-7 border-rose-200 bg-rose-50 px-2 text-rose-700 hover:bg-rose-100">
-              {busy === "print" ? <Loader2 className="h-3.5 w-3.5" /> : <Printer className="h-3.5 w-3.5" />}
-            </Button>
-            {(() => {
-              // v6.9 — show "Log communication" button when a critical
-              // finding is active on this report. Lets the radiologist
-              // document PCPNDT/NMC-required referring-physician contact.
-              // v6.10 — gated by the enableCriticalComm feature toggle.
-              if (settings.enableCriticalComm === false) return null;
-              const sel = state.organs.flatMap((o) =>
-                (o.pathologies ?? (o.pathology ? [o.pathology] : [])).map((k) => ({
-                  key: k, label: k, organ: o.organ,
-                })),
-              );
-              const criticalAlerts = scanForCriticalFindings(sel);
-              const hasCritical = criticalAlerts.length > 0;
-              if (!hasCritical && !isFinal) return null;
-              return (
-                <Button size="sm" variant="outline" onClick={() => setCommOpen(true)}
-                  title="Critical finding communication log (PCPNDT/NMC legal record)"
-                  className="h-7 border-rose-300 bg-rose-100 px-2 text-rose-700 hover:bg-rose-200">
-                  <Phone className="h-3.5 w-3.5" />
-                </Button>
-              );
-            })()}
-            {isFinal ? (
-              <Button size="sm" variant="outline" onClick={() => downloadReportPdf({ reportId: savedIdRef.current ?? report?.id ?? "", patientName, serial, date: fmtPrintDate(scanDate) })}
-                title="Download PDF" className="h-7 border-sky-200 bg-sky-50 px-2 text-sky-700 hover:bg-sky-100">
-                <FileDown className="h-3.5 w-3.5" />
-              </Button>
-            ) : null}
-          </div>
-        </div>
-
-        {/* ── Row 2: study title + status badges (thin line) ─────────────── */}
-        <div className="flex items-center gap-1.5 px-3 pb-1 text-[10px] text-muted-foreground">
-          <span className="font-semibold text-foreground">{resolved.title}</span>
-          <span className={cn("rounded-full px-1.5 py-0.5 font-semibold", abnormalCount ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700")}>
-            {abnormalCount ? `${abnormalCount} organ${abnormalCount > 1 ? "s" : ""} affected` : "All normal"}
-          </span>
-          {serial ? <span className="rounded-full bg-sky-50 px-1.5 py-0.5 font-bold text-sky-700">{serial}</span> : null}
-          {isFinal ? (
-            <span className="rounded-full bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-700">finalized</span>
-          ) : (
-            <span className="rounded-full bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-700">draft</span>
-          )}
-          {lastAutosave && !isFinal ? (
-            <span className="text-[9px] text-emerald-600">· autosaved {new Date(lastAutosave).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>
-          ) : null}
-        </div>
-
-        <UsgTipsRibbon />
-
-        {/* ── Expanded: full patient input form ──────────────────────────── */}
-        {!headerCollapsed && (
-          <>
-            {/* CARE order banner */}
-            {order ? (
-              <div className="flex flex-wrap items-center gap-2 border-t border-sky-100 bg-sky-50/60 px-3 py-1 text-[10px]">
-                <Link2 className="h-3 w-3 text-sky-600" />
-                <span className="font-mono font-bold text-sky-800">
-                  {order.accessionNumber ?? (order.careWorklistId ? `WL ${order.careWorklistId}` : "Bill-desk order")}
-                </span>
-                {order.billNumber ? <span className="text-sky-700">· Bill {order.billNumber}</span> : null}
-                {order.testName ? <span className="truncate text-sky-700">· {order.testName}</span> : null}
-                {order.billingStatus ? (
-                  <span className={cn("rounded-full px-1.5 py-0.5 text-[9px] font-bold ring-1",
-                    order.billingStatus === "PAID" ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-amber-50 text-amber-700 ring-amber-200")}>
-                    {order.billingStatus}
-                  </span>
-                ) : null}
-                <div className="ml-auto flex items-center gap-1">
-                  {orderUid ? (
-                    <Button size="sm" variant="outline" onClick={() => void pullFromMachine()} disabled={pulling || isFinal}
-                      className="h-6 border-violet-200 bg-white px-1.5 text-[10px] font-semibold text-violet-700 hover:bg-violet-50">
-                      {pulling ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <ScanLine className="mr-1 h-3 w-3" />}
-                      Pull
-                    </Button>
-                  ) : null}
-                  {study.pcpndt && formFDefaults ? (
-                    <Button size="sm" variant="outline" onClick={() => setFormFOpen(true)}
-                      className="h-6 border-rose-200 bg-white px-1.5 text-[10px] font-semibold text-rose-700 hover:bg-rose-50">
-                      <FileCheck2Icon className="mr-1 h-3 w-3" /> Form F
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
-
-            {/* Pull summary */}
-            {pullSummary ? (
-              <div className="flex flex-wrap items-center gap-2 border-t border-violet-100 bg-violet-50/50 px-3 py-1 text-[10px] text-violet-800">
-                <b>Pulled {pullSummary.matchedCount} slot(s)</b>
-                <span className="text-violet-600">{pullSummary.source === "sr" ? "from SR" : pullSummary.source === "ocr" ? "via OCR" : "nothing"}</span>
-                {Object.keys(pullSummary.extras).length ? (
-                  <span className="truncate text-violet-600">
-                    · unmatched: {Object.entries(pullSummary.extras).slice(0, 4).map(([k, v]) => `${k} ${v}`).join("; ")}
-                  </span>
-                ) : null}
-                <button className="ml-auto text-[9px] font-bold text-violet-500 underline" onClick={() => setPullSummary(null)}>dismiss</button>
-              </div>
-            ) : null}
-
-            {/* Patient inputs — compact single row */}
-            <div className="flex flex-wrap items-end gap-1.5 border-t border-border px-3 py-2">
-              <div className="grid flex-1 min-w-[140px] gap-0.5">
-                <Label className="text-[9px] font-semibold uppercase tracking-wide text-faint">Patient</Label>
-                <Input value={patientName} onChange={(e) => onNameChange(e.target.value)} placeholder="Type patient name…"
-                  list="usg-patient-names" disabled={isFinal}
-                  className="h-8 border-border bg-panel text-[12px] font-semibold" />
-                <datalist id="usg-patient-names">
-                  {patients.map((p) => (
-                    <option key={p.id} value={p.name}>{p.phone ? `${p.phone}${p.scanCount ? ` · ${p.scanCount} scan${p.scanCount > 1 ? "s" : ""}` : ""}` : p.scanCount ? `${p.scanCount} scan${p.scanCount > 1 ? "s" : ""}` : ""}</option>
-                  ))}
-                </datalist>
-              </div>
-              <div className="grid w-[110px] gap-0.5">
-                <Label className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-faint"><Phone className="h-2.5 w-2.5" />Phone</Label>
-                <Input value={patientPhone} onChange={(e) => setPatientPhone(e.target.value)} placeholder="Optional"
-                  inputMode="tel" disabled={isFinal}
-                  className="h-8 border-border bg-panel text-[11px]" />
-              </div>
-              <div className="grid w-[70px] gap-0.5">
-                <Label className="text-[9px] font-semibold uppercase tracking-wide text-faint">Age</Label>
-                <Input value={patientAge} onChange={(e) => setPatientAge(e.target.value)} placeholder="Yrs"
-                  className="h-8 border-border bg-panel text-[12px]" />
-              </div>
-              <div className="grid w-[72px] gap-0.5">
-                <Label className="text-[9px] font-semibold uppercase tracking-wide text-faint">Sex</Label>
-                <Select value={patientSex} onValueChange={(v) => changeSex(v as "F" | "M" | typeof USG_SEX_CHILD)}>
-                  <SelectTrigger className="h-8 border-border bg-panel text-[12px]"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="F">F</SelectItem>
-                    <SelectItem value="M">M</SelectItem>
-                    <SelectItem value={USG_SEX_CHILD}>Child</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid flex-1 min-w-[140px] gap-0.5">
-                <Label className="text-[9px] font-semibold uppercase tracking-wide text-faint">Referred by</Label>
-                {/* v6.16: autocomplete from the doctor directory */}
-                <UsgDoctorAutocomplete value={referredBy} onChange={setReferredBy} disabled={isFinal} />
-              </div>
-              <div className="grid w-[130px] gap-0.5">
-                <Label className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-faint"><CalendarDays className="h-2.5 w-2.5" />Scan date</Label>
-                <Input type="date" value={scanDate} onChange={(e) => setScanDate(e.target.value)} disabled={isFinal}
-                  className="h-8 border-border bg-panel text-[11px]" />
-              </div>
-              <div className="grid min-w-[160px] gap-0.5">
-                <Label className="text-[9px] font-semibold uppercase tracking-wide text-faint">Study</Label>
-                <Select value={studyKey} onValueChange={pickStudy}>
-                  <SelectTrigger className="h-8 border-border bg-panel text-[12px] font-semibold">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-96 overflow-y-auto">
-                    {STUDY_GROUPS.map((g) => {
-                      const studies = USG_STUDIES.filter((s) => s.group === g.key);
-                      if (!studies.length) return null;
-                      return (
-                        <SelectGroup key={g.key}>
-                          <SelectLabel className="text-[10px] font-bold uppercase tracking-wider text-faint">{g.label}</SelectLabel>
-                          {studies.map((s) => (
-                            <SelectItem key={s.key} value={s.key} className="text-[12px]">{s.label}</SelectItem>
-                          ))}
-                        </SelectGroup>
-                      );
-                    })}
-                    {USG_STUDIES.filter((s) => !s.group || !STUDY_GROUPS.some((g) => g.key === s.group)).map((s) => (
-                      <SelectItem key={s.key} value={s.key} className="text-[12px]">{s.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {isFinal ? (
-                <Button size="sm" variant="outline" disabled={busy !== ""}
-                  onClick={() => {
-                    const id = savedIdRef.current ?? report?.id;
-                    if (!id) return;
-                    void shareReportPdf({ reportId: id, patientName, serial, date: fmtPrintDate(scanDate) }).then((r) => {
-                      if (r === "shared") toast.success("Shared via the device share sheet");
-                      else if (r === "downloaded") toast.success("PDF saved — WhatsApp opened");
-                      else toast.error("Could not build the PDF");
-                    });
-                  }}
-                  title="Share on WhatsApp" className="h-8 border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100">
-                  <MessageCircle className="h-3.5 w-3.5" />
-                </Button>
-              ) : null}
-            </div>
-
-            {/* Secondary row: technique toggle + calculators + LMP */}
-            <div className="flex flex-wrap items-center gap-1.5 px-3 pb-1.5 text-[10px] text-muted-foreground">
-              <button onClick={() => setShowTechnique((v) => !v)}
-                className="flex items-center gap-1 rounded-full border border-border bg-panel px-1.5 py-0.5 hover:text-foreground">
-                <Settings2 className="h-2.5 w-2.5" /> Technique
-                <ChevronDown className={cn("h-2.5 w-2.5 transition-transform", showTechnique && "rotate-180")} />
-              </button>
-              <UsgCalculators />
-              {isPregnancyStudy && (
-                <div className="flex items-center gap-1">
-                  <Label className="flex items-center gap-0.5 text-[9px] font-bold uppercase text-rose-600">
-                    <CalendarDays className="h-2.5 w-2.5" /> LMP
-                  </Label>
-                  <Input type="date" value={lmp} onChange={(e) => applyLmp(e.target.value)}
-                    className="h-6 w-[110px] border-rose-200 bg-white text-[11px]" />
-                  {lmpInfo ? (
-                    <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] font-bold text-rose-700 ring-1 ring-rose-200">
-                      {lmpInfo.weeks}w{lmpInfo.days}d · EDD {lmpInfo.edd}
-                    </span>
-                  ) : null}
-                </div>
-              )}
-            </div>
-
-            {showTechnique ? (
-              <div className="flex items-start gap-1 px-3 pb-1.5">
-                <Textarea value={technique} onChange={(e) => setTechnique(e.target.value)} rows={1} disabled={isFinal}
-                  className="border-border bg-panel text-[11px]" placeholder="Technique…" />
-                <DictationButton onText={(t) => setTechnique((prev) => appendTranscript(prev, t))}
-                  title="Dictate technique" />
-              </div>
-            ) : null}
-          </>
-        )}
-
-        {/* Critical findings banner (always visible — even when collapsed) */}
-        <UsgCriticalBanner
-          selectedPathologies={state.organs.flatMap((o) =>
-            (o.pathologies ?? (o.pathology ? [o.pathology] : [])).map((k) => ({
-              key: k, label: k, organ: o.organ,
-            })),
-          )}
-        />
-
-        {/* Crash recovery banner */}
-        {restoreSnap ? (
-          <div className="border-t border-amber-200 bg-amber-50/90 px-3 py-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[10px] font-semibold text-amber-800">
-                Unsaved draft from {new Date(restoreSnap.savedAt).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })} — newer than saved.
-              </span>
-              <div className="ml-auto flex gap-1">
-                <Button size="sm" className="h-6 bg-amber-600 px-2 text-[10px] hover:bg-amber-700" onClick={restoreDraft}>Restore</Button>
-                <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => { clearDraft(dKey); setRestoreSnap(null); }}>Discard</Button>
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        {/* Follow-up diff */}
-        {diffSource && !isFinal ? (
-          <UsgDiffPanel
-            source={diffSource}
-            state={state}
-            pathologies={pathologies}
-            onCopyForward={() => {
-              try {
-                const prior = JSON.parse(diffSource.stateJson) as UsgComposerState;
-                const { state: next, filledCount } = copyForwardMeasurements(state, prior);
-                setState(next);
-                toast.success(
-                  filledCount > 0
-                    ? `Filled ${filledCount} empty measurement slot(s) from prior scan`
-                    : "No empty slots to fill — already complete",
-                );
-              } catch {
-                toast.error("Could not read prior scan state");
-              }
-            }}
-          />
-        ) : null}
-
-        {/* Pregnancy timeline */}
-        {isObStudyKey(state.studyKey) && patientReports.length > 0 && (
-          <div className="px-3 py-1 space-y-2">
-            <UsgPregnancyTimeline timeline={buildPregnancyTimeline(patientReports)} />
-            {/* v6.9 — wired up the orphaned UsgGrowthChart. Plot EFW/BPD/HC/AC/FL
-                across this pregnancy's visits on Hadlock percentile curves so the
-                radiologist can spot IUGR / macrosomia at a glance. */}
-            {(() => {
-              const tl = buildPregnancyTimeline(patientReports);
-              const pts = tl.points
-                .map((p) => ({
-                  gaWeeks: p.gaWeeks ?? 0,
-                  efw: p.efw ?? undefined,
-                  bpd: p.bpd ?? undefined,
-                  hc: p.hc ?? undefined,
-                  ac: p.ac ?? undefined,
-                  fl: p.fl ?? undefined,
-                }))
-                .filter((p) => p.gaWeeks > 0);
-              return pts.length > 0 ? <UsgGrowthChart points={pts} /> : null;
-            })()}
-          </div>
-        )}
-      </div>
-
-      {/* v6.15: Quick report templates bar — one-click pre-filled reports */}
-      {/* Peak-time: one-tap all-normal without measurement slots */}
-      {!isFinal && (
-        <div className="flex flex-wrap items-center gap-2 px-3 pt-2">
-          {studyAllowsRushNormals(study) ? (
-            <>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-7 border-amber-200 bg-amber-50 px-2.5 text-[11px] font-semibold text-amber-800 hover:bg-amber-100"
-                title="Peak-time: mark every organ normal with no size measurements"
-                onClick={() => {
-                  const next = applyRushNormalStudy(state, study);
-                  if (!next) {
-                    toast.error("This study needs measurements — use organ cards");
-                    return;
-                  }
-                  setState(next);
-                  toast.success("All normal · no sizes — ready to print");
-                }}
-              >
-                <Zap className="mr-1 h-3.5 w-3.5" />
-                Normal · no sizes
-              </Button>
-              {study.organs.some((o) => o.key === "liver") ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-7 border-orange-200 bg-orange-50 px-2.5 text-[11px] font-semibold text-orange-800 hover:bg-orange-100"
-                  title="NP + Fatty Gr I · no size — most common almost-normal abdomen"
-                  onClick={() => {
-                    const next = applyRushPreset(state, study, "fatty-g1", (k) => pathologies.find((p) => p.key === k));
-                    if (!next) {
-                      toast.error("This study needs measurements — use organ cards");
-                      return;
-                    }
-                    setState(next);
-                    toast.success("NP + Fatty Gr I · no size — ready to print");
-                  }}
-                >
-                  NP + Fatty
-                </Button>
-              ) : null}
-            </>
-          ) : (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-7 border-emerald-200 bg-emerald-50 px-2.5 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100"
-              title="Clear all pathologies back to measured normals"
-              onClick={() => {
-                setState((s) => markAllNormal(s, study));
-                toast.success("All organs set to normal");
-              }}
-            >
-              <Zap className="mr-1 h-3.5 w-3.5" />
-              Clear all
-            </Button>
-          )}
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-7 border-emerald-300 bg-emerald-50 px-2.5 text-[11px] font-semibold text-emerald-900 hover:bg-emerald-100"
-            title="Fill every unset organ with its normal finding (leaves abnormals untouched)"
-            onClick={applyAllNormalMacro}
-          >
-            <Check className="mr-1 h-3.5 w-3.5" />
-            All Normal
-          </Button>
-          <UsgFormatsLibrary organs={state.organs} onApply={(organs, imp) => setState((p) => ({ ...p, organs, impressionOverride: imp ?? p.impressionOverride }))} />
-          <UsgTemplateBar
-          onApply={(template) => {
-            try {
-              const savedState = JSON.parse(template.stateJson) as UsgComposerState;
-              const target = getStudy(template.studyKey);
-              if (target) {
-                setStudyKey(template.studyKey);
-                const nextDefault =
-                  settings.studyTechniqueDefaults?.[template.studyKey]?.trim() || target.technique;
-                setTechnique(nextDefault);
-                if (template.studyKey.includes("child")) setPatientSex(USG_SEX_CHILD);
-                else if (template.studyKey.includes("female") || template.studyKey === "tvs" || template.studyKey === "ob") setPatientSex("F");
-                else if (template.studyKey.includes("male")) setPatientSex("M");
-              }
-              setState(savedState);
-              toast.success(`Template applied: ${template.name}`);
-            } catch {
-              toast.error("Could not apply template — corrupted state");
-            }
-          }}
-          currentStateJson={JSON.stringify(state)}
-          currentStudyKey={state.studyKey}
-        />
-        </div>
-      )}
-
-      {/* ══ BODY: organ cards + impression + preview ════════════════════ */}
-      {/* v6.15: responsive grid — the right column grows with display width.
-          Was fixed at 460px max; now starts at 460px but grows to 55% on wide
-          screens. On narrow screens (< lg), stacks vertically (organ cards
-          on top, impression + preview below). */}
-      <div className={`grid min-h-0 flex-1 gap-4 overflow-hidden p-4 ${focusMode === 'preview' ? "lg:grid-cols-[minmax(0,2fr)_minmax(360px,1fr)] xl:grid-cols-[minmax(0,2fr)_minmax(400px,1fr)]" : "lg:grid-cols-[minmax(360px,1fr)_minmax(0,2fr)] xl:grid-cols-[minmax(400px,1fr)_minmax(0,2fr)]"}`}>
-        {/* Left column: organ cards + images */}
-        <div className="relative flex min-h-0 flex-col gap-3 overflow-hidden pr-1" onDoubleClick={(e) => { e.stopPropagation(); setFocusMode(null); }}>
-          {focusMode !== 'preview' && (<div className="absolute inset-0 z-10 cursor-pointer" onClick={(e) => { e.stopPropagation(); setFocusMode('preview'); }} title="Click to enlarge viewer & letterpad" />)}
-          {orderUid && <UsgViewerSidebar studyInstanceUid={orderUid} />}
-          <div className="flex-1 min-h-0 rounded-lg border border-border bg-white shadow-sm overflow-hidden">
-            <iframe
-              title="USG report preview"
-              srcDoc={previewHtml}
-              className="h-full w-full border-0"
-              sandbox="allow-same-origin"
-            />
-          </div>
-        </div>
-
-        {/* Right rail: impression + live preview
-            v6.15: flex column (not overflow-y-auto) so the preview iframe
-            can grow to fill available vertical space. The impression box
-            stays fixed at its natural height; the preview gets flex-1. */}
-        <div className="studio-scroll min-h-0 space-y-3 overflow-y-auto pr-1 cursor-pointer" onClick={(e) => { e.stopPropagation(); setFocusMode('workspace'); }} onDoubleClick={(e) => { e.stopPropagation(); setFocusMode(null); }} title="Click to focus workspace · Double-click to reset">
-          <div className="space-y-3">
-          {study.organs.map((def, organIdx) => {
-            const st = state.organs.find((o) => o.organ === def.key);
-            if (!st) return null;
-            const overrideKey = normalOverrideKey(studyKey, def.key);
-            const override = normalOverrides?.[overrideKey] ?? null;
-            return (
-              <div
-                key={def.key}
-                onClick={() => setFocusedOrganIdx(organIdx)}
-                className={cn(focusedOrganIdx === organIdx && "rounded-lg ring-2 ring-amber-200/80")}
-              >
-              {isGridOrgan(def) ? (
-                <UsgGridOrganCard
-                  def={def}
-                  state={st}
-                  readOnly={isFinal}
-                  onRows={(next) => setState((s) => setOrganRows(s, def.key, next.rows))}
-                  onConvertLegacy={
-                    isFinal
-                      ? undefined
-                      : () => setState((s) => setOrganRows(s, def.key, defaultBppRows()))
-                  }
-                />
-              ) : (
-              <UsgOrganCard
-                def={def}
-                state={st}
-                pathologies={pathologiesForOrgan(pathologies, def.key)}
-                preferNoSizeChips={studyAllowsRushNormals(study)}
-                normalOverride={override}
-                onSaveNormal={(text) => saveNormalOverride(def.key, text)}
-                onResetNormal={() => resetNormalOverride(def.key)}
-                onToggle={(k) => togglePathology(def.key, k)}
-                onQuickNormal={() => setState((s) => applyOrganQuickNormal(s, def.key, def))}
-                onVar={(k, v) => setState((s) => setOrganVar(s, def.key, k, v))}
-                onText={(t) => {
-                  const snip = matchSnippetExact(t);
-                  if (snip) {
-                    const p = pathologies.find((x) => x.key === snip.pathologyKey);
-                    if (p && (p.organ === def.key || (p.organ === "kidney" && def.key.startsWith("kidney")))) {
-                      togglePathology(def.key, snip.pathologyKey);
-                      toast.success(snip.confirm);
-                      return;
-                    }
-                  }
-                  setState((s) => setOrganText(s, def.key, t));
-                }}
-                onAddCustom={(organ) => setDialogOrgan(organ)}
-              />
-              )}
-              </div>
-            );
-          })}
-
-          <UsgImagesCard
-            images={images}
-            pending={pendingImages}
-            readOnly={isFinal}
-            onAdd={addImage}
-            onCaption={setCaption}
-            onRemove={removeImage}
-            onMove={moveImage}
-            onPickDicom={orderUid ? () => setDicomOpen(true) : undefined}
-            pacsLinked={!!orderUid}
-            onOcrMeasurements={(vars) => {
-              let applied = 0;
-              setState((s) => {
-                let next = s;
-                for (const [organ, kv] of Object.entries(vars)) {
-                  for (const [k, v] of Object.entries(kv)) {
-                    if (!v) continue;
-                    next = setOrganVar(next, organ, k, v);
-                    applied++;
-                  }
-                }
-                return next;
-              });
-              if (applied > 0) {
-                toast.success(`OCR filled ${applied} measurement slot(s) — verify values`);
-              }
-            }}
-          />
-          </div>
-          {/* v6.10 — BI-RADS picker for breast studies, gated by the enableBirads toggle */}
-          {state.studyKey === "breast" && settings.enableBirads !== false && !isFinal ? (
-            <UsgBiradsPicker
-              value={birads}
-              onChange={(v) => {
-                setBirads(v);
-                // Append the BI-RADS impression line via addendum / override.
-                const line = biradsImpressionLine(v);
-                if (!line) return;
-                setState((s) => {
-                  const current = (s.impressionAddendum ?? "")
-                    .split("\n")
-                    .filter((l) => !/^BI-RADS\s/i.test(l.trim()))
-                    .join("\n")
-                    .trim();
-                  const next = current ? `${current}\n${line}` : line;
-                  return { ...s, impressionAddendum: next };
-                });
-                const followDays = biradsFollowUpDays(v);
-                if (followDays && savedIdRef.current) {
-                  const d = new Date();
-                  d.setDate(d.getDate() + followDays);
-                  fetch(`/api/usg/reports/${savedIdRef.current}/follow-up`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      followUpDate: d.toISOString().slice(0, 10),
-                      followUpNote: `BI-RADS 3 — short-interval follow-up (${Math.round(followDays / 30)} months)`,
-                    }),
-                  }).then(
-                    () => toast.success(`BI-RADS 3 follow-up set for ${d.toLocaleDateString("en-IN")}`),
-                    () => {},
-                  );
-                }
-              }}
-            />
-          ) : null}
-
-          {!isFinal && priorFinalized.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {priorFinalized.slice(0, 2).map((p) => {
-                const label = p.scanDate
-                  ? new Date(p.scanDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
-                  : "prior scan";
-                return (
-                  <Button
-                    key={p.id}
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-7 border-emerald-200 bg-emerald-50/60 px-2.5 text-[10px] font-semibold text-emerald-800 hover:bg-emerald-100"
-                    title="Merge organ findings (pathologies, measurements, grid rows) from this finalized report"
-                    onClick={() => {
-                      try {
-                        const prior = JSON.parse(p.stateJson ?? "{}") as UsgComposerState;
-                        const { state: next, mergedOrgans } = copyForwardFindings(state, prior);
-                        setState(next);
-                        toast.success(
-                          mergedOrgans > 0
-                            ? `Copied findings from ${label} (${mergedOrgans} organ${mergedOrgans === 1 ? "" : "s"})`
-                            : `No findings to copy from ${label}`,
-                        );
-                      } catch {
-                        toast.error("Could not read prior report");
-                      }
-                    }}
-                  >
-                    Copy findings from {label}
-                  </Button>
-                );
-              })}
-            </div>
-          ) : null}
-
-          <UsgTriadZones
-            impressionLines={resolved.impressionLines ?? resolved.impression.map((t) => ({ text: t, pathologyKey: "", edited: false, legacy: !!state.impressionOverride }))}
-            adviceLines={resolved.adviceLines ?? (resolved.advice ?? resolved.suggestions).map((t) => ({ text: t, pathologyKey: "", edited: false }))}
-            disabled={isFinal}
-            impressionAddendum={state.impressionAddendum}
-            onDismissImpression={(text) =>
-              setState((s) => ({
-                ...s,
-                dismissedImpressions: [...new Set([...(s.dismissedImpressions ?? []), text])],
-              }))
-            }
-            onDismissAdvice={(text) =>
-              setState((s) => ({
-                ...s,
-                dismissedAdvice: [...new Set([...(s.dismissedAdvice ?? []), text])],
-              }))
-            }
-            onEditImpression={(pk, text) => {
-              if (!pk) {
-                // Legacy badge edit → impressionOverride
-                setImpressionManual(true);
-                setState((s) => ({ ...s, impressionOverride: text }));
-                return;
-              }
-              setState((s) => ({
-                ...s,
-                impressionEdits: { ...(s.impressionEdits ?? {}), [pk]: text },
-              }));
-            }}
-            onEditAdvice={(pk, text) => {
-              if (!pk) return;
-              setState((s) => ({
-                ...s,
-                adviceEdits: { ...(s.adviceEdits ?? {}), [pk]: text },
-              }));
-            }}
-            onResetImpressionEdit={(pk) =>
-              setState((s) => {
-                const next = { ...(s.impressionEdits ?? {}) };
-                delete next[pk];
-                return { ...s, impressionEdits: next };
-              })
-            }
-            onResetAdviceEdit={(pk) =>
-              setState((s) => {
-                const next = { ...(s.adviceEdits ?? {}) };
-                delete next[pk];
-                return { ...s, adviceEdits: next };
-              })
-            }
-            onAddendum={(text) => setState((s) => ({ ...s, impressionAddendum: text }))}
-            onSaveImpressionDefault={async (pk, text) => {
-              const organ = state.organs.find((o) => selectedPathologies(o).includes(pk))?.organ;
-              if (!organ) return;
-              const res = await fetch("/api/usg/pathology-wording", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ studyKey, organKey: organ, pathologyKey: pk, kind: "impression", text }),
-              });
-              if (!res.ok) {
-                toast.error("Could not save impression default");
-                return;
-              }
-              const key = pathologyOverrideKey(studyKey, organ, pk);
-              onPathologyWordingChange?.({
-                impressions: { ...(pathologyWording?.impressions ?? {}), [key]: text },
-                advice: { ...(pathologyWording?.advice ?? {}) },
-              });
-              toast.success("Impression wording saved as clinic default");
-            }}
-            onSaveAdviceDefault={async (pk, text) => {
-              const organ = state.organs.find((o) => selectedPathologies(o).includes(pk))?.organ;
-              if (!organ) return;
-              const res = await fetch("/api/usg/pathology-wording", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ studyKey, organKey: organ, pathologyKey: pk, kind: "advice", text }),
-              });
-              if (!res.ok) {
-                toast.error("Could not save advice default");
-                return;
-              }
-              const key = pathologyOverrideKey(studyKey, organ, pk);
-              onPathologyWordingChange?.({
-                impressions: { ...(pathologyWording?.impressions ?? {}) },
-                advice: { ...(pathologyWording?.advice ?? {}), [key]: text },
-              });
-              toast.success("Advice wording saved as clinic default");
-            }}
-            onResetImpressionDefault={async (pk) => {
-              const organ = state.organs.find((o) => selectedPathologies(o).includes(pk))?.organ;
-              if (!organ) return;
-              await fetch(
-                `/api/usg/pathology-wording?studyKey=${encodeURIComponent(studyKey)}&organKey=${encodeURIComponent(organ)}&pathologyKey=${encodeURIComponent(pk)}&kind=impression`,
-                { method: "DELETE" },
-              );
-              const key = pathologyOverrideKey(studyKey, organ, pk);
-              const nextImp = { ...(pathologyWording?.impressions ?? {}) };
-              delete nextImp[key];
-              onPathologyWordingChange?.({
-                impressions: nextImp,
-                advice: { ...(pathologyWording?.advice ?? {}) },
-              });
-              toast.success("Impression default cleared");
-            }}
-            onResetAdviceDefault={async (pk) => {
-              const organ = state.organs.find((o) => selectedPathologies(o).includes(pk))?.organ;
-              if (!organ) return;
-              await fetch(
-                `/api/usg/pathology-wording?studyKey=${encodeURIComponent(studyKey)}&organKey=${encodeURIComponent(organ)}&pathologyKey=${encodeURIComponent(pk)}&kind=advice`,
-                { method: "DELETE" },
-              );
-              const key = pathologyOverrideKey(studyKey, organ, pk);
-              const nextAdv = { ...(pathologyWording?.advice ?? {}) };
-              delete nextAdv[key];
-              onPathologyWordingChange?.({
-                impressions: { ...(pathologyWording?.impressions ?? {}) },
-                advice: nextAdv,
-              });
-              toast.success("Advice default cleared");
-            }}
-          />
-
-          {/* Legacy free-text override escape hatch */}
-          {impressionManual && state.impressionOverride != null && !isFinal ? (
-            <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-2">
-              <div className="mb-1 flex items-center justify-between">
-                <span className="text-[9px] font-bold uppercase text-amber-700">Legacy impression override</span>
-                <button
-                  className="text-[10px] font-bold text-rose-500 underline"
-                  onClick={() => {
-                    setImpressionManual(false);
-                    setState((s) => ({ ...s, impressionOverride: null }));
-                  }}
-                >
-                  back to auto triad
-                </button>
-              </div>
-              <Textarea
-                value={state.impressionOverride ?? ""}
-                onChange={(e) => setState((s) => ({ ...s, impressionOverride: e.target.value }))}
-                rows={3}
-                className="resize-y text-[12px] leading-relaxed"
-              />
-            </div>
-          ) : null}
-
-          {/* Declaration line (if set in settings) */}
-          {settings.usgDeclarationLine?.trim() && !isFinal ? (
-            <div className="rounded-lg border border-rose-200 bg-rose-50/50 p-2.5 text-[10px] text-rose-800">
-              {settings.usgDeclarationLine}
-            </div>
-          ) : null}
-
-          {/* Live preview
-              v6.15: flex-1 so the preview grows to fill available vertical
-              space. The iframe itself uses h-full to fill the container.
-              On small screens the container gets a min-height so it's
-              always visible even when the impression is tall. */}
-          <div className="flex min-h-[300px] flex-1 flex-col rounded-xl border border-border bg-card p-3.5 shadow-sm">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-[12px] font-bold tracking-wide">Live preview — {paperLabel}</span>
-              {!isFinal ? <span className="text-[9px] font-bold text-rose-500">PROVISIONAL</span> : null}
-            </div>
-            
-          </div>
-        </div>
-      </div>
-
-      {/* Print iframe — hidden, used for printing drafts */}
-      <iframe ref={printRef} title="print" className="hidden" />
-
-      {/* ══ DIALOGS ═════════════════════════════════════════════════════ */}
-      <UsgDicomPicker
-        open={dicomOpen}
-        reportId={savedIdRef.current ?? report?.id ?? null}
-        studyInstanceUid={orderUid ?? null}
-        onClose={() => setDicomOpen(false)}
-        onAdded={() => { /* refresh images */ }}
-        onOcrResult={(ocr) => {
-          // Map OCR JSON to OB state if pregnancy study
-          if (isPregnancyStudy && ocr) {
-            const obPatch: any = {};
-            if (ocr.bpd) obPatch.bpdMm = parseFloat(ocr.bpd) * 10;
-            if (ocr.hc) obPatch.hcMm = parseFloat(ocr.hc) * 10;
-            if (ocr.ac) obPatch.acMm = parseFloat(ocr.ac) * 10;
-            if (ocr.fl) obPatch.flMm = parseFloat(ocr.fl) * 10;
-            if (ocr.fhr) obPatch.fhr = parseInt(ocr.fhr);
-            if (ocr.fetalPresentation) obPatch.presentation = ocr.fetalPresentation.toLowerCase();
-            if (ocr.placentaPosition) obPatch.placentaPosition = ocr.placentaPosition;
-            if (ocr.liquorAfi) obPatch.liquorAfi = ocr.liquorAfi;
-            setState((s) => ({ ...s, ob: { ...((s as any).ob ?? {}), ...obPatch } }));
-            toast.success(`OCR → ${Object.keys(obPatch).length} OB fields filled (verify values)`);
-          }
-        }}
-      />
-
-      {formFDefaults ? (
-        <UsgFormFDialog
-          open={formFOpen}
-          onClose={() => setFormFOpen(false)}
-          defaults={formFDefaults}
-          order={order as FormFOrderLite | undefined}
-          report={report ?? undefined}
-          onSaved={onSaved}
-        />
-      ) : null}
-
-      <UsgPathologyDialog
-        open={dialogOrgan !== null}
-        organKey={dialogOrgan ?? ""}
-        organLabel={study.organs.find((o) => o.key === dialogOrgan)?.label ?? ""}
-        editing={null}
-        onClose={() => setDialogOrgan(null)}
-        onSaved={onSaved}
-      />
-
-      <UsgStudyPicker
-        open={pickerOpen}
-        currentKey={studyKey}
-        onPick={pickStudy}
-        onClose={() => setPickerOpen(false)}
-      />
-
-      {/* Pre-finalize quality checklist */}
-      <UsgQualityChecklist
-        open={qualityOpen}
-        onOpenChange={setQualityOpen}
+      <ComposerHotkeys
+        isFinal={isFinal}
+        study={study}
         state={state}
-        resolved={resolved}
-        onForceFinalize={() => void persist("finalize")}
+        setState={setState}
+        pathologies={pathologies}
+        focusedOrganIdx={focusedOrganIdx}
+        setFocusedOrganIdx={setFocusedOrganIdx}
+        setQualityOpen={setQualityOpen}
+        setPickerOpen={setPickerOpen}
+        persistRef={persistRef}
+        printRefFn={printRefFn}
+        finalizeFastRef={finalizeFastRef}
+        togglePathologyRef={togglePathologyRef}
+        busyRef={busyRef}
       />
-
-      {/* Measurement review dialog (Pull from machine) */}
-      {reviewSrResult && (
-        <UsgMeasurementReviewDialog
-          open={reviewOpen}
-          onOpenChange={setReviewOpen}
-          srResult={reviewSrResult}
-          srMeasurements={reviewSrMeasurements}
-          onAccept={(vars) => {
-            let applied = 0;
-            setState((s) => {
-              let next = s;
-              for (const [organ, kv] of Object.entries(vars)) {
-                for (const [k, v] of Object.entries(kv)) {
-                  if (!v) continue;
-                  next = setOrganVar(next, organ, k, v);
-                  applied++;
-                }
-              }
-              return next;
-            });
-            if (applied > 0) {
-              toast.success(`${applied} measurement(s) filled from machine SR`);
-            }
-          }}
-        />
-      )}
-
-      {/* Critical findings communication log (PCPNDT/NMC legal record) */}
-      <UsgCriticalCommDialog
-        open={commOpen}
-        onOpenChange={setCommOpen}
-        reportId={savedIdRef.current ?? report?.id ?? null}
+      <ComposerToolbar
+        onBack={onBack}
+        headerCollapsed={headerCollapsed}
+        setHeaderCollapsed={setHeaderCollapsed}
         patientName={patientName}
-        initialFinding={(impressionManual ? state.impressionOverride ?? "" : resolved.impression.join("\n")).split("\n")[0] ?? ""}
-        initialRecipient={referredBy}
+        patientAge={patientAge}
+        patientSex={patientSex}
+        referredBy={referredBy}
+        setReferredBy={setReferredBy}
+        resolved={resolved}
+        abnormalCount={abnormalCount}
+        serial={serial}
+        isFinal={isFinal}
+        fullscreen={fullscreen}
+        setFullscreen={setFullscreen}
+        persist={persist}
+        busy={busy}
+        finalizeFast={finalizeFast}
+        print={print}
+        settings={settings}
+        normalOverrides={normalOverrides}
+        state={state}
+        setState={setState}
+        setCommOpen={setCommOpen}
+        savedIdRef={savedIdRef}
+        report={report}
+        scanDate={scanDate}
+        setScanDate={setScanDate}
+        fmtPrintDate={fmtPrintDate}
+        lastAutosave={lastAutosave}
+        order={order}
+        orderUid={orderUid}
+        pullFromMachine={pullFromMachine}
+        pulling={pulling}
+        study={study}
+        formFDefaults={formFDefaults}
+        setFormFOpen={setFormFOpen}
+        pullSummary={pullSummary}
+        setPullSummary={setPullSummary}
+        onNameChange={onNameChange}
+        patients={patients}
+        patientPhone={patientPhone}
+        setPatientPhone={setPatientPhone}
+        setPatientAge={setPatientAge}
+        studyKey={studyKey}
+        setStudyKey={setStudyKey}
+        setTechnique={setTechnique}
+        setPatientSex={setPatientSex}
+        showTechnique={showTechnique}
+        setShowTechnique={setShowTechnique}
+        isPregnancyStudy={isPregnancyStudy}
+        lmp={lmp}
+        setLmp={setLmp}
+        lmpInfo={lmpInfo}
+        technique={technique}
+        restoreSnap={restoreSnap}
+        setRestoreSnap={setRestoreSnap}
+        restoreDraft={restoreDraft}
+        dKey={dKey}
+        diffSource={diffSource}
+        pathologies={pathologies}
+        patientReports={patientReports}
+        togglePathology={togglePathology}
       />
 
-      {/* v6.10 — AI Draft assistant (Ollama), gated by the enableAiDraft toggle. */}
-      {settings.enableAiDraft !== false ? (
-        <UsgAiDraftPanel
-          reportId={savedIdRef.current ?? report?.id ?? null}
-          onInsertImpression={(text) => {
-            setImpressionManual(true);
-            setState((s) => ({ ...s, impressionOverride: text }));
-            toast.success("AI impression inserted — review and edit");
-          }}
+      <div className={`grid min-h-0 flex-1 gap-4 overflow-hidden p-4 ${focusMode === 'preview' ? "lg:grid-cols-[minmax(0,2fr)_minmax(360px,1fr)] xl:grid-cols-[minmax(0,2fr)_minmax(400px,1fr)]" : "lg:grid-cols-[minmax(360px,1fr)_minmax(0,2fr)] xl:grid-cols-[minmax(400px,1fr)_minmax(0,2fr)]"}`}>
+        <PreviewZone
+          focusMode={focusMode}
+          previewHtml={previewHtml}
+          orderUid={orderUid}
+          onEnlarge={onEnlargePreview}
+          onResetFocus={onResetFocus}
         />
-      ) : null}
 
+        <div className="studio-scroll min-h-0 space-y-3 overflow-y-auto pr-1 cursor-pointer" onClick={(e) => { e.stopPropagation(); onWorkspaceFocus(); }} onDoubleClick={(e) => { e.stopPropagation(); onResetFocus(); }} title="Click to focus workspace · Double-click to reset">
+          <div className="space-y-3">
+            {study.organs.map((def, organIdx) => {
+              const st = state.organs.find((o) => o.organ === def.key);
+              if (!st) return null;
+              const overrideKey = normalOverrideKey(studyKey, def.key);
+              const override = normalOverrides?.[overrideKey] ?? null;
+              return (
+                <OrganCard
+                  key={def.key}
+                  organIdx={organIdx}
+                  focused={focusedOrganIdx === organIdx}
+                  def={def}
+                  organState={st}
+                  pathologies={pathologies}
+                  preferNoSizeChips={studyAllowsRushNormals(study)}
+                  normalOverride={override}
+                  isFinal={isFinal}
+                  onFocus={onFocusOrgan}
+                  onSaveNormal={onSaveNormal}
+                  onResetNormal={onResetNormal}
+                  onTogglePathology={onTogglePathology}
+                  setState={setState}
+                  onAddCustom={onAddCustom}
+                  lookupPathology={lookupPathology}
+                />
+              );
+            })}
+
+            <UsgImagesCard
+              images={images}
+              pending={pendingImages}
+              readOnly={isFinal}
+              onAdd={onAddImage}
+              onCaption={onCaption}
+              onRemove={onRemoveImage}
+              onMove={onMoveImage}
+              onPickDicom={orderUid ? () => setDicomOpen(true) : undefined}
+              pacsLinked={!!orderUid}
+              onOcrMeasurements={(vars) => {
+                let applied = 0;
+                setState((s) => {
+                  let next = s;
+                  for (const [organ, kv] of Object.entries(vars)) {
+                    for (const [k, v] of Object.entries(kv)) {
+                      if (!v) continue;
+                      next = setOrganVar(next, organ, k, v);
+                      applied++;
+                    }
+                  }
+                  return next;
+                });
+                if (applied > 0) toast.success(`OCR filled ${applied} measurement slot(s) — verify values`);
+              }}
+            />
+          </div>
+
+          <ImpressionZone
+            resolved={resolved}
+            state={state}
+            setState={setState}
+            isFinal={isFinal}
+            studyKey={studyKey}
+            impressionManual={impressionManual}
+            setImpressionManual={setImpressionManual}
+            declarationLine={settings.usgDeclarationLine}
+            paperLabel={paperLabel}
+            enableBirads={settings.enableBirads !== false}
+            birads={birads}
+            setBirads={setBirads}
+            priorFinalized={priorFinalized}
+            pathologyWording={pathologyWording}
+            onPathologyWordingChange={onPathologyWordingChange}
+            savedId={savedIdRef.current}
+          />
+        </div>
+      </div>
+
+      <iframe ref={printRef} title="print" className="hidden" />
+      <ComposerDialogs
+        dicomOpen={dicomOpen} setDicomOpen={setDicomOpen}
+        formFOpen={formFOpen} setFormFOpen={setFormFOpen}
+        formFDefaults={formFDefaults} order={order} report={report} onSaved={onSaved}
+        dialogOrgan={dialogOrgan} setDialogOrgan={setDialogOrgan} study={study}
+        pickerOpen={pickerOpen} setPickerOpen={setPickerOpen} pickStudy={pickStudy} studyKey={studyKey}
+        qualityOpen={qualityOpen} setQualityOpen={setQualityOpen} state={state} resolved={resolved} persist={persist}
+        reviewSrResult={reviewSrResult} reviewOpen={reviewOpen} setReviewOpen={setReviewOpen}
+        reviewSrMeasurements={reviewSrMeasurements} setState={setState}
+        commOpen={commOpen} setCommOpen={setCommOpen} savedIdRef={savedIdRef}
+        patientName={patientName} impressionManual={impressionManual} setImpressionManual={setImpressionManual}
+        referredBy={referredBy} settings={settings} isPregnancyStudy={isPregnancyStudy} orderUid={orderUid}
+      />
     </div>
   );
 }
+

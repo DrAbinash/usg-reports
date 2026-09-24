@@ -18,7 +18,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { Check, Pencil, Plus, RotateCcw, Stethoscope, Type, ChevronDown } from "lucide-react";
+import { Check, Pencil, RotateCcw, Stethoscope, Type } from "lucide-react";
 import type { UsgOrganDef, UsgOrganState, UsgPathologyDef, UsgVarDef } from "@/lib/usg/types";
 import { extractTokens, ORGAN_SIDE, selectedPathologies, substitute } from "@/lib/usg/composer";
 import { isSelectToken, getTokenOptions } from "@/lib/usg/tokenTypes";
@@ -26,6 +26,7 @@ import { organNormalHasMeasurements } from "@/lib/usg/quickActions";
 import { appendTranscript } from "@/lib/usg/dictation";
 import { DictationButton } from "./DictationButton";
 import { UsgSuggestionsPanel } from "./UsgSuggestionsPanel";
+import { ChipRow } from "./composer/ChipRow";
 
 export type OrganCardProps = {
   def: UsgOrganDef;
@@ -233,77 +234,23 @@ export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, norma
       ) : null}
 
       {/* Pathology chips — multi-select toggles */}
-      <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
-        <button
-          onClick={() => {
-            setEditing(false);
-            onToggle(null);
-          }}
-          className={cn(
-            "rounded-full border px-3.5 py-1.5 text-[12px] font-bold transition-colors shadow-sm",
-            !anySelected && !state.custom && !usingQuickNormal
-              ? "border-emerald-500 bg-emerald-500 text-white ring-2 ring-emerald-200"
-              : "border-emerald-300 bg-emerald-50 text-emerald-800 hover:border-emerald-400 hover:bg-emerald-100",
-          )}
-          title={def.vars?.length ? "Normal with measurement slots" : "Normal"}
-        >
-          Normal
-        </button>
-        {showQuickNormal ? (
-          <button
-            onClick={() => {
-              setEditing(false);
-              onQuickNormal();
-            }}
-            className={cn(
-              "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
-              usingQuickNormal
-                ? "border-amber-300 bg-amber-50 text-amber-800"
-                : "border-dashed border-amber-200 bg-amber-50/40 text-amber-700 hover:border-amber-300 hover:bg-amber-50",
-            )}
-            title="Peak-time normal — qualitative wording, no size measurements (e.g. liver without MCL span)"
-          >
-            Normal · no size
-          </button>
-        ) : null}
-        {visible.map((p) => {
-          const on = selectedKeys.includes(p.key);
-          return (
-            <button
-              key={p.key}
-              onClick={() => {
-                setEditing(false);
-                onToggle(p.key);
-              }}
-              className={cn(
-                "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
-                on
-                  ? "border-rose-300 bg-rose-50 text-rose-700"
-                  : "border-border bg-muted/40 text-muted-foreground hover:border-rose-200 hover:text-rose-700",
-                !p.builtin ? "italic" : "",
-              )}
-              title={p.builtin ? (on ? "Selected — click to remove" : "Click to add (combine with others)") : `Custom entry${on ? " — click to remove" : ""}`}
-            >
-              {p.label}
-            </button>
-          );
-        })}
-        {pathologies.length > 6 && !showAll ? (
-          <button
-            onClick={() => setShowAll(true)}
-            className="rounded-full border border-dashed border-border px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
-          >
-            +{pathologies.length - 6} more
-          </button>
-        ) : null}
-        <button
-          onClick={() => onAddCustom(def.key)}
-          className="flex items-center gap-0.5 rounded-full border border-dashed border-rose-200 px-2 py-1 text-[11px] font-medium text-rose-600 hover:bg-rose-50"
-          title={`Add a custom ${def.label} finding${isKidneySlot ? " (applies to both kidneys)" : ""}`}
-        >
-          <Plus className="h-3 w-3" />
-        </button>
-      </div>
+      <ChipRow
+        def={def}
+        selectedKeys={selectedKeys}
+        anySelected={anySelected}
+        custom={!!state.custom}
+        usingQuickNormal={usingQuickNormal}
+        showQuickNormal={showQuickNormal}
+        visible={visible}
+        pathologiesCount={pathologies.length}
+        showAll={showAll}
+        isKidneySlot={isKidneySlot}
+        onToggle={onToggle}
+        onQuickNormal={onQuickNormal}
+        onAddCustom={onAddCustom}
+        onShowAll={() => setShowAll(true)}
+        onBeforeChip={() => setEditing(false)}
+      />
 
       {/* Measurement inputs for {tokens} (side tokens auto-fill) */}
       {inputTokens.length > 0 ? (

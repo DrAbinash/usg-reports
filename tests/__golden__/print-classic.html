@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8" />
+<title>CARE Diagnostics — Rani Devi — USG WHOLE ABDOMEN</title>
+<style>
+  @page { size: A4; margin: 14mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Georgia", "Times New Roman", "Noto Serif", serif; color: #000; font-size: 10.5pt; line-height: 1.55; }
+  .sheet { max-width: 182mm; margin: 0 auto; }
+
+  .masthead { text-align: center; border-bottom: 3px double #000; padding: 2px 0 9px; }
+  .logo { width: 46px; height: 46px; object-fit: contain; margin: 0 auto 2px; display: block; }
+  .logo-fallback { display: none; }
+  .masthead .hospital { font-size: 17pt; font-weight: 700; letter-spacing: 2px; line-height: 1.2; text-transform: uppercase; }
+  .masthead .addr { font-size: 9pt; margin-top: 3px; }
+  .masthead .brand { display: none; }
+
+  table.patient { width: 100%; border-collapse: collapse; margin-top: 10px; border: 1px solid #000; font-size: 9.5pt; }
+  table.patient td { padding: 4px 8px; border: 1px solid #000; }
+  table.patient td.k { font-weight: 700; width: 15%; white-space: nowrap; font-size: 8.5pt; text-transform: uppercase; letter-spacing: .5px; background: #f2f2f2; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  table.patient td.v { font-weight: 600; }
+
+  .thanks { text-align: center; font-style: italic; font-size: 9.5pt; margin-top: 7px; }
+
+  .study { margin-top: 13px; text-align: center; page-break-after: avoid; }
+  .study .name { font-size: 13.5pt; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 4px 0; }
+  .study .rule { display: none; }
+
+  .machine { text-align: center; font-size: 9pt; font-weight: 600; font-style: italic; margin-top: 6px; }
+
+  h2.band { font-size: 10pt; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; border-bottom: 1.5px solid #000; padding-bottom: 2px; margin: 16px 0 7px; page-break-after: avoid; }
+  h2.band .n { margin-right: 7px; }
+
+  p.technique { margin: 3px 0; text-align: left; }
+
+  table.organs { width: 100%; border-collapse: collapse; margin-top: 2px; }
+  table.organs tr.organ { page-break-inside: avoid; }
+  table.organs th { width: 24mm; text-align: left; vertical-align: top; font-size: 9pt; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; padding: 4.5px 8px 4.5px 0; border-bottom: 1px solid #999; }
+  table.organs td { vertical-align: top; text-align: left; padding: 4.5px 0; border-bottom: 1px solid #999; }
+  table.organs tr:last-child th, table.organs tr:last-child td { border-bottom: none; }
+
+  .meas-block { margin-top: 2px; page-break-inside: avoid; }
+  .meas-cap { font-size: 9pt; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; padding: 4.5px 0 3px; border-bottom: 1.5px solid #000; }
+  table.meas { width: 100%; border-collapse: collapse; }
+  table.meas th { text-align: left; vertical-align: top; width: 62%; font-weight: 700; font-size: 9.5pt; padding: 3px 8px 3px 0; border-bottom: 1px solid #999; }
+  table.meas td { vertical-align: top; font-weight: 600; font-size: 9.5pt; padding: 3px 0; border-bottom: 1px solid #999; }
+  table.meas tr:last-child th, table.meas tr:last-child td { border-bottom: none; }
+  table.meas .norm { color: #555; font-weight: 400; font-size: 8.5pt; font-style: italic; }
+  table.meas td.m-full { font-weight: 700; }
+
+  .impression-box { border: 1.5px solid #000; padding: 8px 12px; margin-top: 2px; page-break-inside: avoid; }
+  .impression-box ol { margin-left: 20px; }
+  .impression-box li { font-weight: 700; margin: 4px 0; }
+
+  .images-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+  .img-cell { border: 1px solid #000; padding: 4px; text-align: center; page-break-inside: avoid; }
+  .img-cell img { max-width: 100%; max-height: 45mm; object-fit: contain; }
+  .img-cell figcaption { font-size: 8pt; font-weight: 600; margin-top: 2px; min-height: 1em; }
+
+  .suggestions { margin-top: 7px; font-weight: 700; }
+  .suggestions p { margin: 3px 0; }
+  .advice-box { margin-top: 8px; page-break-inside: avoid; }
+  .advice-box .advice-h { font-size: 9pt; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; margin-bottom: 3px; }
+
+  .sig-block { margin-top: 16px; display: flex; justify-content: flex-end; page-break-inside: avoid; }
+  .sig { text-align: center; min-width: 62mm; }
+  .sig .line { border-bottom: 1.5px solid #000; height: 18px; margin-bottom: 5px; }
+  .sig .name { font-weight: 700; font-size: 11pt; }
+  .sig .sub { font-size: 9pt; font-weight: 600; }
+
+  .declaration { margin-top: 10px; font-size: 8pt; font-weight: 600; border: 1px solid #000; padding: 6px 10px; text-align: left; }
+
+  .pcpndt { margin-top: 10px; border: 1.5px solid #000; padding: 8px 12px; page-break-inside: avoid; }
+  .pcpndt-title { font-size: 9pt; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; margin-bottom: 4px; }
+  .pcpndt p { font-size: 8.5pt; font-weight: 600; text-align: left; line-height: 1.55; }
+
+  .footer { margin-top: 10px; border-top: 1.5px solid #000; padding-top: 5px; font-size: 8pt; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+  .qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+  .qr { width: 20mm; height: 20mm; }
+  .qr-cap { font-size: 6.5pt; font-weight: 700; }
+
+  .sig-img { height: 18mm; max-width: 64mm; object-fit: contain; display: block; margin: 0 auto; }
+
+  .tail { page-break-inside: avoid; }
+body { font-size: 10pt; line-height: 1.4; }
+  table.patient { font-size: 0.9em; }
+  h2.band { font-size: 0.95em; }
+  table.meas th, table.meas td { font-size: 0.9em; }
+  table.organs th { font-size: 0.81em; }
+  .sig .name { font-size: 1.1em; }
+  .suggestions { font-size: 0.95em; }
+
+  .study { margin-top: 8px; }
+  .thanks { margin-top: 3px; }
+  h2.band { margin-top: 8px; margin-bottom: 5px; }
+  p.technique { margin: 2px 0; }
+  table.organs th, table.organs td { padding-top: 3px; padding-bottom: 3px; }
+  .impression-box li { margin: 2px 0; }
+  .sig-block { margin-top: 10px; }
+  .declaration { margin-top: 7px; }
+  .pcpndt { margin-top: 7px; }
+  .footer { margin-top: 7px; }
+
+/* Flow layout for signature / PC-PNDT / footer — never pin to page-1 bottom
+   so long reports push the tail cleanly onto page 2 as one unit. */
+.tail { page-break-inside: avoid; break-inside: avoid; margin-top: 12px; }
+.sig-block { page-break-inside: avoid; break-inside: avoid; }
+
+/* Two-line demography strip */
+.patient-strip { display: flex; flex-direction: column; gap: 4px; margin: 4mm 0 3mm; }
+.strip-row { display: flex; justify-content: space-between; align-items: center; }
+.strip-row .field { flex: 1; display: flex; justify-content: space-between; align-items: baseline; }
+.strip-row .field:first-child { padding-right: 8mm; }
+.strip-row .label { font-size: 8.5pt; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
+.strip-row .value { font-size: 9.5pt; font-weight: 500; text-align: right; }
+.strip-row .field:first-child .value { text-align: left; }
+
+/* Honour size dials */
+.top-bar .logo-block img { height: var(--logo-h, 14mm); }
+.top-bar .logo-block .hospital-name { font-size: var(--name-fs, 15pt); }
+.top-bar .contact-block { font-size: var(--addr-fs, 8.5pt); }
+</style><style id="usg-justify-kill">p, li, td, th, div, span, .organ-body, .ob-body, .pbody { text-align: left !important; hyphens: none !important; word-spacing: normal !important; letter-spacing: normal !important; }</style><style id="usg-sig-fit">.signature-block,.sig-wrap,.sig-pin{position:static !important;bottom:auto !important;right:auto !important;transform:none !important;}</style><script>window.addEventListener("beforeprint",function(){var mm=277/25.4*96;var h=document.body.scrollHeight;if(h>mm){document.body.style.zoom=(mm/h).toFixed(3);}});</script></head>
+<body>
+
+<div class="sheet">
+  <div class="masthead">
+    <div class="logo logo-fallback">USG</div>
+    <div>
+      <div class="hospital">CARE Diagnostics</div>
+      <div class="addr">Subhash Chowk, Deoghar &nbsp;·&nbsp; 06432-123456 &nbsp;·&nbsp; care@example.com</div>
+    </div>
+  </div>
+  
+
+  <table class="patient">
+    <tr>
+      <td class="k">Patient</td><td class="v">Rani Devi</td>
+      <td class="k">Age / Sex</td><td class="v">30 / F</td>
+      <td class="k">USG No.</td><td class="v">USG-0001</td>
+    </tr>
+    <tr>
+      <td class="k">Referred by</td><td class="v">Dr. Kumar</td>
+      <td class="k">Date</td><td class="v">01-Sep-2026</td>
+      <td class="k"></td><td class="v"></td>
+    </tr>
+  </table>
+
+  <p class="thanks">Thanks For Your Referral.</p>
+
+  <div class="study">
+    <div class="name">USG WHOLE ABDOMEN</div>
+    <div class="rule"></div>
+  </div>
+  <p class="machine">GE Voluson Pro</p>
+
+  <h2 class="band"><span class="n">1</span>Technique</h2>
+  <p class="technique">Routine transabdominal scan.</p>
+
+  <h2 class="band"><span class="n">2</span>Findings</h2>
+  <table class="organs"><tr class="organ"><th>LIVER</th><td>Liver appears normal in morphology and parenchymal echogenicity. No masses or focal pathology is noted. Intrahepatic biliary channels are not dilated. The portal vein is normal in appearance.</td></tr>
+<tr class="organ"><th>G. B</th><td>Gall bladder is normal in physiological distension. No calculi or other intrinsic lesions are noted. Wall thickness is normal. No pericholecystic collection. Sonographic Murphy&#39;s sign negative.</td></tr>
+<tr class="organ"><th>C.B.DUCT</th><td>Diameter of the C.B.D is normal. No evidence of intraluminal calculus.</td></tr>
+<tr class="organ"><th>PANCREAS</th><td>Pancreas appears normal in morphology and parenchymal echogenicity. Pancreatic duct is not dilated. No evidence of calcification or focal lesion is seen.</td></tr>
+<tr class="organ"><th>SPLEEN</th><td>Spleen appears normal in morphology and parenchymal echogenicity. No evidence of focal lesion or S.O.L seen. No evidence of splenic collateral vessels.</td></tr>
+<tr class="organ"><th>RT KIDNEY</th><td>Normal in shape, size &amp; position. Sinuses as well as cortical echoes are normal. No evidence of calculus, space occupying lesion, cyst or hydronephrosis is seen.</td></tr>
+<tr class="organ"><th>LT KIDNEY</th><td>Normal in shape, size &amp; position. Sinuses as well as cortical echoes are normal. No evidence of calculus, space occupying lesion, cyst or hydronephrosis is seen.</td></tr>
+<tr class="organ"><th>URETERS</th><td>Proximal and distal ureters are normal.</td></tr>
+<tr class="organ"><th>U. B</th><td>Urinary bladder is normal in outline and distension. It is echo free. No evidence of calculus, mass or diverticulum is seen. Insignificant post void residual urine.</td></tr>
+<tr class="organ"><th>UTERUS</th><td>Uterus is normal in size and shape. The uterus is in anteversion with normal endometrial thickness. No focal pathology or abnormalities of outline are noted. The cervical echo is normal.</td></tr>
+<tr class="organ"><th>ADNEXA</th><td>Ovaries are normally positioned. Normal in echotexture.</td></tr>
+<tr class="organ"><th>P.O.D</th><td>Pouch of Douglas is clear.</td></tr>
+<tr class="organ"><th>OTHERS</th><td>No free peritoneal fluid / enlarged lymph nodes are seen.</td></tr></table>
+
+  
+  
+
+  <h2 class="band"><span class="n">3</span>Impression</h2>
+  <div class="impression-box"><ol class="impression"><li>Normal scan of upper abdomen.</li><li>Normal sized uterus with normal endometrial thickness.</li></ol></div>
+  
+
+  <div class="tail">
+  <div class="sig-block"><div class="sig">
+    <div class="line"></div>
+    <div class="name">Dr. Sugandha</div>
+    <div class="sub">MBBS, MD</div>
+    <div class="sub">Reg. No: J/12345</div>
+    
+  </div></div>
+
+  
+  
+
+  <div class="footer">
+    <span>Correlate clinically.</span>
+    
+    <span>CARE USG Studio</span>
+  </div>
+  </div>
+</div>
+</body></html>

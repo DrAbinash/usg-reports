@@ -6,6 +6,61 @@ import { ensureDefaultClinic } from "@/lib/clinic";
 
 export type HospitalSettingsRow = Awaited<ReturnType<typeof getSettings>>;
 
+function parseStringRecord(raw: unknown): Record<string, string> {
+  if (!raw) return {};
+  let obj: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      obj = JSON.parse(raw);
+    } catch {
+      return {};
+    }
+  }
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+    if (typeof k === "string" && k && typeof v === "string" && v.trim()) {
+      out[k] = v.trim();
+    }
+  }
+  return out;
+}
+
+function serializeStringRecord(map: Record<string, string> | undefined | null): string {
+  if (!map || typeof map !== "object") return "{}";
+  const clean: Record<string, string> = {};
+  for (const [k, v] of Object.entries(map)) {
+    if (typeof k === "string" && k && typeof v === "string" && v.trim()) {
+      clean[k] = v.trim();
+    }
+  }
+  return JSON.stringify(clean);
+}
+
+export type UsgSettingsExtras = {
+  studyTechniqueDefaults: Record<string, string>;
+  machineLineByStudio: Record<string, string>;
+};
+
+/** Parse the P2b JSON maps from a settings row (DB or masked client payload). */
+export function readSettingsMaps(row: {
+  studyTechniqueDefaultsJson?: string | null;
+  machineLineByStudioJson?: string | null;
+  studyTechniqueDefaults?: Record<string, string> | null;
+  machineLineByStudio?: Record<string, string> | null;
+}): UsgSettingsExtras {
+  return {
+    studyTechniqueDefaults:
+      row.studyTechniqueDefaults && typeof row.studyTechniqueDefaults === "object"
+        ? parseStringRecord(row.studyTechniqueDefaults)
+        : parseStringRecord(row.studyTechniqueDefaultsJson),
+    machineLineByStudio:
+      row.machineLineByStudio && typeof row.machineLineByStudio === "object"
+        ? parseStringRecord(row.machineLineByStudio)
+        : parseStringRecord(row.machineLineByStudioJson),
+  };
+}
+
 /**
  * USG Studio settings — the singleton personalisation row.
  *
@@ -116,6 +171,10 @@ export async function getSettings() {
     // Passwords decrypt on read; legacy plaintext falls through transparently.
     orthancPassword: decryptSecret(row.orthancPassword) || (defaultsOff() ? "" : envOverride("ORTHANC_PASSWORD")) || null,
     geminiApiKey: decryptSecret(row.geminiApiKey) || (defaultsOff() ? "" : envOverride("GEMINI_API_KEY")) || null,
+    ...readSettingsMaps(row as {
+      studyTechniqueDefaultsJson?: string | null;
+      machineLineByStudioJson?: string | null;
+    }),
   };
 }
 
@@ -155,7 +214,7 @@ export async function getMaskedSettings(): Promise<MaskedSettings> {
   };
 }
 
-type SettingsUpdate = Partial<Record<string, string | boolean | number>>;
+type SettingsUpdate = Partial<Record<string, string | boolean | number | Record<string, string>>>;
 
 /** Apply a settings update. */
 export async function updateSettings(patch: SettingsUpdate) {
@@ -311,6 +370,30 @@ export async function updateSettings(patch: SettingsUpdate) {
       data[k] = trimmed;
     }
   }
+  // P2b — study technique defaults + per-studio machine lines (JSON maps).
+  if (patch.studyTechniqueDefaults != null) {
+    const raw = patch.studyTechniqueDefaults;
+    if (typeof raw === "string") {
+      data.studyTechniqueDefaultsJson = serializeStringRecord(parseStringRecord(raw));
+    } else if (typeof raw === "object") {
+      data.studyTechniqueDefaultsJson = serializeStringRecord(raw as Record<string, string>);
+    }
+  }
+  if (patch.machineLineByStudio != null) {
+    const raw = patch.machineLineByStudio;
+    if (typeof raw === "string") {
+      data.machineLineByStudioJson = serializeStringRecord(parseStringRecord(raw));
+    } else if (typeof raw === "object") {
+      data.machineLineByStudioJson = serializeStringRecord(raw as Record<string, string>);
+    }
+  }
+  if (typeof patch.studyTechniqueDefaultsJson === "string") {
+    data.studyTechniqueDefaultsJson = serializeStringRecord(parseStringRecord(patch.studyTechniqueDefaultsJson));
+  }
+  if (typeof patch.machineLineByStudioJson === "string") {
+    data.machineLineByStudioJson = serializeStringRecord(parseStringRecord(patch.machineLineByStudioJson));
+  }
+
   await getSettings(); // ensure row exists (creates if missing)
   const clinicId = await getActiveClinicId();
   const settingsId = clinicId === "default" ? "singleton" : clinicId;

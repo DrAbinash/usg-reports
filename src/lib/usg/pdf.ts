@@ -13,7 +13,7 @@
  */
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
 import type { UsgResolved } from "./types";
-import type { UsgPrintSettings, UsgPrintImage } from "./print";
+import { resolveMachineLine, type UsgPrintSettings, type UsgPrintImage } from "./print";
 
 export type UsgPrintPatient = {
   name: string;
@@ -237,8 +237,9 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
   ctx.page.drawText(studyTitle, { x: (pageW - stw) / 2, y: ctx.y - stSize, size: stSize, font: fonts.bold, color: NAVY });
   ctx.y -= stSize + (a5 ? 8 : 10);
 
-  if (settings.usgShowMachine && settings.usgMachineLine?.trim()) {
-    const line = S(settings.usgMachineLine.trim());
+  const machineBanner = resolveMachineLine(settings as UsgPrintSettings);
+  if (settings.usgShowMachine && machineBanner) {
+    const line = S(machineBanner);
     const lw = fonts.italic.widthOfTextAtSize(line, a5 ? 7 : 8);
     ensure(ctx, 12);
     ctx.page.drawText(line, { x: (pageW - lw) / 2, y: ctx.y, size: a5 ? 7 : 8, font: fonts.italic, color: NAVY });

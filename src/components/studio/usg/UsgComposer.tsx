@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { ArrowLeft, CalendarDays, ChevronDown, FileCheck2, Loader2, Maximize2, Minimize2, Phone, Printer, Save, Search, Settings2, Zap } from "lucide-react";
 import type { UsgComposerState, UsgPathologyDef } from "@/lib/usg/types";
 import { USG_SEX_CHILD } from "@/lib/usg/types";
-import { USG_STUDIES, STUDY_GROUPS, applyNormalOverrides, getStudy, normalOverrideKey, studyKeyForBillTest, type NormalOverrides } from "@/lib/usg/studies";
+import { USG_STUDIES, STUDY_GROUPS, applyNormalOverrides, getStudy, initialState as freshComposerState, normalOverrideKey, studyKeyForBillTest, type NormalOverrides } from "@/lib/usg/studies";
 import { isObStudyKey } from "@/lib/usg/orderStudy";
 import {
   applyPathologies,
@@ -27,10 +27,12 @@ import {
   pathologiesForOrgan,
   resolve,
   selectedPathologies,
+  setOrganRows,
   setOrganText,
   setOrganVar,
   switchStudy,
 } from "@/lib/usg/composer";
+import { defaultBppRows, isGridOrgan } from "@/lib/usg/gridOrgans";
 import {
   applyOrganQuickNormal,
   applyRushNormalStudy,
@@ -45,6 +47,7 @@ import { buildUsgReportHtml, formatUsgSerial, type UsgPrintSettings } from "@/li
 import { lmpSummary, parseLmpInput } from "@/lib/usg/lmp";
 import { toScanDateInput } from "@/lib/usg/dates";
 import { UsgOrganCard } from "./UsgOrganCard";
+import { UsgGridOrganCard } from "./UsgGridOrganCard";
 import { UsgPathologyDialog } from "./UsgPathologyDialog";
 import { UsgDiffPanel, type DiffSource } from "./UsgDiffPanel";
 import { UsgBiometryCalc } from "./UsgBiometryCalc";
@@ -140,16 +143,21 @@ function fmtPrintDate(iso: string): string {
 }
 
 export function UsgComposer({ pathologies, settings, report, prefill, diffSource, normalOverrides, order, formFDefaults, onBack, onSaved }: UsgComposerProps) {
+  const studyKey0 = report?.studyKey ?? studyKeyForBillTest((report as any)?.testName ?? (prefill as any)?.testName ?? "", (report as any)?.sex ?? (report as any)?.gender ?? (report as any)?.patientGender ?? "") ?? "wa-female";
+
   const initial = useMemo(() => {
     if (!report) return null;
     try {
-      return JSON.parse(report.stateJson) as UsgComposerState;
+      const raw = JSON.parse(report.stateJson) as unknown;
+      // Strict: NEVER migrate FINALIZED stateJson — frozen forever.
+      if (report.status === "FINALIZED") return raw as UsgComposerState;
+      // Draft reopen/edit — coerce grid rows in memory (persisted only on save).
+      return normaliseState(raw, report.studyKey ?? studyKey0, normalOverrides);
     } catch {
       return null;
     }
-  }, [report]);
+  }, [report, normalOverrides, studyKey0]);
 
-  const studyKey0 = report?.studyKey ?? studyKeyForBillTest((report as any)?.testName ?? (prefill as any)?.testName ?? "", (report as any)?.sex ?? (report as any)?.gender ?? (report as any)?.patientGender ?? "") ?? "wa-female";
   const [patientName, setPatientName] = useState(report?.patientName ?? prefill?.patientName ?? "");
   const [patientPhone, setPatientPhone] = useState(report?.patient?.phone ?? prefill?.patientPhone ?? "");
   const [patientAge, setPatientAge] = useState(report?.patientAge ?? prefill?.patientAge ?? "");
@@ -165,7 +173,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   );
   const [technique, setTechnique] = useState(report?.technique ?? study.technique);
   const [state, setState] = useState<UsgComposerState>(
-    () => initial ?? { studyKey: studyKey0, organs: study.organs.map((o) => ({ organ: o.key, pathology: null, pathologies: [], custom: false, text: o.normal, vars: {} })), impressionOverride: null },
+    () => initial ?? freshComposerState(studyKey0, normalOverrides),
   );
   const [scanDate, setScanDate] = useState(() => toScanDateInput(report?.scanDate ? new Date(report.scanDate) : null));
 
@@ -584,13 +592,24 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const pickStudy = (k: string) => {
     const target = getStudy(k);
     if (!target) return;
+    const prevStudy = getStudy(studyKey);
+    const prevDefault =
+      settings.studyTechniqueDefaults?.[studyKey]?.trim() ||
+      prevStudy?.technique?.trim() ||
+      "";
+    const nextDefault =
+      settings.studyTechniqueDefaults?.[k]?.trim() || target.technique;
     setStudyKey(k);
-    setTechnique(target.technique);
+    setTechnique((cur) => {
+      const t = cur.trim();
+      if (!t || t === prevDefault) return nextDefault;
+      return cur;
+    });
     setState((s) => switchStudy(s, k, normalOverrides));
     // Study drives patient type: pregnancy studies are female, the child
     // scaffold switches the strip to the Child profile.
     if (k === "wa-child") setPatientSex(USG_SEX_CHILD);
-    else if (target.sex) setPatientSex(target.sex);
+    else if (target.sex === "F" || target.sex === "M") setPatientSex(target.sex);
   };
 
   const changeSex = (sex: "F" | "M" | typeof USG_SEX_CHILD) => {
@@ -1348,7 +1367,9 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
               const target = getStudy(template.studyKey);
               if (target) {
                 setStudyKey(template.studyKey);
-                setTechnique(target.technique);
+                const nextDefault =
+                  settings.studyTechniqueDefaults?.[template.studyKey]?.trim() || target.technique;
+                setTechnique(nextDefault);
                 if (template.studyKey.includes("child")) setPatientSex(USG_SEX_CHILD);
                 else if (template.studyKey.includes("female") || template.studyKey === "tvs" || template.studyKey === "ob") setPatientSex("F");
                 else if (template.studyKey.includes("male")) setPatientSex("M");
@@ -1402,6 +1423,19 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
                 onClick={() => setFocusedOrganIdx(organIdx)}
                 className={cn(focusedOrganIdx === organIdx && "rounded-lg ring-2 ring-amber-200/80")}
               >
+              {isGridOrgan(def) ? (
+                <UsgGridOrganCard
+                  def={def}
+                  state={st}
+                  readOnly={isFinal}
+                  onRows={(next) => setState((s) => setOrganRows(s, def.key, next.rows))}
+                  onConvertLegacy={
+                    isFinal
+                      ? undefined
+                      : () => setState((s) => setOrganRows(s, def.key, defaultBppRows()))
+                  }
+                />
+              ) : (
               <UsgOrganCard
                 def={def}
                 state={st}
@@ -1427,6 +1461,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
                 }}
                 onAddCustom={(organ) => setDialogOrgan(organ)}
               />
+              )}
               </div>
             );
           })}

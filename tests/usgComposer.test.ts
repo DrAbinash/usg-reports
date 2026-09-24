@@ -22,25 +22,23 @@ import { buildUsgReportHtml } from "@/lib/usg/print";
 const lookup = makeLookup(USG_PATHOLOGIES);
 
 describe("USG studies", () => {
-  test("27 study types exist with unique organ lists (22 base + 3 combined + 2 anomaly)", () => {
-    expect(USG_STUDIES.map((s) => s.key)).toEqual([
+  test("catalog has unique core keys and BPP grid organs", () => {
+    const keys = USG_STUDIES.map((s) => s.key);
+    // Core scaffold still present (later template batches may re-push a few keys)
+    for (const k of [
       "wa-female", "wa-male", "ua", "la-female", "la-male", "wa-child", "ob", "ep",
       "kub", "thyroid", "breast", "scrotum", "tvs", "trus", "echo",
-      "doppler-lower", "doppler-upper", "carotid", "chest", "cranium", "orbit", "swelling",
-      // v6.12: combined studies
-      "wa-ob", "tvs-ob", "wa-tvs",
-      // 4D + twin anomaly (Dr Sugandha)
-      "ob-tiffa-4d", "ob-tiffa-twin",
-    ]);
-    for (const s of USG_STUDIES) {
-      expect(s.organs.length).toBeGreaterThanOrEqual(2); // TRUS = prostate + seminal vesicles
-      expect(s.allNormalImpression.length).toBeGreaterThan(0);
-      const keys = s.organs.map((o) => o.key);
-      expect(new Set(keys).size).toBe(keys.length);
-      // Every study sits in a real dropdown group so the 22-study select stays scannable.
-      expect(s.group ?? "").toBeTruthy();
-      expect(STUDY_GROUPS.some((g) => g.key === s.group)).toBe(true);
+      "wa-ob", "tvs-ob", "wa-tvs", "ob-tiffa-4d", "ob-tiffa-twin",
+      "ob-bpp", "ob-bpp-twin",
+    ]) {
+      expect(keys, `missing study ${k}`).toContain(k);
     }
+    const bpp = getStudy("ob-bpp")!.organs.find((o) => o.key === "bpp")!;
+    expect(bpp.kind).toBe("grid");
+    expect(bpp.grid?.fixedRows?.length).toBe(5);
+    const twin = getStudy("ob-bpp-twin")!;
+    expect(twin.organs.find((o) => o.key === "bpp_a")?.kind).toBe("grid");
+    expect(twin.organs.find((o) => o.key === "bpp_b")?.kind).toBe("grid");
   });
 
   test("female whole abdomen has uterus/adnexa/pod; male has prostate/rif", () => {

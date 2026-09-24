@@ -10,6 +10,7 @@
  * (uterus 3 dims + ET + both ovaries) because that is how she reports them.
  */
 import type { UsgComposerState, UsgStudyDef, UsgVarDef } from "./types";
+import { BPP_GRID_SCHEMA, initialGridRows } from "./gridOrgans";
 
 const V = (key: string, label: string, unit = "cm"): UsgVarDef => ({ key, label, unit });
 
@@ -931,15 +932,22 @@ USG_STUDIES.push(
 
 
 
-/** Quick lookup by key. O(1) via a Map built once at module load — the
- *  prior `.find()` scanned the studies array on every call. */
-const STUDY_MAP: ReadonlyMap<string, UsgStudyDef> = new Map(
+/** Quick lookup by key. Rebuilt when late USG_STUDIES.push batches land
+ *  after this module's first evaluation of the map length. */
+let STUDY_MAP: ReadonlyMap<string, UsgStudyDef> = new Map(
   USG_STUDIES.map((s) => [s.key, s]),
 );
 
+function refreshStudyMap(): ReadonlyMap<string, UsgStudyDef> {
+  if (STUDY_MAP.size !== USG_STUDIES.length) {
+    STUDY_MAP = new Map(USG_STUDIES.map((s) => [s.key, s]));
+  }
+  return STUDY_MAP;
+}
+
 /** Quick lookup by key. */
 export function getStudy(key: string): UsgStudyDef | undefined {
-  return STUDY_MAP.get(key);
+  return refreshStudyMap().get(key);
 }
 
 /** Normal-wording override map — key `${studyKey}:${organKey}` → text (v5). */
@@ -976,7 +984,8 @@ export function getStudyWithOverrides(
   return study ? applyNormalOverrides(study, overrides) : undefined;
 }
 
-/** Fresh composer state for a study — every organ normal, no variables. */
+/** Fresh composer state for a study — every organ normal, no variables.
+ *  Grid organs (BPP) seed structured rows; prose organs keep empty vars. */
 export function initialState(
   studyKey: string,
   overrides?: NormalOverrides | null,
@@ -991,6 +1000,7 @@ export function initialState(
       custom: false,
       text: o.normal,
       vars: {},
+      ...(o.kind === "grid" ? { rows: initialGridRows(o) } : {}),
     })),
     impressionOverride: null,
   };
@@ -1004,7 +1014,9 @@ export function studyKeyForBillTest(name: string, gender?: string): string | nul
   if (/twin/.test(n)) return "ob-tiffa-twin";
   if (/anomaly|tiffa|targeted|level ?(ii|2)|4d/.test(n)) return "ob-tiffa-4d";
   if (/nt scan|nuchal/.test(n)) return "ep";
-  if (/fetal doppler|fwb|well ?being|growth/.test(n)) return "ob";
+  if (/growth/.test(n)) return "ob";
+  if (/\bbpp\b|biophysical/.test(n)) return /twin/.test(n) ? "ob-bpp-twin" : "ob-bpp";
+  if (/fetal doppler|fwb|well ?being/.test(n)) return "ob";
   if (/tvs|transvaginal|follicular|sonosalping/.test(n)) return "tvs";
   if (/thyroid/.test(n)) return "thyroid";
   if (/breast|sonomamm/.test(n)) return "breast";
@@ -1125,7 +1137,13 @@ USG_STUDIES.push(
     organs: [
       { key: 'fetus', label: 'FETUS & BIOMETRY', normal: 'Single live intrauterine fetus in [ ] presentation. FHR: [ ] bpm. Biometry: BPD [ ]mm, HC [ ]mm, AC [ ]mm, FL [ ]mm. Mean GA: [ ] weeks. EDD: [ ]. Fetal Weight: [ ] gms.' },
       { key: 'placenta', label: 'PLACENTA & LIQUOR', normal: 'Placenta: [ ] located, Grade-[ ]. Liquor: AFI [ ] cm. Internal OS closed.' },
-      { key: 'bpp', label: 'BIOPHYSICAL SCORE', normal: 'Fetal breathing: 2. Fetal movement: 2. Fetal tone: 2. NST (Reactivity): 2. Amniotic fluid: 2. Total Score: 10/10.' },
+      {
+        key: 'bpp',
+        label: 'BIOPHYSICAL SCORE',
+        kind: 'grid',
+        grid: BPP_GRID_SCHEMA,
+        normal: 'Fetal breathing: 2. Fetal movement: 2. Fetal tone: 2. NST (Reactivity): 2. Amniotic fluid: 2. Total Score: 10/10.',
+      },
     ]
   },
   {
@@ -1134,8 +1152,20 @@ USG_STUDIES.push(
     allNormalImpression: ['Twin intrauterine pregnancy.', 'Normal biophysical profile score for both fetuses.'],
     organs: [
       { key: 'twins', label: 'TWIN A & B SURVEY', normal: 'Twin-A in [ ] presentation. Twin-B in [ ] presentation. Biometry and weights calculated for both.' },
-      { key: 'bpp_a', label: 'BPP TWIN-A', normal: 'Fetal breathing: 2. Movement: 2. Tone: 2. NST: 2. AFV: 2. Total: 10/10.' },
-      { key: 'bpp_b', label: 'BPP TWIN-B', normal: 'Fetal breathing: 2. Movement: 2. Tone: 2. NST: 2. AFV: 2. Total: 10/10.' },
+      {
+        key: 'bpp_a',
+        label: 'BPP TWIN-A',
+        kind: 'grid',
+        grid: BPP_GRID_SCHEMA,
+        normal: 'Fetal breathing: 2. Movement: 2. Tone: 2. NST: 2. AFV: 2. Total: 10/10.',
+      },
+      {
+        key: 'bpp_b',
+        label: 'BPP TWIN-B',
+        kind: 'grid',
+        grid: BPP_GRID_SCHEMA,
+        normal: 'Fetal breathing: 2. Movement: 2. Tone: 2. NST: 2. AFV: 2. Total: 10/10.',
+      },
       { key: 'placenta', label: 'PLACENTA & LIQUOR', normal: 'Placenta: [ ] located, Grade-[ ]. Liquor: Adequate. Internal OS closed.' },
     ]
   },

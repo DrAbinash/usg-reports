@@ -43,7 +43,11 @@ export function guessStudyKey(testName: string, sex: "F" | "M" | "" = "", child 
   // Obstetrics first — the Form F duty and the most safety-critical routing.
   if (/tvs|transvaginal|follicular|hsg/.test(t)) return "tvs";
   if (/early preg|first trimester|dating|viability|\bep\b/.test(t)) return "ep";
-  if (/pregnan|antenatal|obstetric|anomaly|growth|bpp|fetal|ob us|obstet/.test(t)) return "ob";
+  // Growth scans that mention BPP stay on the antenatal scaffold — dedicated
+  // BPP studies only when the bill is primarily a biophysical profile.
+  if (/growth/.test(t)) return "ob";
+  if (/\bbpp\b|biophysical/.test(t)) return /twin/.test(t) ? "ob-bpp-twin" : "ob-bpp";
+  if (/pregnan|antenatal|obstetric|anomaly|fetal|ob us|obstet/.test(t)) return "ob";
 
   // Sex-aware default screening when the bill is just "USG abdomen".
   const sexOr = child ? "CHILD" : sex;

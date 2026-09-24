@@ -8,6 +8,13 @@
  * doctor's trailing normal-summary lines.
  */
 import type { UsgComposerState, UsgOrganDef, UsgOrganState, UsgPathologyDef, UsgResolved, UsgStudyDef } from "./types";
+import {
+  coerceGridRows,
+  gridRowsToProse,
+  initialGridRows,
+  isGridOrgan,
+  deriveGridScoreTotal,
+} from "./gridOrgans";
 import { getTokenType } from "./tokenTypes";
 import { getStudy, getStudyWithOverrides, initialState, USG_STUDIES, type NormalOverrides } from "./studies";
 import { perParameterGa, meanGa, hadlockEfw, efwTolerance, eddFromGa } from "./biometry";
@@ -105,7 +112,14 @@ export function makeLookup(extra: UsgPathologyDef[] = []): PathologyLookup {
   return (key) => map.get(key);
 }
 
-/** Normalise arbitrary JSON (DB row / client payload) into a valid state. */
+/** Normalise arbitrary JSON (DB row / client payload) into a valid state.
+ *
+ *  Grid organs (BPP):
+ *    • incoming.rows → coerce to schema columns (in-memory only)
+ *    • legacy prose only (no rows) → keep text; UI shows read-only banner
+ *  Never invent rows for legacy prose on open — FINALIZED reportHtml /
+ *  stateJson stay untouched until a draft is explicitly edited & saved.
+ */
 export function normaliseState(
   raw: unknown,
   fallbackStudy = "wa-female",
@@ -120,11 +134,19 @@ export function normaliseState(
       ? (obj.organs.find((o) => o && typeof o === "object" && o.organ === def.key) as Partial<UsgOrganState> | undefined)
       : undefined;
     if (!incoming) {
-      return { organ: def.key, pathology: null, pathologies: [], custom: false, text: def.normal, vars: {} };
+      return {
+        organ: def.key,
+        pathology: null,
+        pathologies: [],
+        custom: false,
+        text: def.normal,
+        vars: {},
+        ...(isGridOrgan(def) ? { rows: initialGridRows(def) } : {}),
+      };
     }
     const text = typeof incoming.text === "string" && incoming.text.trim() ? incoming.text : def.normal;
     const keys = selectedPathologies(incoming as UsgOrganState);
-    return {
+    const baseOrgan: UsgOrganState = {
       organ: def.key,
       pathology: keys[0] ?? null, // legacy mirror of the combined list
       pathologies: keys,
@@ -132,6 +154,14 @@ export function normaliseState(
       text,
       vars: incoming.vars && typeof incoming.vars === "object" ? { ...incoming.vars } : {},
     };
+    if (isGridOrgan(def) && def.grid) {
+      const hasRows = Array.isArray(incoming.rows) && incoming.rows.length > 0;
+      if (hasRows) {
+        baseOrgan.rows = coerceGridRows(def.grid, incoming.rows);
+      }
+      // else: legacy prose — leave rows undefined so UI shows the banner
+    }
+    return baseOrgan;
   });
   return {
     studyKey: study.key,
@@ -157,8 +187,18 @@ export function switchStudy(
     studyKey: target.key,
     organs: target.organs.map((def) => {
       const old = prev.get(def.key);
-      if (old && (selectedPathologies(old).length || old.custom)) return { ...old };
-      return { organ: def.key, pathology: null, pathologies: [], custom: false, text: def.normal, vars: {} };
+      if (old && (selectedPathologies(old).length || old.custom || (old.rows && old.rows.length))) {
+        return { ...old };
+      }
+      return {
+        organ: def.key,
+        pathology: null,
+        pathologies: [],
+        custom: false,
+        text: def.normal,
+        vars: {},
+        ...(isGridOrgan(def) ? { rows: initialGridRows(def) } : {}),
+      };
     }),
     impressionOverride: state.impressionOverride,
   };
@@ -215,6 +255,7 @@ export function applyPathologies(
       custom: false,
       text: nextText,
       vars: kept,
+      ...(o.rows ? { rows: o.rows } : {}),
     };
   });
   return { ...state, organs };
@@ -225,6 +266,25 @@ export function setOrganText(state: UsgComposerState, organKey: string, text: st
   const organs = state.organs.map((o) =>
     o.organ === organKey ? { ...o, custom: true, text, pathologies: selectedPathologies(o) } : o,
   );
+  return { ...state, organs };
+}
+
+/** Replace structured grid rows for an organ (BPP scores etc.). */
+export function setOrganRows(
+  state: UsgComposerState,
+  organKey: string,
+  rows: UsgOrganState["rows"],
+): UsgComposerState {
+  const study = getStudy(state.studyKey);
+  const def = study?.organs.find((o) => o.key === organKey);
+  const organs = state.organs.map((o) => {
+    if (o.organ !== organKey) return o;
+    const next = { ...o, rows, custom: true };
+    if (def && rows?.length) {
+      next.text = gridRowsToProse(def, rows);
+    }
+    return next;
+  });
   return { ...state, organs };
 }
 
@@ -362,8 +422,31 @@ export function resolve(
     // so the organ text renders the default (e.g. "cephalic") even when the
     // doctor hasn't picked a lie yet.
     const organVars = { ...mergedVars, ...o.vars };
-    const text = substitute(o.text, organVars, o.organ);
-    sections.push({ organ: o.organ, label: def.label, text, kind: def.kind });
+
+    if (isGridOrgan(def) && def.grid && o.rows && o.rows.length) {
+      const total = def.grid.scoreTotal
+        ? {
+            value: deriveGridScoreTotal(o.rows, def.grid.scoreTotal.columnKey),
+            max: def.grid.scoreTotal.max,
+          }
+        : undefined;
+      const prose = gridRowsToProse(def, o.rows);
+      sections.push({
+        organ: o.organ,
+        label: def.label,
+        text: prose,
+        kind: "grid",
+        grid: {
+          columns: def.grid.columns,
+          rows: o.rows,
+          total,
+          twinLabel: /twin-?a|_a$/i.test(o.organ) ? "Fetus-A" : /twin-?b|_b$/i.test(o.organ) ? "Fetus-B" : undefined,
+        },
+      });
+    } else {
+      const text = substitute(o.text, organVars, o.organ);
+      sections.push({ organ: o.organ, label: def.label, text, kind: def.kind === "grid" ? "rows" : def.kind });
+    }
 
     // Combined findings: every selected pathology contributes its impression
     // lines, suggestions and title fragment — in click order, deduplicated.

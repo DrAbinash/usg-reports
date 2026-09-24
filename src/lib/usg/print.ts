@@ -51,6 +51,12 @@ export type UsgPrintSettings = {
   usgDoctorRegNo: string;
   usgMachineLine: string;
   usgShowMachine: boolean;
+  /** Per-studio machine line override (clinic/studio id → text). */
+  machineLineByStudio?: Record<string, string>;
+  /** Active studio/clinic id used to resolve machineLineByStudio. */
+  studioId?: string;
+  /** Per-study technique defaults (studyKey → technique text). */
+  studyTechniqueDefaults?: Record<string, string>;
   usgFooterLine: string;
   usgDeclarationLine: string;
   /** "premium" (default) or "classic" (plain B/W letterhead). */
@@ -138,6 +144,15 @@ function safeImgUrl(raw: string | undefined | null): string {
   return "";
 }
 
+/** Resolve the machine banner: studio override → global usgMachineLine. */
+export function resolveMachineLine(settings: UsgPrintSettings): string {
+  const studioId = settings.studioId?.trim();
+  if (studioId && settings.machineLineByStudio?.[studioId]?.trim()) {
+    return settings.machineLineByStudio[studioId].trim();
+  }
+  return (settings.usgMachineLine ?? "").trim();
+}
+
 /** A measurement line "Label : value ( Normal ... )" → table row HTML. */
 function measurementRow(line: string): string {
   const idx = line.indexOf(":");
@@ -151,7 +166,35 @@ function measurementRow(line: string): string {
   return `<tr><th>${esc(label)}</th><td>${esc(value)}</td></tr>`;
 }
 
-/** Section blocks in organ order; table sections render as measurement tables. */
+/** Structured grid section (BPP) → Variable | Score HTML table. */
+function gridSectionHtml(s: UsgResolved["sections"][number]): string {
+  const g = s.grid;
+  if (!g) return "";
+  const twin = g.twinLabel ? `<div class="grid-twin">${esc(g.twinLabel)}</div>` : "";
+  const head = g.columns
+    .map((c) => `<th>${esc(c.label)}</th>`)
+    .join("");
+  const body = g.rows
+    .map((r) => {
+      const cells = g.columns
+        .map((c) => {
+          const v = r.cells[c.key] ?? "";
+          const cls = c.key === "score" ? ' class="grid-score"' : "";
+          return `<td${cls}>${esc(v)}</td>`;
+        })
+        .join("");
+      return `<tr>${cells}</tr>`;
+    })
+    .join("");
+  const totalRow =
+    g.total != null
+      ? `<tr class="grid-total"><td><strong>Total</strong></td><td class="grid-score"><strong>${esc(String(g.total.value))}/${esc(String(g.total.max))}</strong></td></tr>`
+      : "";
+  return `<div class="grid-block"><div class="grid-cap">${esc(s.label)}</div>${twin}<table class="grid-score-table"><thead><tr>${head}</tr></thead><tbody>${body}${totalRow}</tbody></table></div>`;
+}
+
+/** Section blocks in organ order; table sections render as measurement tables.
+ *  Twin BPP grids (bpp_a + bpp_b) print side-by-side. */
 function renderSections(resolved: UsgResolved): string {
   const parts: string[] = [];
   const rows: string[] = [];
@@ -160,7 +203,9 @@ function renderSections(resolved: UsgResolved): string {
     parts.push(`<table class="organs">${rows.join("\n")}</table>`);
     rows.length = 0;
   };
-  for (const s of resolved.sections) {
+  const sections = resolved.sections;
+  for (let i = 0; i < sections.length; i++) {
+    const s = sections[i]!;
     if (s.kind === "table") {
       flushRows();
       const body = s.text
@@ -170,6 +215,22 @@ function renderSections(resolved: UsgResolved): string {
         .map(measurementRow)
         .join("\n");
       parts.push(`<div class="meas-block"><div class="meas-cap">${esc(s.label)}</div><table class="meas"><tbody>${body}</tbody></table></div>`);
+    } else if (s.kind === "grid" && s.grid) {
+      flushRows();
+      const next = sections[i + 1];
+      // Twin BPP: render Fetus-A | Fetus-B side-by-side when consecutive.
+      if (
+        s.grid.twinLabel === "Fetus-A" &&
+        next?.kind === "grid" &&
+        next.grid?.twinLabel === "Fetus-B"
+      ) {
+        parts.push(
+          `<div class="grid-twin-wrap">${gridSectionHtml(s)}${gridSectionHtml(next)}</div>`,
+        );
+        i++;
+      } else {
+        parts.push(gridSectionHtml(s));
+      }
     } else {
       rows.push(`<tr class="organ"><th>${esc(s.label)}</th><td>${esc(s.text).replace(/\n/g, "<br/>")}</td></tr>`);
     }
@@ -225,6 +286,17 @@ const PREMIUM_CSS = `
   table.meas tr:last-child th, table.meas tr:last-child td { border-bottom: none; }
   table.meas .norm { color: #7A93A8; font-weight: 500; font-size: 8.5pt; }
   table.meas td.m-full { font-weight: 700; }
+
+  .grid-twin-wrap { display: flex; gap: 10px; margin-top: 8px; page-break-inside: avoid; }
+  .grid-twin-wrap .grid-block { flex: 1; min-width: 0; }
+  .grid-block { margin-top: 8px; page-break-inside: avoid; }
+  .grid-cap { font-size: 8.5pt; font-weight: 800; color: #1B4F8A; text-transform: uppercase; letter-spacing: .8px; margin: 0 0 4px; }
+  .grid-twin { font-size: 9pt; font-weight: 800; color: #2E6DA4; margin-bottom: 3px; }
+  table.grid-score-table { width: 100%; border-collapse: collapse; font-size: 9.5pt; border: 1.5px solid #AFCDE8; }
+  table.grid-score-table th { background: #E8F1FA; color: #1B4F8A; font-size: 8pt; text-transform: uppercase; letter-spacing: .5px; padding: 4px 8px; text-align: left; border-bottom: 1px solid #AFCDE8; }
+  table.grid-score-table td { padding: 4px 8px; border-bottom: 1px solid #E1ECF7; vertical-align: top; }
+  table.grid-score-table td.grid-score { text-align: center; font-weight: 800; width: 18%; }
+  table.grid-score-table tr.grid-total td { background: #F0F6FC; border-bottom: none; font-weight: 800; }
 
   .impression-box { background: #E8F1FA; border-left: 4.5px solid #1B4F8A; border-radius: 0 8px 8px 0; padding: 9px 14px; margin-top: 2px; page-break-inside: avoid; }
   .impression-box ol { margin-left: 19px; }
@@ -550,9 +622,10 @@ export function buildUsgReportHtml(
     ? `<img src="${esc(safeLogo)}" alt="logo" class="logo" />`
     : `<div class="logo logo-fallback">USG</div>`;
 
+  const resolvedMachine = resolveMachineLine(settings);
   const machineLine =
-    settings.usgShowMachine && settings.usgMachineLine?.trim()
-      ? `<p class="machine">${esc(settings.usgMachineLine.trim())}</p>`
+    settings.usgShowMachine && resolvedMachine
+      ? `<p class="machine">${esc(resolvedMachine)}</p>`
       : "";
 
   const provisionalTag = provisional

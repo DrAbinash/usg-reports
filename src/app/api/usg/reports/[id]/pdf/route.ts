@@ -61,6 +61,8 @@ export async function GET(req: Request, ctx: Ctx) {
       usgDoctorRegNo: settings.usgDoctorRegNo,
       usgMachineLine: settings.usgMachineLine,
       usgShowMachine: settings.usgShowMachine,
+      machineLineByStudio: (settings as { machineLineByStudio?: Record<string, string> }).machineLineByStudio,
+      studioId: (settings as { clinicId?: string }).clinicId ?? "default",
       usgFooterLine: settings.usgFooterLine,
       usgDeclarationLine: settings.usgDeclarationLine,
       usgPrintStyle: settings.usgPrintStyle,

@@ -91,6 +91,9 @@ model HospitalSettings {
   usgBirthdayMessage String   @default("Happy Birthday, Dr. Sugandha! 🎂\nWith love, Abinash")
   usgMachineLine    String   @default("This Scan has been proudly done on GE Voluson Pro 4-D USG Machine")
   usgShowMachine    Boolean  @default(true)
+  // P2b — JSON maps stored as strings (studyKey→technique; studioId→machine line)
+  studyTechniqueDefaultsJson String @default("{}")
+  machineLineByStudioJson    String @default("{}")
   usgFooterLine     String   @default("Kindly co-relate with clinico-pathological findings.")
   usgDeclarationLine String  @default("") // optional PC-PNDT style declaration under the signature
   usgPrintStyle     String   @default("premium") // premium (gradient letterhead) | classic (plain B/W) | premium_sidebar (two-column with image sidebar)

@@ -216,6 +216,9 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
     ["REFERRED BY", S(patient.referredBy || "—")],
     ["DATE", S(patient.date)],
   ];
+  if (patient.serial?.trim()) {
+    strip.push(["USG No.", S(patient.serial.trim())]);
+  }
   const rowH = a5 ? 11 : 14;
   const col1W = contentW * 0.42;
   const col2W = contentW * 0.58;
@@ -402,17 +405,32 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
   }
 
   // ── Footer + QR ───────────────────────────────────────────────────────
+  // Leave room on the right for the verification QR on the last page so the
+  // footer line never draws through the code.
   for (const p of ctx.pages) {
+    const isLast = p === ctx.pages[ctx.pages.length - 1];
+    const footerEndX = isLast && qrPng ? pageW - margin - (a5 ? 36 : 48) : pageW - margin;
     p.drawLine({
-      start: { x: margin, y: 34 }, end: { x: pageW - margin, y: 34 }, thickness: 1, color: NAVY,
+      start: { x: margin, y: 34 }, end: { x: footerEndX, y: 34 }, thickness: 1, color: NAVY,
     });
     const footer = S(settings.usgFooterLine || settings.footerMessage);
     if (footer) {
-      p.drawText(footer.slice(0, 90), { x: margin, y: 24, size: a5 ? 6 : 7, font: fonts.reg, color: GREY });
+      const maxFooterW = footerEndX - margin - (a5 ? 4 : 8);
+      // Truncate by approximate glyph width so the text stays left of the QR.
+      let text = footer;
+      while (fonts.reg.widthOfTextAtSize(S(text), a5 ? 6 : 7) > maxFooterW && text.length > 8) {
+        text = text.slice(0, -4);
+      }
+      if (text.length < footer.length) text = `${text.trimEnd()}…`;
+      p.drawText(S(text), { x: margin, y: 24, size: a5 ? 6 : 7, font: fonts.reg, color: GREY });
     }
     const brand = S(settings.appTitle || "CARE USG Studio");
     const bw = fonts.bold.widthOfTextAtSize(brand, a5 ? 6 : 7);
-    p.drawText(brand, { x: pageW - margin - bw - (qrPng ? (a5 ? 30 : 38) : 0), y: 24, size: a5 ? 6 : 7, font: fonts.bold, color: GREY });
+    const brandX = Math.min(
+      pageW - margin - bw - (isLast && qrPng ? (a5 ? 30 : 38) : 0),
+      footerEndX - bw,
+    );
+    p.drawText(brand, { x: Math.max(margin, brandX), y: 24, size: a5 ? 6 : 7, font: fonts.bold, color: GREY });
   }
   if (qrPng) {
     const qrImg = await ctx.doc.embedPng(qrPng);

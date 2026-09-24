@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
 import { normaliseState, makeLookup, resolve } from "@/lib/usg/composer";
 import { loadAllPathologies, loadNormalOverrides } from "@/lib/usg/server";
-import { buildUsgReportHtml, formatUsgSerial } from "@/lib/usg/print";
+import { buildUsgReportHtml, formatUsgSerial, toUsgPrintSettings } from "@/lib/usg/print";
 import { audit } from "@/lib/usg/audit";
 import { payloadInputFor, qrDataUrlFor } from "@/lib/usg/qrServer";
 import { finalizeReport } from "@/lib/usg/careClient";
@@ -62,33 +62,10 @@ export async function POST(req: Request, ctx: Ctx) {
   );
 
   const html = buildUsgReportHtml(
-    {
-      appTitle: settings.appTitle,
-      hospitalName: settings.hospitalName,
-      addressLine: settings.addressLine,
-      phone: settings.phone,
-      email: settings.email,
-      logoUrl: settings.logoUrl,
-      footerMessage: settings.footerMessage,
-      usgDoctorName: settings.usgDoctorName,
-      usgDoctorQual: settings.usgDoctorQual,
-      usgDoctorRegNo: settings.usgDoctorRegNo,
-      usgMachineLine: settings.usgMachineLine,
-      usgShowMachine: settings.usgShowMachine,
-      machineLineByStudio: (settings as { machineLineByStudio?: Record<string, string> }).machineLineByStudio,
+    toUsgPrintSettings({
+      ...(settings as unknown as Record<string, unknown>),
       studioId: (settings as { clinicId?: string }).clinicId ?? "default",
-      usgFooterLine: settings.usgFooterLine,
-      usgDeclarationLine: settings.usgDeclarationLine,
-      usgPrintStyle: settings.usgPrintStyle,
-      usgPrintCompact: settings.usgPrintCompact,
-      usgPrintPaper: settings.usgPrintPaper,
-      usgSignatureUrl: settings.usgSignatureUrl,
-      usgPrintFontSize: settings.usgPrintFontSize,
-      usgPrintLineHeight: settings.usgPrintLineHeight,
-      usgPrintSpacing: settings.usgPrintSpacing,
-      usgPrintShowTechnique: settings.usgPrintShowTechnique,
-      usgPrintShowThanks: settings.usgPrintShowThanks,
-    },
+    }),
     {
       name: report.patientName,
       age: report.patientAge,
@@ -98,6 +75,8 @@ export async function POST(req: Request, ctx: Ctx) {
       // back to the finalization/creation day for older rows.
       date: fmtDate(report.scanDate ?? report.finalizedAt ?? report.createdAt),
       serial: formatUsgSerial(serialNo),
+      // Finalized snapshot must never carry the PROVISIONAL watermark.
+      provisional: false,
     },
     resolved,
     images.map((i) => ({ dataUrl: i.dataUrl, caption: i.caption })),

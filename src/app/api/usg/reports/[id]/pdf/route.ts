@@ -4,7 +4,7 @@ import { getSettings } from "@/lib/settings";
 import { makeLookup, normaliseState, resolve } from "@/lib/usg/composer";
 import { loadAllPathologies, loadNormalOverrides } from "@/lib/usg/server";
 import { buildUsgReportPdf } from "@/lib/usg/pdf";
-import { formatUsgSerial } from "@/lib/usg/print";
+import { formatUsgSerial, toUsgPrintSettings } from "@/lib/usg/print";
 import { payloadInputFor, qrPngFor } from "@/lib/usg/qrServer";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -48,33 +48,10 @@ export async function GET(req: Request, ctx: Ctx) {
   const qrPng = await qrPngFor(input, originOf(req));
 
   const bytes = await buildUsgReportPdf({
-    settings: {
-      appTitle: settings.appTitle,
-      hospitalName: settings.hospitalName,
-      addressLine: settings.addressLine,
-      phone: settings.phone,
-      email: settings.email,
-      logoUrl: settings.logoUrl,
-      footerMessage: settings.footerMessage,
-      usgDoctorName: settings.usgDoctorName,
-      usgDoctorQual: settings.usgDoctorQual,
-      usgDoctorRegNo: settings.usgDoctorRegNo,
-      usgMachineLine: settings.usgMachineLine,
-      usgShowMachine: settings.usgShowMachine,
-      machineLineByStudio: (settings as { machineLineByStudio?: Record<string, string> }).machineLineByStudio,
+    settings: toUsgPrintSettings({
+      ...(settings as unknown as Record<string, unknown>),
       studioId: (settings as { clinicId?: string }).clinicId ?? "default",
-      usgFooterLine: settings.usgFooterLine,
-      usgDeclarationLine: settings.usgDeclarationLine,
-      usgPrintStyle: settings.usgPrintStyle,
-      usgPrintCompact: settings.usgPrintCompact,
-      usgPrintPaper: settings.usgPrintPaper,
-      usgSignatureUrl: settings.usgSignatureUrl,
-      usgPrintFontSize: settings.usgPrintFontSize,
-      usgPrintLineHeight: settings.usgPrintLineHeight,
-      usgPrintSpacing: settings.usgPrintSpacing,
-      usgPrintShowTechnique: settings.usgPrintShowTechnique,
-      usgPrintShowThanks: settings.usgPrintShowThanks,
-    },
+    }),
     patient: {
       name: report.patientName,
       age: report.patientAge,

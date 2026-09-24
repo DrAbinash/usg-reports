@@ -115,6 +115,56 @@ export type UsgPrintPatient = {
   provisional?: boolean;
 };
 
+/** Map HospitalSettings (or any settings bag) onto UsgPrintSettings so every
+ *  layout dial (logo size, sidebar position, …) reaches the HTML/PDF builders. */
+export function toUsgPrintSettings(s: Record<string, unknown> | UsgPrintSettings): UsgPrintSettings {
+  const r = s as Record<string, unknown>;
+  const bool = (v: unknown, d = true) => (typeof v === "boolean" ? v : d);
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+  const str = (v: unknown, d = "") => (typeof v === "string" ? v : d);
+  return {
+    appTitle: str(r.appTitle),
+    hospitalName: str(r.hospitalName),
+    addressLine: str(r.addressLine),
+    phone: str(r.phone),
+    email: str(r.email),
+    logoUrl: str(r.logoUrl),
+    footerMessage: str(r.footerMessage),
+    usgDoctorName: str(r.usgDoctorName),
+    usgDoctorQual: str(r.usgDoctorQual),
+    usgDoctorRegNo: str(r.usgDoctorRegNo),
+    usgMachineLine: str(r.usgMachineLine),
+    usgShowMachine: bool(r.usgShowMachine, true),
+    machineLineByStudio: (r.machineLineByStudio as Record<string, string> | undefined) ?? undefined,
+    studioId: str(r.studioId || r.clinicId, "default"),
+    studyTechniqueDefaults: (r.studyTechniqueDefaults as Record<string, string> | undefined) ?? undefined,
+    usgFooterLine: str(r.usgFooterLine),
+    usgDeclarationLine: str(r.usgDeclarationLine),
+    usgPrintStyle: str(r.usgPrintStyle, "premium") || "premium",
+    usgPrintCompact: bool(r.usgPrintCompact, false),
+    usgPrintPaper: str(r.usgPrintPaper, "a4") || "a4",
+    usgSignatureUrl: str(r.usgSignatureUrl),
+    usgPrintFontSize: num(r.usgPrintFontSize),
+    usgPrintLineHeight: num(r.usgPrintLineHeight),
+    usgPrintSpacing: str(r.usgPrintSpacing) || undefined,
+    usgPrintShowTechnique: bool(r.usgPrintShowTechnique, true),
+    usgPrintShowThanks: bool(r.usgPrintShowThanks, true),
+    usgSidebarPosition: str(r.usgSidebarPosition) || undefined,
+    usgLogoPosition: str(r.usgLogoPosition) || undefined,
+    usgAddressPosition: str(r.usgAddressPosition) || undefined,
+    usgPrintFontFamily: str(r.usgPrintFontFamily) || undefined,
+    usgLogoSizeMm: num(r.usgLogoSizeMm),
+    usgNameSizePt: num(r.usgNameSizePt),
+    usgAddressSizePt: num(r.usgAddressSizePt),
+    usgSignatureSizeMm: num(r.usgSignatureSizeMm),
+    enableCriticalComm: typeof r.enableCriticalComm === "boolean" ? r.enableCriticalComm : undefined,
+    enableFollowUps: typeof r.enableFollowUps === "boolean" ? r.enableFollowUps : undefined,
+    enableAiDraft: typeof r.enableAiDraft === "boolean" ? r.enableAiDraft : undefined,
+    enableBirads: typeof r.enableBirads === "boolean" ? r.enableBirads : undefined,
+    enableDicomSr: typeof r.enableDicomSr === "boolean" ? r.enableDicomSr : undefined,
+  };
+}
+
 /** Sequential register number → printed form: 1 → "USG-0001", 12345 → "USG-12345". */
 export function formatUsgSerial(n: number): string {
   return `USG-${String(Math.max(0, Math.floor(n))).padStart(4, "0")}`;
@@ -698,12 +748,12 @@ export function buildUsgReportHtml(
 <html><head><meta charset="utf-8" />
 <title>${esc(settings.hospitalName || settings.appTitle)} — ${esc(patient.name)} — ${esc(resolved.title)}</title>
 <style>${css}
-/* v6.17 sig-pin — signature block anchored to page-1 bottom-right */
-.page { position: relative; }
-.tail { position: absolute !important; right: 8mm; bottom: 6mm; margin: 0 !important; padding: 0 !important; text-align: right; break-inside: avoid; page-break-inside: avoid; }}
-.page { min-height: 277mm; }
+/* Flow layout for signature / PC-PNDT / footer — never pin to page-1 bottom
+   so long reports push the tail cleanly onto page 2 as one unit. */
+.tail { page-break-inside: avoid; break-inside: avoid; margin-top: 12px; }
+.sig-block { page-break-inside: avoid; break-inside: avoid; }
 
-/* v6.17 two-line demography strip */
+/* Two-line demography strip */
 .patient-strip { display: flex; flex-direction: column; gap: 4px; margin: 4mm 0 3mm; }
 .strip-row { display: flex; justify-content: space-between; align-items: center; }
 .strip-row .field { flex: 1; display: flex; justify-content: space-between; align-items: baseline; }
@@ -711,11 +761,8 @@ export function buildUsgReportHtml(
 .strip-row .label { font-size: 8.5pt; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
 .strip-row .value { font-size: 9.5pt; font-weight: 500; text-align: right; }
 .strip-row .field:first-child .value { text-align: left; }
-/* v6.17 signature pin to bottom-right of page 1 */
-.sig-block { position: absolute !important; right: 8mm; bottom: 6mm; margin: 0 !important; text-align: right; }
-.page { position: relative; min-height: 277mm; }
 
-/* v6.20 — honour size dials */
+/* Honour size dials */
 .top-bar .logo-block img { height: var(--logo-h, 14mm); }
 .top-bar .logo-block .hospital-name { font-size: var(--name-fs, 15pt); }
 .top-bar .contact-block { font-size: var(--addr-fs, 8.5pt); }
@@ -729,7 +776,6 @@ ${watermark}
       <div class="hospital">${esc(settings.hospitalName || settings.appTitle)}</div>
       <div class="addr">${esc(settings.addressLine)}${settings.phone ? ` &nbsp;·&nbsp; ${esc(settings.phone)}` : ""}${settings.email ? ` &nbsp;·&nbsp; ${esc(settings.email)}` : ""}</div>
     </div>
-    ""
   </div>
   ${provisionalTag}
 
@@ -1154,20 +1200,15 @@ ${SIDEBAR_CSS}
 
   <!-- Patient strip -->
   <div class="patient-strip">
-  <div class="strip-row">
-    <div class="field"><div class="label">NAME</div><div class="value" style="font-weight:700;">${esc(patient.name || "—")}</div></div>
-    <div class="field"><div class="label">AGE/SEX</div><div class="value">${esc(patient.age || "—")} / ${esc(patient.sex || "—")}</div></div>
-  </div>
-  <div class="strip-row">
-    <div class="field"><div class="label">REFERRED BY</div><div class="value">${esc(patient.referredBy || "—")}</div></div>
-    <div class="field"><div class="label">DATE</div><div class="value">${esc(patient.date || "—")}</div></div>
-  </div>
-</div></div>
-    <div class="field"><div class="label">Study Date</div><div class="value">${esc(patient.date || "—")}</div></div>
-    <div class="field"><div class="label">Age / Gender</div><div class="value">${esc(patient.age || "—")} / ${esc(patient.sex || "—")}</div></div>
-    <div class="field"><div class="label">Ref. Doctor</div><div class="value">${esc(patient.referredBy || "—")}</div></div>
-    ${patient.serial ? `<div class="field"><div class="label">Patient ID</div><div class="value">${esc(patient.serial)}</div></div>` : ""}
-    <div class="field"><div class="label">Study</div><div class="value">${esc(resolved.title || resolved.study.label)}</div></div>
+    <div class="strip-row">
+      <div class="field"><div class="label">NAME</div><div class="value" style="font-weight:700;">${esc(patient.name || "—")}</div></div>
+      <div class="field"><div class="label">AGE/SEX</div><div class="value">${esc(patient.age || "—")} / ${esc(patient.sex || "—")}</div></div>
+    </div>
+    <div class="strip-row">
+      <div class="field"><div class="label">REFERRED BY</div><div class="value">${esc(patient.referredBy || "—")}</div></div>
+      <div class="field"><div class="label">DATE</div><div class="value">${esc(patient.date || "—")}</div></div>
+    </div>
+    ${patient.serial ? `<div class="strip-row"><div class="field"><div class="label">USG No.</div><div class="value">${esc(patient.serial)}</div></div><div class="field"><div class="label">Study</div><div class="value">${esc(resolved.title || resolved.study.label)}</div></div></div>` : `<div class="strip-row"><div class="field"><div class="label">Study</div><div class="value">${esc(resolved.title || resolved.study.label)}</div></div></div>`}
   </div>
 
   <!-- Two-column body -->

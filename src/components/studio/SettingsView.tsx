@@ -42,6 +42,8 @@ type Settings = {
   enableAiDraft?: boolean;
   enableBirads?: boolean;
   enableDicomSr?: boolean;
+  /** Secure WhatsApp share routing: patient_only | patient_and_doctor | doctor_only */
+  whatsappRouting?: string;
 };
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -1160,6 +1162,41 @@ export function SettingsView() {
             <FeatureToggle field="enableAiDraft" label="AI Draft (Ollama)" hint="Local AI findings-draft assistant (requires OLLAMA_URL)" value={!!s?.enableAiDraft} onToggle={(v) => setBool("enableAiDraft", v)} />
             <FeatureToggle field="enableBirads" label="BI-RADS structured reporting" hint="Breast study BI-RADS assessment picker" value={!!s?.enableBirads} onToggle={(v) => setBool("enableBirads", v)} />
             <FeatureToggle field="enableDicomSr" label="DICOM SR PDF attachment" hint="Reserved — embed SR XML in PDF (future)" value={!!s?.enableDicomSr} onToggle={(v) => setBool("enableDicomSr", v)} />
+
+            <div className="rounded-lg border border-border bg-white p-2.5">
+              <Label htmlFor="whatsappRouting" className="text-[12px] font-semibold text-foreground">
+                WhatsApp share routing
+              </Label>
+              <p className="mt-0.5 text-[10.5px] leading-snug text-muted-foreground">
+                Who receives the secure 7-day report link when you tap Share via WhatsApp.
+              </p>
+              <select
+                id="whatsappRouting"
+                className="mt-2 h-9 w-full rounded-md border border-border bg-panel px-2 text-[12px]"
+                value={s?.whatsappRouting || "patient_only"}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setS({ ...s, whatsappRouting: v } as Settings);
+                  void fetch("/api/settings", {
+                    method: "PUT",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ whatsappRouting: v }),
+                  })
+                    .then((r) => r.json())
+                    .then((d) => {
+                      if (d.settings) {
+                        toast.success("WhatsApp routing saved");
+                        setS(d.settings);
+                      } else toast.error("Could not save routing");
+                    })
+                    .catch(() => toast.error("Could not save routing"));
+                }}
+              >
+                <option value="patient_only">Patient only</option>
+                <option value="patient_and_doctor">Patient and referring doctor</option>
+                <option value="doctor_only">Doctor only</option>
+              </select>
+            </div>
           </div>
         </TabsContent>
       </Tabs>

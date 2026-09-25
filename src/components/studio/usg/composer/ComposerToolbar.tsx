@@ -30,7 +30,8 @@ import { scanForCriticalFindings } from "@/lib/usg/criticalFindings";
 import { appendTranscript } from "@/lib/usg/dictation";
 import { clearDraft, type DraftSnapshot } from "@/lib/usg/drafts";
 import { buildPregnancyTimeline } from "@/lib/usg/pregnancyTimeline";
-import { downloadReportPdf, shareReportPdf } from "../sharePdf";
+import { downloadReportPdf } from "../sharePdf";
+import { shareReportWhatsapp } from "../shareWhatsapp";
 import { UsgTipsRibbon } from "../UsgTipsRibbon";
 import { UsgCriticalBanner } from "../UsgCriticalBanner";
 import { UsgDiffPanel, type DiffSource } from "../UsgDiffPanel";
@@ -694,13 +695,13 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
                 onClick={() => {
                   const id = savedIdRef.current ?? report?.id;
                   if (!id) return;
-                  void shareReportPdf({ reportId: id, patientName, serial, date: fmtPrintDate(scanDate) }).then((r) => {
-                    if (r === "shared") toast.success("Shared via the device share sheet");
-                    else if (r === "downloaded") toast.success("PDF saved — WhatsApp opened");
-                    else toast.error("Could not build the PDF");
+                  void shareReportWhatsapp(id).then((r) => {
+                    if (r === "failed") toast.error("Could not create share link");
+                    else if (r === "copied") { /* toast already shown */ }
+                    else if (r === "opened" || r === "doctor_prompt") toast.success("WhatsApp share opened");
                   });
                 }}
-                title="Share on WhatsApp" className="h-8 border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100">
+                title="Share via WhatsApp — secure 7-day link" className="h-8 border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100">
                 <MessageCircle className="h-3.5 w-3.5" />
               </Button>
             ) : null}

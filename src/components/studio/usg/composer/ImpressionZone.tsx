@@ -4,6 +4,7 @@
  * declaration line. Callbacks stay behaviour-identical to the prior inline wiring.
  */
 import { memo } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
@@ -80,6 +81,97 @@ export const ImpressionZone = memo(function ImpressionZone({
   onPathologyWordingChange,
   savedId,
 }: ImpressionZoneProps) {
+  const queryClient = useQueryClient();
+
+  const saveWordingMut = useMutation({
+    mutationFn: async (body: {
+      studyKey: string;
+      organKey: string;
+      pathologyKey: string;
+      kind: "impression" | "advice";
+      text: string;
+    }) => {
+      const res = await fetch("/api/usg/pathology-wording", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(body.kind);
+      return body;
+    },
+    onSuccess: (body) => {
+      const key = pathologyOverrideKey(body.studyKey, body.organKey, body.pathologyKey);
+      if (body.kind === "impression") {
+        onPathologyWordingChange?.({
+          impressions: { ...(pathologyWording?.impressions ?? {}), [key]: body.text },
+          advice: { ...(pathologyWording?.advice ?? {}) },
+        });
+        toast.success("Impression wording saved as clinic default");
+      } else {
+        onPathologyWordingChange?.({
+          impressions: { ...(pathologyWording?.impressions ?? {}) },
+          advice: { ...(pathologyWording?.advice ?? {}), [key]: body.text },
+        });
+        toast.success("Advice wording saved as clinic default");
+      }
+      void queryClient.invalidateQueries({ queryKey: ["usg", "pathology-wording"] });
+    },
+    onError: (_e, body) =>
+      toast.error(body.kind === "impression" ? "Could not save impression default" : "Could not save advice default"),
+  });
+
+  const resetWordingMut = useMutation({
+    mutationFn: async (body: {
+      studyKey: string;
+      organKey: string;
+      pathologyKey: string;
+      kind: "impression" | "advice";
+    }) => {
+      await fetch(
+        `/api/usg/pathology-wording?studyKey=${encodeURIComponent(body.studyKey)}&organKey=${encodeURIComponent(body.organKey)}&pathologyKey=${encodeURIComponent(body.pathologyKey)}&kind=${body.kind}`,
+        { method: "DELETE" },
+      );
+      return body;
+    },
+    onSuccess: (body) => {
+      const key = pathologyOverrideKey(body.studyKey, body.organKey, body.pathologyKey);
+      if (body.kind === "impression") {
+        const nextImp = { ...(pathologyWording?.impressions ?? {}) };
+        delete nextImp[key];
+        onPathologyWordingChange?.({
+          impressions: nextImp,
+          advice: { ...(pathologyWording?.advice ?? {}) },
+        });
+        toast.success("Impression default cleared");
+      } else {
+        const nextAdv = { ...(pathologyWording?.advice ?? {}) };
+        delete nextAdv[key];
+        onPathologyWordingChange?.({
+          impressions: { ...(pathologyWording?.impressions ?? {}) },
+          advice: nextAdv,
+        });
+        toast.success("Advice default cleared");
+      }
+      void queryClient.invalidateQueries({ queryKey: ["usg", "pathology-wording"] });
+    },
+  });
+
+  const followUpMut = useMutation({
+    mutationFn: async (payload: { savedId: string; followUpDate: string; followUpNote: string; label: string }) => {
+      const res = await fetch(`/api/usg/reports/${payload.savedId}/follow-up`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          followUpDate: payload.followUpDate,
+          followUpNote: payload.followUpNote,
+        }),
+      });
+      if (!res.ok) throw new Error("follow-up");
+      return payload.label;
+    },
+    onSuccess: (label) => toast.success(`BI-RADS 3 follow-up set for ${label}`),
+  });
+
   const impressionLines: UsgTriadLine[] =
     resolved.impressionLines ??
     resolved.impression.map((t) => ({
@@ -118,17 +210,12 @@ export const ImpressionZone = memo(function ImpressionZone({
             if (followDays && savedId) {
               const d = new Date();
               d.setDate(d.getDate() + followDays);
-              fetch(`/api/usg/reports/${savedId}/follow-up`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  followUpDate: d.toISOString().slice(0, 10),
-                  followUpNote: `BI-RADS 3 — short-interval follow-up (${Math.round(followDays / 30)} months)`,
-                }),
-              }).then(
-                () => toast.success(`BI-RADS 3 follow-up set for ${d.toLocaleDateString("en-IN")}`),
-                () => {},
-              );
+              void followUpMut.mutateAsync({
+                savedId,
+                followUpDate: d.toISOString().slice(0, 10),
+                followUpNote: `BI-RADS 3 — short-interval follow-up (${Math.round(followDays / 30)} months)`,
+                label: d.toLocaleDateString("en-IN"),
+              }).catch(() => {});
             }
           }}
         />
@@ -227,72 +314,44 @@ export const ImpressionZone = memo(function ImpressionZone({
         onSaveImpressionDefault={async (pk, text) => {
           const organ = state.organs.find((o) => selectedPathologies(o).includes(pk))?.organ;
           if (!organ) return;
-          const res = await fetch("/api/usg/pathology-wording", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ studyKey, organKey: organ, pathologyKey: pk, kind: "impression", text }),
+          await saveWordingMut.mutateAsync({
+            studyKey,
+            organKey: organ,
+            pathologyKey: pk,
+            kind: "impression",
+            text,
           });
-          if (!res.ok) {
-            toast.error("Could not save impression default");
-            return;
-          }
-          const key = pathologyOverrideKey(studyKey, organ, pk);
-          onPathologyWordingChange?.({
-            impressions: { ...(pathologyWording?.impressions ?? {}), [key]: text },
-            advice: { ...(pathologyWording?.advice ?? {}) },
-          });
-          toast.success("Impression wording saved as clinic default");
         }}
         onSaveAdviceDefault={async (pk, text) => {
           const organ = state.organs.find((o) => selectedPathologies(o).includes(pk))?.organ;
           if (!organ) return;
-          const res = await fetch("/api/usg/pathology-wording", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ studyKey, organKey: organ, pathologyKey: pk, kind: "advice", text }),
+          await saveWordingMut.mutateAsync({
+            studyKey,
+            organKey: organ,
+            pathologyKey: pk,
+            kind: "advice",
+            text,
           });
-          if (!res.ok) {
-            toast.error("Could not save advice default");
-            return;
-          }
-          const key = pathologyOverrideKey(studyKey, organ, pk);
-          onPathologyWordingChange?.({
-            impressions: { ...(pathologyWording?.impressions ?? {}) },
-            advice: { ...(pathologyWording?.advice ?? {}), [key]: text },
-          });
-          toast.success("Advice wording saved as clinic default");
         }}
         onResetImpressionDefault={async (pk) => {
           const organ = state.organs.find((o) => selectedPathologies(o).includes(pk))?.organ;
           if (!organ) return;
-          await fetch(
-            `/api/usg/pathology-wording?studyKey=${encodeURIComponent(studyKey)}&organKey=${encodeURIComponent(organ)}&pathologyKey=${encodeURIComponent(pk)}&kind=impression`,
-            { method: "DELETE" },
-          );
-          const key = pathologyOverrideKey(studyKey, organ, pk);
-          const nextImp = { ...(pathologyWording?.impressions ?? {}) };
-          delete nextImp[key];
-          onPathologyWordingChange?.({
-            impressions: nextImp,
-            advice: { ...(pathologyWording?.advice ?? {}) },
+          await resetWordingMut.mutateAsync({
+            studyKey,
+            organKey: organ,
+            pathologyKey: pk,
+            kind: "impression",
           });
-          toast.success("Impression default cleared");
         }}
         onResetAdviceDefault={async (pk) => {
           const organ = state.organs.find((o) => selectedPathologies(o).includes(pk))?.organ;
           if (!organ) return;
-          await fetch(
-            `/api/usg/pathology-wording?studyKey=${encodeURIComponent(studyKey)}&organKey=${encodeURIComponent(organ)}&pathologyKey=${encodeURIComponent(pk)}&kind=advice`,
-            { method: "DELETE" },
-          );
-          const key = pathologyOverrideKey(studyKey, organ, pk);
-          const nextAdv = { ...(pathologyWording?.advice ?? {}) };
-          delete nextAdv[key];
-          onPathologyWordingChange?.({
-            impressions: { ...(pathologyWording?.impressions ?? {}) },
-            advice: nextAdv,
+          await resetWordingMut.mutateAsync({
+            studyKey,
+            organKey: organ,
+            pathologyKey: pk,
+            kind: "advice",
           });
-          toast.success("Advice default cleared");
         }}
       />
 

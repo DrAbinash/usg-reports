@@ -1,6 +1,7 @@
 "use client";
 /** App shell: slim header + left nav + main region. Single-screen USG studio. */
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useStudio } from "@/lib/store";
 import { SettingsView } from "./SettingsView";
 import { UsgStudioView } from "./usg/UsgStudioView";
@@ -30,6 +31,19 @@ const NAV: { id: View; label: string; icon: typeof Waves; tint: string }[] = [
 export function AppShell() {
   const { view, setView } = useStudio();
   const router = useRouter();
+  const queryClient = useQueryClient();
+
+  // Prefetch patients list on shell mount so the patient panel opens warm.
+  useEffect(() => {
+    void queryClient.prefetchQuery({
+      queryKey: ["usg", "patients"],
+      queryFn: async () => {
+        const res = await fetch("/api/usg/patients");
+        if (!res.ok) throw new Error("patients");
+        return ((await res.json()).patients ?? []) as unknown[];
+      },
+    });
+  }, [queryClient]);
 
   // v6.1 Sonologist's Day — the card auto-opens once on the birthday, then
   // a cake stays in the header for the rest of the day to reopen it.

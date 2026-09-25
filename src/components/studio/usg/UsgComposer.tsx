@@ -690,6 +690,9 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
             pathologyWording={pathologyWording}
             onPathologyWordingChange={onPathologyWordingChange}
             savedId={savedIdRef.current}
+            patientAge={patientAge}
+            patientSex={patientSex === "F" || patientSex === "M" ? patientSex : undefined}
+            lmp={lmp}
           />
         </div>
       </div>

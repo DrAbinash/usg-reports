@@ -9,6 +9,7 @@
  */
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useStudio } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -110,12 +111,13 @@ function SexChip({ sex }: { sex: string }) {
 }
 
 function OrderRow({
-  order, onClick, action, focused,
+  order, onClick, action, focused, onPrefetch,
 }: {
   order: Order;
   onClick?: () => void;
   action?: React.ReactNode;
   focused?: boolean;
+  onPrefetch?: () => void;
 }) {
   return (
     <div
@@ -126,6 +128,8 @@ function OrderRow({
         focused && "border-amber-300 ring-2 ring-amber-200/80 shadow-[0_2px_12px_-4px_rgba(217,119,6,0.35)]",
       )}
       onClick={onClick}
+      onMouseEnter={() => onPrefetch?.()}
+      onFocus={() => onPrefetch?.()}
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
@@ -173,6 +177,7 @@ function OrderRow({
 
 export function UsgWorklistView() {
   const { openComposer } = useStudio();
+  const queryClient = useQueryClient();
   const [data, setData] = useState<WorklistResponse | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [q, setQ] = useState("");
@@ -225,6 +230,42 @@ export function UsgWorklistView() {
     const t = setInterval(load, 5 * 60 * 1000);
     return () => clearInterval(t);
   }, [load]);
+
+  // Prefetch patients + any already-linked reports so opening a study is warm.
+  useEffect(() => {
+    void queryClient.prefetchQuery({
+      queryKey: ["usg", "patients"],
+      queryFn: async () => {
+        const res = await fetch("/api/usg/patients");
+        if (!res.ok) throw new Error("patients");
+        return ((await res.json()).patients ?? []) as unknown[];
+      },
+    });
+  }, [queryClient]);
+
+  const prefetchReport = useCallback(
+    (id: string | null | undefined) => {
+      if (!id) return;
+      void queryClient.prefetchQuery({
+        queryKey: ["usg", "report", id],
+        queryFn: async () => {
+          const res = await fetch(`/api/usg/reports/${id}`);
+          if (!res.ok) throw new Error("report");
+          return res.json();
+        },
+      });
+    },
+    [queryClient],
+  );
+
+  useEffect(() => {
+    if (!data?.orders?.length) return;
+    const ids = data.orders
+      .map((o) => o.reportId)
+      .filter((id): id is string => !!id)
+      .slice(0, 30);
+    for (const id of ids) prefetchReport(id);
+  }, [data, prefetchReport]);
 
   useEffect(() => {
     if (defaults) return;

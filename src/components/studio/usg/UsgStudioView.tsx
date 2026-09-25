@@ -7,6 +7,7 @@
  * Composer mode: organ-based whole-abdomen reporting with live preview.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { UsgQuickSelect } from "./UsgQuickSelect";
 import { useStudio } from "@/lib/store";
 import { Button } from "@/components/ui/button";
@@ -37,13 +38,6 @@ import { shareReportPdf } from "./sharePdf";
 import { UsgPacsReturnButton } from "./UsgPacsReturnButton";
 import { UsgFollowUpWidget } from "./UsgFollowUpWidget";
 
-// Audit #15 — the prior `EMPTY_SETTINGS` constant duplicated the Prisma
-// schema defaults in two places (DB + frontend), and a divergence would
-// silently corrupt the first paint. The studio now waits for the
-// /api/settings fetch to resolve before rendering the composer; null
-// means "not yet loaded", and the loader below renders until then.
-// All defaults live in exactly one place: prisma/schema.prisma.
-
 type PatientRow = {
   id: string;
   name: string;
@@ -61,48 +55,168 @@ type ComposerPrefill = {
   referredBy?: string;
 };
 
-export function UsgStudioView() {
-  const [pathologies, setPathologies] = useState<UsgPathologyDef[]>([]);
+type SettingsBundle = {
+  settings: UsgPrintSettings;
+  formFDefaults: FormFDefaults;
+};
 
-  const [quickSelectPatients, setQuickSelectPatients] = useState<any[]>([]);
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      for (const url of ["/api/usg/worklist", "/api/usg/reports"]) {
-        try {
-          const r = await fetch(url);
-          if (!r.ok) continue;
-          const d = await r.json();
-          const arr: any[] = Array.isArray(d) ? d : Array.isArray(d?.rows) ? d.rows : Array.isArray(d?.reports) ? d.reports : Array.isArray(d?.items) ? d.items : [];
-          if (alive && arr.length) {
-            setQuickSelectPatients(arr.map((x: any) => ({
-              id: x.id ?? x.reportId ?? x.worklistId ?? String(x.patientId ?? ""),
-              name: x.patientName ?? x.name ?? "",
-              age: x.age ?? x.patientAge ?? "",
-              sex: x.sex ?? x.patientSex ?? "",
-              studyDate: x.scanDate ?? x.studyDate ?? x.date ?? "",
-              study: x.studyTitle ?? x.study ?? x.testName ?? "",
-              referrer: x.referredBy ?? x.referringDoctor ?? "",
-              status: x.status ?? "",
-            })).filter((q: any) => q.id));
-            return;
-          }
-        } catch {}
+async function fetchUsgReport(id: string) {
+  const res = await fetch(`/api/usg/reports/${id}`);
+  if (!res.ok) throw new Error(`report ${res.status}`);
+  return (await res.json()) as { report: UsgReportRow; order: ReportOrderLite | null };
+}
+
+async function fetchPatientsList() {
+  const res = await fetch("/api/usg/patients");
+  if (!res.ok) throw new Error("patients");
+  return ((await res.json()).patients ?? []) as PatientRow[];
+}
+
+async function fetchReportsList() {
+  const res = await fetch("/api/usg/reports");
+  if (!res.ok) throw new Error("reports");
+  return ((await res.json()).reports ?? []) as UsgReportRow[];
+}
+
+async function fetchSettingsBundle(): Promise<SettingsBundle> {
+  const sRes = await fetch("/api/settings");
+  if (!sRes.ok) throw new Error("settings");
+  const s = (await sRes.json()).settings ?? {};
+  const formFDefaults: FormFDefaults = {
+    pcpndtCentreName: s.pcpndtCentreName ?? "",
+    pcpndtRegistrationNo: s.pcpndtRegistrationNo ?? "",
+    pcpndtPlace: s.pcpndtPlace ?? "",
+    usgDoctorName: s.usgDoctorName ?? "",
+    usgDoctorQual: s.usgDoctorQual ?? "",
+    usgDoctorRegNo: s.usgDoctorRegNo ?? "",
+  };
+  const settings: UsgPrintSettings = {
+    appTitle: s.appTitle ?? "",
+    hospitalName: s.hospitalName ?? "",
+    addressLine: s.addressLine ?? "",
+    phone: s.phone ?? "",
+    email: s.email ?? "",
+    logoUrl: s.logoUrl ?? "",
+    footerMessage: s.footerMessage ?? "",
+    usgDoctorName: s.usgDoctorName ?? "",
+    usgDoctorQual: s.usgDoctorQual ?? "",
+    usgDoctorRegNo: s.usgDoctorRegNo ?? "",
+    usgMachineLine: s.usgMachineLine ?? "",
+    usgShowMachine: s.usgShowMachine !== false,
+    usgFooterLine: s.usgFooterLine ?? "",
+    usgDeclarationLine: s.usgDeclarationLine ?? "",
+    usgPrintStyle: s.usgPrintStyle ?? "premium",
+    usgPrintCompact: s.usgPrintCompact === true || s.usgPrintCompact === "true",
+    usgPrintPaper: s.usgPrintPaper ?? "a4",
+    usgSignatureUrl: s.usgSignatureUrl ?? "",
+    usgPrintFontSize: Number(s.usgPrintFontSize) > 0 ? Number(s.usgPrintFontSize) : 10,
+    usgPrintLineHeight: Number(s.usgPrintLineHeight) > 0 ? Number(s.usgPrintLineHeight) : 1.4,
+    usgPrintSpacing: s.usgPrintSpacing ?? "tight",
+    usgPrintShowTechnique: s.usgPrintShowTechnique !== false && s.usgPrintShowTechnique !== "false",
+    usgPrintShowThanks: s.usgPrintShowThanks !== false && s.usgPrintShowThanks !== "false",
+    enableCriticalComm: s.enableCriticalComm !== false,
+    enableFollowUps: s.enableFollowUps !== false,
+    enableAiDraft: s.enableAiDraft !== false,
+    enableBirads: s.enableBirads !== false,
+    enableDicomSr: s.enableDicomSr !== false,
+    studyTechniqueDefaults: (s as { studyTechniqueDefaults?: Record<string, string> }).studyTechniqueDefaults ?? {},
+    machineLineByStudio: (s as { machineLineByStudio?: Record<string, string> }).machineLineByStudio ?? {},
+    studioId: String((s as { clinicId?: string }).clinicId ?? "default"),
+  };
+  return { settings, formFDefaults };
+}
+
+async function fetchNormalsMap(): Promise<NormalOverrides> {
+  const nRes = await fetch("/api/usg/normals");
+  if (!nRes.ok) throw new Error("normals");
+  const rows = ((await nRes.json()).overrides ?? []) as { studyKey: string; organKey: string; text: string }[];
+  const map: NormalOverrides = {};
+  for (const r of rows) {
+    if (r.text.trim()) map[normalOverrideKey(r.studyKey, r.organKey)] = r.text.trim();
+  }
+  return map;
+}
+
+async function fetchPathologyWording(): Promise<PathologyWordingOverrides> {
+  const wRes = await fetch("/api/usg/pathology-wording");
+  if (!wRes.ok) throw new Error("pathology-wording");
+  const body = await wRes.json().catch(() => ({}));
+  return {
+    impressions: (body.impressions ?? {}) as Record<string, string>,
+    advice: (body.advice ?? {}) as Record<string, string>,
+  };
+}
+
+async function fetchQuickSelectPatients() {
+  for (const url of ["/api/usg/worklist", "/api/usg/reports"]) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) continue;
+      const d = await r.json();
+      const arr: any[] = Array.isArray(d)
+        ? d
+        : Array.isArray(d?.rows)
+          ? d.rows
+          : Array.isArray(d?.reports)
+            ? d.reports
+            : Array.isArray(d?.items)
+              ? d.items
+              : [];
+      if (arr.length) {
+        return arr
+          .map((x: any) => ({
+            id: x.id ?? x.reportId ?? x.worklistId ?? String(x.patientId ?? ""),
+            name: x.patientName ?? x.name ?? "",
+            age: x.age ?? x.patientAge ?? "",
+            sex: x.sex ?? x.patientSex ?? "",
+            studyDate: x.scanDate ?? x.studyDate ?? x.date ?? "",
+            study: x.studyTitle ?? x.study ?? x.testName ?? "",
+            referrer: x.referredBy ?? x.referringDoctor ?? "",
+            status: x.status ?? "",
+          }))
+          .filter((q: any) => q.id);
       }
-    })();
-    return () => { alive = false; };
-  }, []);
+    } catch {
+      /* try next */
+    }
+  }
+  return [] as any[];
+}
 
-  const [settings, setSettings] = useState<UsgPrintSettings | null>(null);
-  const [normalOverrides, setNormalOverrides] = useState<NormalOverrides>({});
-  const [pathologyWording, setPathologyWording] = useState<PathologyWordingOverrides>({
-    impressions: {},
-    advice: {},
+export function UsgStudioView() {
+  const queryClient = useQueryClient();
+
+  const pathologiesQ = useQuery({
+    queryKey: ["usg", "pathologies"],
+    queryFn: async () => {
+      const pRes = await fetch("/api/usg/pathologies");
+      if (!pRes.ok) throw new Error("pathologies");
+      return ((await pRes.json()).pathologies ?? []) as UsgPathologyDef[];
+    },
   });
-  const [reports, setReports] = useState<UsgReportRow[]>([]);
+  const settingsQ = useQuery({
+    queryKey: ["usg", "settings"],
+    queryFn: fetchSettingsBundle,
+  });
+  const reportsQ = useQuery({
+    queryKey: ["usg", "reports"],
+    queryFn: fetchReportsList,
+  });
+  const normalsQ = useQuery({
+    queryKey: ["usg", "normals"],
+    queryFn: fetchNormalsMap,
+  });
+  const pathologyWordingQ = useQuery({
+    queryKey: ["usg", "pathology-wording"],
+    queryFn: fetchPathologyWording,
+  });
+  const quickSelectQ = useQuery({
+    queryKey: ["usg", "quick-select"],
+    queryFn: fetchQuickSelectPatients,
+  });
+
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"" | "DRAFT" | "FINALIZED">("");
-  const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<UsgReportRow | null>(null);
   const [creating, setCreating] = useState(false);
   const [reprintHtml, setReprintHtml] = useState<string | null>(null);
@@ -111,250 +225,239 @@ export function UsgStudioView() {
   const [registerHtml, setRegisterHtml] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // v6 — bill-desk order behind the open report + Form F fixed details
   const [order, setOrder] = useState<ReportOrderLite | null>(null);
-  const [formFDefaults, setFormFDefaults] = useState<FormFDefaults | null>(null);
 
-  // Registry (Patients mode)
   const [mode, setMode] = useState<"reports" | "patients">("reports");
-  const [patients, setPatients] = useState<PatientRow[]>([]);
   const [patientQuery, setPatientQuery] = useState("");
   const [patientDetail, setPatientDetail] = useState<
     (PatientRow & { reports: UsgReportRow[] }) | null
   >(null);
 
-  // Audit #14 — replace the synchronous window.confirm() in del() with a
-  // proper AlertDialog that supports a loading state. The old path blocked
-  // the main thread and gave no feedback during the network round-trip.
+  const patientsQ = useQuery({
+    queryKey: ["usg", "patients"],
+    queryFn: fetchPatientsList,
+    enabled: mode === "patients",
+  });
+
   const [deleteTarget, setDeleteTarget] = useState<UsgReportRow | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const loadAll = useCallback(async () => {
-    const [pRes, sRes, rRes, nRes, wRes] = await Promise.all([
-      fetch("/api/usg/pathologies"),
-      fetch("/api/settings"),
-      fetch("/api/usg/reports"),
-      fetch("/api/usg/normals"),
-      fetch("/api/usg/pathology-wording"),
-    ]);
-    if (pRes.ok) setPathologies(((await pRes.json()).pathologies ?? []) as UsgPathologyDef[]);
-    if (nRes.ok) {
-      const rows = ((await nRes.json()).overrides ?? []) as { studyKey: string; organKey: string; text: string }[];
-      const map: NormalOverrides = {};
-      for (const r of rows) {
-        if (r.text.trim()) map[normalOverrideKey(r.studyKey, r.organKey)] = r.text.trim();
-      }
-      setNormalOverrides(map);
-    }
-    if (wRes.ok) {
-      const body = await wRes.json().catch(() => ({}));
-      setPathologyWording({
-        impressions: (body.impressions ?? {}) as Record<string, string>,
-        advice: (body.advice ?? {}) as Record<string, string>,
-      });
-    }
-    if (sRes.ok) {
-      const s = (await sRes.json()).settings ?? {};
-      setFormFDefaults({
-        pcpndtCentreName: s.pcpndtCentreName ?? "",
-        pcpndtRegistrationNo: s.pcpndtRegistrationNo ?? "",
-        pcpndtPlace: s.pcpndtPlace ?? "",
-        usgDoctorName: s.usgDoctorName ?? "",
-        usgDoctorQual: s.usgDoctorQual ?? "",
-        usgDoctorRegNo: s.usgDoctorRegNo ?? "",
-      });
-      setSettings({
-        appTitle: s.appTitle ?? "",
-        hospitalName: s.hospitalName ?? "",
-        addressLine: s.addressLine ?? "",
-        phone: s.phone ?? "",
-        email: s.email ?? "",
-        logoUrl: s.logoUrl ?? "",
-        footerMessage: s.footerMessage ?? "",
-        usgDoctorName: s.usgDoctorName ?? "",
-        usgDoctorQual: s.usgDoctorQual ?? "",
-        usgDoctorRegNo: s.usgDoctorRegNo ?? "",
-        usgMachineLine: s.usgMachineLine ?? "",
-        usgShowMachine: s.usgShowMachine !== false,
-        usgFooterLine: s.usgFooterLine ?? "",
-        usgDeclarationLine: s.usgDeclarationLine ?? "",
-        usgPrintStyle: s.usgPrintStyle ?? "premium",
-        usgPrintCompact: s.usgPrintCompact === true || s.usgPrintCompact === "true",
-        usgPrintPaper: s.usgPrintPaper ?? "a4",
-        usgSignatureUrl: s.usgSignatureUrl ?? "",
-        usgPrintFontSize: Number(s.usgPrintFontSize) > 0 ? Number(s.usgPrintFontSize) : 10,
-        usgPrintLineHeight: Number(s.usgPrintLineHeight) > 0 ? Number(s.usgPrintLineHeight) : 1.4,
-        usgPrintSpacing: s.usgPrintSpacing ?? "tight",
-        usgPrintShowTechnique: s.usgPrintShowTechnique !== false && s.usgPrintShowTechnique !== "false",
-        usgPrintShowThanks: s.usgPrintShowThanks !== false && s.usgPrintShowThanks !== "false",
-        // v6.10 feature toggles (per-clinic)
-        enableCriticalComm: s.enableCriticalComm !== false,
-        enableFollowUps: s.enableFollowUps !== false,
-        enableAiDraft: s.enableAiDraft !== false,
-        enableBirads: s.enableBirads !== false,
-        enableDicomSr: s.enableDicomSr !== false,
-        studyTechniqueDefaults: (s as { studyTechniqueDefaults?: Record<string, string> }).studyTechniqueDefaults ?? {},
-        machineLineByStudio: (s as { machineLineByStudio?: Record<string, string> }).machineLineByStudio ?? {},
-        studioId: String((s as { clinicId?: string }).clinicId ?? "default"),
-      });
-    }
-    if (rRes.ok) setReports(((await rRes.json()).reports ?? []) as UsgReportRow[]);
-  }, []);
+  const pathologies = pathologiesQ.data ?? [];
+  const settings = settingsQ.data?.settings ?? null;
+  const formFDefaults = settingsQ.data?.formFDefaults ?? null;
+  const reports = reportsQ.data ?? [];
+  const normalOverrides = normalsQ.data ?? {};
+  const pathologyWording = pathologyWordingQ.data ?? { impressions: {}, advice: {} };
+  const patients = patientsQ.data ?? [];
+  const quickSelectPatients = quickSelectQ.data ?? [];
 
-  const loadPatients = useCallback(async () => {
-    const res = await fetch("/api/usg/patients");
-    if (res.ok) setPatients(((await res.json()).patients ?? []) as PatientRow[]);
-  }, []);
+  const loading =
+    pathologiesQ.isLoading ||
+    settingsQ.isLoading ||
+    reportsQ.isLoading ||
+    normalsQ.isLoading ||
+    pathologyWordingQ.isLoading;
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      await loadAll();
-      if (!cancelled) setLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [loadAll]);
-
-  useEffect(() => {
-    if (mode !== "patients") return;
-    let cancelled = false;
-    void (async () => {
-      const res = await fetch("/api/usg/patients");
-      if (!res.ok || cancelled) return;
-      const d = await res.json();
-      if (!cancelled) setPatients((d.patients ?? []) as PatientRow[]);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [mode]);
+  const setPathologyWording = useCallback(
+    (next: PathologyWordingOverrides) => {
+      queryClient.setQueryData(["usg", "pathology-wording"], next);
+    },
+    [queryClient],
+  );
 
   const refreshReports = useCallback(async () => {
-    const res = await fetch("/api/usg/reports");
-    if (res.ok) setReports(((await res.json()).reports ?? []) as UsgReportRow[]);
-  }, []);
+    await queryClient.invalidateQueries({ queryKey: ["usg", "reports"] });
+  }, [queryClient]);
 
-  // v6: the Worklist hands over a freshly created draft via the store.
+  const loadPatients = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: ["usg", "patients"] });
+  }, [queryClient]);
+
+  const loadAll = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["usg", "pathologies"] }),
+      queryClient.invalidateQueries({ queryKey: ["usg", "settings"] }),
+      queryClient.invalidateQueries({ queryKey: ["usg", "reports"] }),
+      queryClient.invalidateQueries({ queryKey: ["usg", "normals"] }),
+      queryClient.invalidateQueries({ queryKey: ["usg", "pathology-wording"] }),
+    ]);
+  }, [queryClient]);
+
+  const prefetchReport = useCallback(
+    (id: string) => {
+      if (!id) return;
+      void queryClient.prefetchQuery({
+        queryKey: ["usg", "report", id],
+        queryFn: () => fetchUsgReport(id),
+      });
+    },
+    [queryClient],
+  );
+
+  useEffect(() => {
+    void queryClient.prefetchQuery({
+      queryKey: ["usg", "patients"],
+      queryFn: fetchPatientsList,
+    });
+  }, [queryClient]);
+
+  useEffect(() => {
+    for (const r of reports.slice(0, 20)) prefetchReport(r.id);
+  }, [reports, prefetchReport]);
+
   const openReportId = useStudio((s) => s.openReportId);
   const clearOpenReport = useStudio((s) => s.clearOpenReport);
   useEffect(() => {
     if (!openReportId || loading) return;
     let alive = true;
     void (async () => {
-      const res = await fetch(`/api/usg/reports/${openReportId}`);
-      if (res.ok && alive) {
-        const d = (await res.json()) as { report: UsgReportRow; order: ReportOrderLite | null };
-        setEditing(d.report);
-        setOrder(d.order ?? null);
-        setCreating(false);
-        setPrefill(null);
-        setDiffSource(null);
-        setReprintHtml(d.report.status === "FINALIZED" ? d.report.reportHtml ?? "" : null);
+      try {
+        const d = await queryClient.fetchQuery({
+          queryKey: ["usg", "report", openReportId],
+          queryFn: () => fetchUsgReport(openReportId),
+        });
+        if (alive) {
+          setEditing(d.report);
+          setOrder(d.order ?? null);
+          setCreating(false);
+          setPrefill(null);
+          setDiffSource(null);
+          setReprintHtml(d.report.status === "FINALIZED" ? d.report.reportHtml ?? "" : null);
+        }
+      } catch {
+        /* ignore */
       }
       clearOpenReport();
     })();
     return () => {
       alive = false;
     };
-  }, [openReportId, loading, clearOpenReport]);
+  }, [openReportId, loading, clearOpenReport, queryClient]);
 
   const openReport = async (row: UsgReportRow) => {
     setEditing(row);
     setCreating(false);
     setPrefill(null);
-    // Always fetch the full row — patient phone + attached stills live on it.
-    const res = await fetch(`/api/usg/reports/${row.id}`);
-    if (res.ok) {
-      const d = (await res.json()) as { report: UsgReportRow; order: ReportOrderLite | null };
+    try {
+      const d = await queryClient.fetchQuery({
+        queryKey: ["usg", "report", row.id],
+        queryFn: () => fetchUsgReport(row.id),
+      });
       const fresh = d.report;
       setOrder(d.order ?? null);
       setEditing({ ...row, ...fresh });
       if (fresh.status === "FINALIZED") setReprintHtml(fresh.reportHtml ?? "");
       else setReprintHtml(null);
-    } else {
+    } catch {
       setOrder(null);
       setReprintHtml(null);
     }
   };
 
   const del = (row: UsgReportRow) => {
-    // Open the AlertDialog (see render below) — actual deletion runs in
-    // confirmDelete() so we can show a loading spinner on the action button
-    // and keep the dialog dismissable until the network call completes.
     setDeleteTarget(row);
   };
+
+  const duplicateMutation = useMutation({
+    mutationFn: async (row: UsgReportRow) => {
+      const res = await fetch(`/api/usg/reports/${row.id}/duplicate`, { method: "POST" });
+      if (!res.ok) throw new Error("Could not create the follow-up draft");
+      const body = (await res.json()) as {
+        report: UsgReportRow;
+        source: { id: string; serialNo?: number | null; scanDate: string } | null;
+      };
+      return { ...body, row };
+    },
+    onSuccess: async ({ report, source, row }) => {
+      toast.success(`Follow-up draft created for ${report.patientName}`);
+      await queryClient.invalidateQueries({ queryKey: ["usg", "reports"] });
+      setReprintHtml(null);
+      setEditing({ ...report, patient: row.patient ?? null });
+      setCreating(false);
+      setPrefill(null);
+      if (source) {
+        try {
+          const p = (
+            await queryClient.fetchQuery({
+              queryKey: ["usg", "report", source.id],
+              queryFn: () => fetchUsgReport(source.id),
+            })
+          ).report;
+          setDiffSource({
+            id: source.id,
+            serial: source.serialNo != null ? formatUsgSerial(source.serialNo) : undefined,
+            date: new Date(source.scanDate).toLocaleDateString("en-GB", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            }),
+            stateJson: p.stateJson,
+            impression: p.impression ?? "",
+          });
+        } catch {
+          /* ignore */
+        }
+      }
+    },
+    onError: (err: Error) => toast.error(err.message || "Could not create the follow-up draft"),
+  });
+
+  const duplicate = async (row: UsgReportRow) => {
+    await duplicateMutation.mutateAsync(row);
+  };
+
+  const openPatient = useCallback(
+    async (id: string, force = false) => {
+      try {
+        const p = await queryClient.fetchQuery({
+          queryKey: ["usg", "patient", id],
+          queryFn: async () => {
+            const res = await fetch(`/api/usg/patients/${id}`);
+            if (!res.ok) throw new Error("patient");
+            return (await res.json()).patient as PatientRow & { reports: UsgReportRow[] };
+          },
+        });
+        setPatientDetail(p);
+        if (force) setMode("patients");
+      } catch {
+        toast.error("Could not open this patient");
+      }
+    },
+    [queryClient],
+  );
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/usg/reports/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const err = new Error(`Delete failed (${res.status})`) as Error & { status: number };
+        err.status = res.status;
+        throw err;
+      }
+      return id;
+    },
+    onSuccess: async () => {
+      toast.success("Report deleted");
+      await queryClient.invalidateQueries({ queryKey: ["usg", "reports"] });
+      if (patientDetail) void openPatient(patientDetail.id, true);
+    },
+    onError: (err: Error & { status?: number }) => {
+      if (err.status === 409) toast.error("Finalized reports cannot be deleted via this action.");
+      else toast.error(err.message || "Delete failed");
+    },
+  });
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      const res = await fetch(`/api/usg/reports/${deleteTarget.id}`, { method: "DELETE" });
-      if (res.ok) {
-        toast.success("Report deleted");
-        refreshReports();
-        if (patientDetail) void openPatient(patientDetail.id, true);
-      } else if (res.status === 409) {
-        toast.error("Finalized reports cannot be deleted via this action.");
-      } else {
-        toast.error(`Delete failed (${res.status})`);
-      }
-    } catch (err) {
-      toast.error(`Delete failed — ${(err as Error)?.message ?? "network error"}`);
+      await deleteMutation.mutateAsync(deleteTarget.id);
     } finally {
       setDeleting(false);
       setDeleteTarget(null);
     }
   };
 
-  /** Follow-up — duplicate any report as a fresh editable draft (same patient,
-   *  study and composer state) for the repeat scan. The previous scan travels
-   *  with the draft so the composer can show the “Δ vs previous” panel. */
-  const duplicate = async (row: UsgReportRow) => {
-    const res = await fetch(`/api/usg/reports/${row.id}/duplicate`, { method: "POST" });
-    if (!res.ok) {
-      toast.error("Could not create the follow-up draft");
-      return;
-    }
-    const { report, source } = (await res.json()) as {
-      report: UsgReportRow;
-      source: { id: string; serialNo?: number | null; scanDate: string } | null;
-    };
-    toast.success(`Follow-up draft created for ${report.patientName}`);
-    setReprintHtml(null);
-    setEditing({ ...report, patient: row.patient ?? null });
-    setCreating(false);
-    setPrefill(null);
-    if (source) {
-      // Fetch the frozen snapshot (stateJson + impression column) for the diff.
-      const prev = await fetch(`/api/usg/reports/${source.id}`);
-      if (prev.ok) {
-        const p = (await prev.json()).report as UsgReportRow;
-        setDiffSource({
-          id: source.id,
-          serial: source.serialNo != null ? formatUsgSerial(source.serialNo) : undefined,
-          date: new Date(source.scanDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
-          stateJson: p.stateJson,
-          impression: p.impression ?? "",
-        });
-      }
-    }
-  };
-
-  const openPatient = useCallback(async (id: string, force = false) => {
-    const res = await fetch(`/api/usg/patients/${id}`);
-    if (!res.ok) {
-      toast.error("Could not open this patient");
-      return;
-    }
-    const p = (await res.json()).patient as PatientRow & { reports: UsgReportRow[] };
-    setPatientDetail(p);
-    if (force) setMode("patients");
-  }, []);
-
-  /** New scan for a patient — prefill name/phone (age, sex & referrer from her
-   *  last report so the strip is one-glance ready) and jump into the composer. */
   const newScanFor = (p: PatientRow & { reports?: UsgReportRow[] }) => {
     const last = p.reports?.[0];
     setPrefill({
@@ -369,15 +472,22 @@ export function UsgStudioView() {
     setCreating(true);
   };
 
+  const openRegisterMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/usg/register?format=html");
+      if (!res.ok) throw new Error("Could not build the register");
+      return await res.text();
+    },
+    onSuccess: (html) => setRegisterHtml(html),
+    onError: (err: Error) => toast.error(err.message || "Could not build the register"),
+  });
+
   const openRegister = async () => {
-    const res = await fetch("/api/usg/register?format=html");
-    if (res.ok) setRegisterHtml(await res.text());
-    else toast.error("Could not build the register");
+    await openRegisterMutation.mutateAsync();
   };
 
   const composerMode = creating || editing !== null;
 
-  // "/" focuses the search box on the list screens (keyboard-first flow).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "/" || composerMode) return;
@@ -390,6 +500,7 @@ export function UsgStudioView() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
+
 
   const filtered = useMemo(
     () =>
@@ -577,6 +688,7 @@ export function UsgStudioView() {
             onOpenReport={openReport}
             onDuplicate={duplicate}
             onDelete={del}
+            onPrefetch={prefetchReport}
           />
         ) : (
           <div className="space-y-2">
@@ -714,7 +826,7 @@ export function UsgStudioView() {
           ) : (
             <div className="space-y-2">
               {filtered.map((r) => (
-                <ReportCard key={r.id} r={r} onOpen={() => openReport(r)} onDuplicate={() => duplicate(r)} onDelete={() => del(r)} />
+                <ReportCard key={r.id} r={r} onOpen={() => openReport(r)} onDuplicate={() => duplicate(r)} onDelete={() => del(r)} onPrefetch={() => prefetchReport(r.id)} />
               ))}
             </div>
           )}
@@ -767,11 +879,13 @@ function ReportCard({
   onOpen,
   onDuplicate,
   onDelete,
+  onPrefetch,
 }: {
   r: UsgReportRow;
   onOpen: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  onPrefetch?: () => void;
 }) {
   return (
     <div
@@ -780,6 +894,8 @@ function ReportCard({
       aria-label={`Open ${r.patientName}'s USG report${r.studyTitle ? ` — ${r.studyTitle}` : ""}`}
       className="group flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-card p-3 shadow-sm transition-colors hover:border-rose-200 hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:ring-offset-2"
       onClick={onOpen}
+      onMouseEnter={() => onPrefetch?.()}
+      onFocus={() => onPrefetch?.()}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
@@ -867,6 +983,7 @@ function PatientHistory({
   onOpenReport,
   onDuplicate,
   onDelete,
+  onPrefetch,
 }: {
   patient: PatientRow & { reports: UsgReportRow[] };
   onBack: () => void;
@@ -874,6 +991,7 @@ function PatientHistory({
   onOpenReport: (r: UsgReportRow) => void;
   onDuplicate: (r: UsgReportRow) => void;
   onDelete: (r: UsgReportRow) => void;
+  onPrefetch?: (id: string) => void;
 }) {
   const finalized = patient.reports.filter((r) => r.status === "FINALIZED");
   return (
@@ -923,7 +1041,7 @@ function PatientHistory({
       ) : (
         <div className="space-y-2">
           {patient.reports.map((r) => (
-            <ReportCard key={r.id} r={r} onOpen={() => onOpenReport(r)} onDuplicate={() => onDuplicate(r)} onDelete={() => onDelete(r)} />
+            <ReportCard key={r.id} r={r} onOpen={() => onOpenReport(r)} onDuplicate={() => onDuplicate(r)} onDelete={() => onDelete(r)} onPrefetch={() => onPrefetch?.(r.id)} />
           ))}
         </div>
       )}

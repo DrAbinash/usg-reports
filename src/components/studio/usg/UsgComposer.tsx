@@ -4,6 +4,7 @@
  * composer/{OrganCard,ChipRow,ComposerToolbar,ImpressionZone,PreviewZone}.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { UsgComposerState, UsgPathologyDef } from "@/lib/usg/types";
 import { USG_SEX_CHILD } from "@/lib/usg/types";
@@ -125,7 +126,6 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const [patientSex, setPatientSex] = useState(
     (report?.patientSex ?? prefill?.patientSex ?? "F") as "F" | "M" | typeof USG_SEX_CHILD,
   );
-  const [patients, setPatients] = useState<PatientSuggestion[]>([]);
   const [referredBy, setReferredBy] = useState(report?.referredBy ?? prefill?.referredBy ?? (typeof window !== "undefined" ? localStorage.getItem("usg:lastReferredBy") ?? "" : ""));
   const [studyKey, setStudyKey] = useState(studyKey0);
   const study = useMemo(
@@ -159,8 +159,6 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewSrResult, setReviewSrResult] = useState<{ vars: Record<string, Record<string, string>>; extras: Record<string, string>; matchedCount: number } | null>(null);
   const [reviewSrMeasurements, setReviewSrMeasurements] = useState<Array<{ conceptName: string; value: string; unit: string; path?: string }>>([]);
-  const [patientReports, setPatientReports] = useState<Array<{ id: number; scanDate: string | null; stateJson: string | null; studyKey: string | null; status: string }>>([]);
-  const [priorFinalized, setPriorFinalized] = useState<Array<{ id: string; scanDate: string | null; stateJson: string | null; studyKey: string | null }>>([]);
   const [dialogOrgan, setDialogOrgan] = useState<string | null>(null);
   const printRef = useRef<HTMLIFrameElement>(null);
   const frozenHtmlRef = useRef<string | null>(
@@ -193,76 +191,83 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const orderUid = order?.studyInstanceUid ?? null;
   const reportIdForPacs = savedIdRef.current ?? report?.id ?? null;
 
-  const pullFromMachine = async () =>
-    pullFromMachineFn({
-      savedId: savedIdRef.current,
-      reportId: report?.id,
-      setPulling,
-      setState,
-      setReviewSrResult,
-      setReviewSrMeasurements,
-      setReviewOpen,
-      setPullSummary,
-    });
-
+  const pullMutation = useMutation({
+    mutationFn: async () =>
+      pullFromMachineFn({
+        savedId: savedIdRef.current,
+        reportId: report?.id,
+        setPulling,
+        setState,
+        setReviewSrResult,
+        setReviewSrMeasurements,
+        setReviewOpen,
+        setPullSummary,
+      }),
+  });
+  const pullFromMachine = async () => {
+    await pullMutation.mutateAsync();
+  };
+  const queryClient = useQueryClient();
   const lookup = useMemo(() => makeLookup(pathologies), [pathologies]);
   const resolved = useMemo(
     () => resolve(state, lookup, technique, normalOverrides, pathologyWording),
     [state, lookup, technique, normalOverrides, pathologyWording],
   );
 
-  // one fills the phone (and links this report into her history on save).
-  // to build the pregnancy timeline.
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/usg/patients")
-      .then((r) => (r.ok ? r.json() : { patients: [] }))
-      .then((d) => {
-        if (!cancelled) setPatients(((d.patients ?? []) as PatientSuggestion[]).slice(0, 300));
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const patientsQ = useQuery({
+    queryKey: ["usg", "patients"],
+    queryFn: async () => {
+      const r = await fetch("/api/usg/patients");
+      if (!r.ok) return [] as PatientSuggestion[];
+      const d = await r.json();
+      return ((d.patients ?? []) as PatientSuggestion[]).slice(0, 300);
+    },
+  });
+  const patients = patientsQ.data ?? [];
 
-  useEffect(() => {
-    if (!patientName.trim() || !isObStudyKey(state.studyKey)) {
-      setPatientReports([]);
-      return;
-    }
-    let cancelled = false;
-    fetch(`/api/usg/reports?patientName=${encodeURIComponent(patientName.trim())}&limit=20`)
-      .then((r) => (r.ok ? r.json() : { reports: [] }))
-      .then((d) => {
-        if (!cancelled) {
-          const reports = (d.reports ?? d ?? []) as Array<{ id: number; scanDate: string | null; stateJson: string | null; studyKey: string | null; status: string }>;
-          setPatientReports(reports);
-        }
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [patientName, state.studyKey]);
+  const patientReportsQ = useQuery({
+    queryKey: ["usg", "reports", "by-name", patientName.trim()],
+    enabled: !!patientName.trim() && isObStudyKey(state.studyKey),
+    queryFn: async () => {
+      const r = await fetch(`/api/usg/reports?patientName=${encodeURIComponent(patientName.trim())}&limit=20`);
+      if (!r.ok) return [] as Array<{ id: number; scanDate: string | null; stateJson: string | null; studyKey: string | null; status: string }>;
+      const d = await r.json();
+      return (d.reports ?? d ?? []) as Array<{ id: number; scanDate: string | null; stateJson: string | null; studyKey: string | null; status: string }>;
+    },
+  });
+  const patientReports = patientReportsQ.data ?? [];
 
-  useEffect(() => {
-    const phone = patientPhone.trim();
-    if (!phone || phone.length < 6) {
-      setPriorFinalized([]);
-      return;
-    }
-    let cancelled = false;
-    fetch(`/api/usg/reports?patientPhone=${encodeURIComponent(phone)}&status=FINALIZED&limit=8`)
-      .then((r) => (r.ok ? r.json() : { reports: [] }))
-      .then((d) => {
-        if (cancelled) return;
-        const rows = ((d.reports ?? []) as Array<{ id: string; scanDate: string | null; stateJson: string | null; studyKey: string | null; status: string }>)
-          .filter((r) => r.status === "FINALIZED" && r.stateJson && r.id !== report?.id)
-          .slice(0, 5);
-        setPriorFinalized(rows);
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [patientPhone, report?.id]);
+  const priorFinalizedQ = useQuery({
+    queryKey: ["usg", "reports", "prior-finalized", patientPhone.trim(), report?.id ?? ""],
+    enabled: patientPhone.trim().length >= 6,
+    queryFn: async () => {
+      const phone = patientPhone.trim();
+      const r = await fetch(`/api/usg/reports?patientPhone=${encodeURIComponent(phone)}&status=FINALIZED&limit=8`);
+      if (!r.ok) return [] as Array<{ id: string; scanDate: string | null; stateJson: string | null; studyKey: string | null }>;
+      const d = await r.json();
+      return ((d.reports ?? []) as Array<{ id: string; scanDate: string | null; stateJson: string | null; studyKey: string | null; status: string }>)
+        .filter((row) => row.status === "FINALIZED" && row.stateJson && row.id !== report?.id)
+        .slice(0, 5);
+    },
+  });
+  const priorFinalized = priorFinalizedQ.data ?? [];
+
+  const saveNormalMut = useMutation({
+    mutationFn: async ({ organKey, text }: { organKey: string; text: string }) => {
+      await saveNormalOverride(studyKey, organKey, text, setState);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["usg", "normals"] });
+    },
+  });
+  const resetNormalMut = useMutation({
+    mutationFn: async ({ organKey }: { organKey: string }) => {
+      await resetNormalOverride(studyKey, organKey, setState);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["usg", "normals"] });
+    },
+  });
 
   const normName = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
   const onNameChange = (v: string) => {
@@ -404,16 +409,42 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     savedIdRef, frozenHtmlRef, dirtyRef, dKey, pendingImages, setPendingImages, setImages,
     setBusy, setSerial, setFinalizedHere, onSaved,
   });
-  const persist = async (status: "" | "finalize") => persistReport(status, persistDeps());
+  const persistMutation = useMutation({
+    mutationFn: async (status: "" | "finalize") => persistReport(status, persistDeps()),
+    onSuccess: (id, status) => {
+      void queryClient.invalidateQueries({ queryKey: ["usg", "reports"] });
+      if (id) void queryClient.invalidateQueries({ queryKey: ["usg", "report", id] });
+      if (status === "finalize") void queryClient.invalidateQueries({ queryKey: ["usg", "patients"] });
+    },
+  });
+  const persist = async (status: "" | "finalize") => persistMutation.mutateAsync(status);
   persistRef.current = persist;
 
-  const print = async () =>
-    printReport({
-      patientName, setBusy, report, finalizedHere, frozenHtmlRef, savedIdRef, printRef, previewHtml, persist,
-    });
+  const printMutation = useMutation({
+    mutationFn: async () =>
+      printReport({
+        patientName,
+        setBusy,
+        report,
+        finalizedHere,
+        frozenHtmlRef,
+        savedIdRef,
+        printRef,
+        previewHtml,
+        persist,
+      }),
+  });
+  const print = async () => printMutation.mutateAsync();
   const finalizeFast = async (alsoPrint = false) =>
     finalizeFastReport({
-      isFinal, busyRef, state, persist, frozenHtmlRef, printRef, setQualityOpen, alsoPrint,
+      isFinal,
+      busyRef,
+      state,
+      persist,
+      frozenHtmlRef,
+      printRef,
+      setQualityOpen,
+      alsoPrint,
     });
   finalizeFastRef.current = finalizeFast;
   printRefFn.current = print;
@@ -431,12 +462,12 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     moveImage(kind, key, dir, { setImages, setPendingImages, savedIdRef });
 
   const onSaveNormal = useCallback(
-    (organKey: string, text: string) => void saveNormalOverride(studyKey, organKey, text, setState),
-    [studyKey],
+    (organKey: string, text: string) => void saveNormalMut.mutateAsync({ organKey, text }),
+    [saveNormalMut],
   );
   const onResetNormal = useCallback(
-    (organKey: string) => void resetNormalOverride(studyKey, organKey, setState),
-    [studyKey],
+    (organKey: string) => void resetNormalMut.mutateAsync({ organKey }),
+    [resetNormalMut],
   );
   const onTogglePathology = useCallback(
     (organKey: string, key: string | null) => togglePathology(organKey, key),

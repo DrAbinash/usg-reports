@@ -3,16 +3,28 @@
  * Impression / advice triad zone + BI-RADS, copy-findings, legacy override,
  * declaration line. Callbacks stay behaviour-identical to the prior inline wiring.
  */
-import { memo } from "react";
+import { memo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+import { Sparkles } from "lucide-react";
 import type { UsgComposerState, UsgResolved, UsgTriadLine } from "@/lib/usg/types";
 import { selectedPathologies } from "@/lib/usg/composer";
 import { pathologyOverrideKey, type PathologyWordingOverrides } from "@/lib/usg/triad";
 import { copyForwardFindings } from "@/lib/usg/quickActions";
 import { biradsImpressionLine, biradsFollowUpDays, type BiradsCategory } from "@/lib/usg/birads";
+import { composeImpression } from "@/lib/usg/autoCompose";
 import { UsgTriadZones } from "../UsgTriadZones";
 import { UsgBiradsPicker } from "../UsgBiradsPicker";
 
@@ -40,6 +52,9 @@ export type ImpressionZoneProps = {
   pathologyWording?: PathologyWordingOverrides | null;
   onPathologyWordingChange?: (next: PathologyWordingOverrides) => void;
   savedId: string | null;
+  patientAge?: string;
+  patientSex?: string;
+  lmp?: string;
 };
 
 function impressionEqual(a: ImpressionZoneProps, b: ImpressionZoneProps): boolean {
@@ -59,7 +74,10 @@ function impressionEqual(a: ImpressionZoneProps, b: ImpressionZoneProps): boolea
     a.priorFinalized === b.priorFinalized &&
     a.pathologyWording === b.pathologyWording &&
     a.onPathologyWordingChange === b.onPathologyWordingChange &&
-    a.savedId === b.savedId
+    a.savedId === b.savedId &&
+    a.patientAge === b.patientAge &&
+    a.patientSex === b.patientSex &&
+    a.lmp === b.lmp
   );
 }
 
@@ -80,8 +98,12 @@ export const ImpressionZone = memo(function ImpressionZone({
   pathologyWording,
   onPathologyWordingChange,
   savedId,
+  patientAge,
+  patientSex,
+  lmp,
 }: ImpressionZoneProps) {
   const queryClient = useQueryClient();
+  const [confirmAutoFill, setConfirmAutoFill] = useState(false);
 
   const saveWordingMut = useMutation({
     mutationFn: async (body: {
@@ -188,6 +210,58 @@ export const ImpressionZone = memo(function ImpressionZone({
       edited: false,
     }));
 
+  const impressionHasText =
+    !!(state.impressionOverride?.trim()) ||
+    impressionLines.some((l) => l.text.trim()) ||
+    !!(state.impressionAddendum?.trim());
+
+  const runAutoFill = () => {
+    const selectedChips: { organKey: string; chipKey: string }[] = [];
+    for (const o of state.organs) {
+      for (const chipKey of selectedPathologies(o)) {
+        selectedChips.push({ organKey: o.organ, chipKey });
+      }
+    }
+    const bio = state.organs.find((o) => o.organ === "biometry");
+    const num = (v: string | undefined) => {
+      if (!v?.trim()) return undefined;
+      const n = Number(v);
+      return Number.isFinite(n) && n > 0 ? n : undefined;
+    };
+    const ageN = patientAge?.trim() ? Number(patientAge) : undefined;
+    const result = composeImpression({
+      selectedChips,
+      patient: {
+        age: Number.isFinite(ageN) ? ageN : undefined,
+        sex: patientSex === "M" || patientSex === "F" ? patientSex : undefined,
+        lmp: lmp?.trim() || undefined,
+      },
+      studyKey,
+      biometry: bio
+        ? {
+            bpd: num(bio.vars.bpd),
+            hc: num(bio.vars.hc),
+            ac: num(bio.vars.ac),
+            fl: num(bio.vars.fl),
+          }
+        : undefined,
+    });
+    const text = result.lines.join("\n");
+    if (!text.trim()) {
+      toast.message("Nothing to auto-fill — select chips or use a known study");
+      return;
+    }
+    setImpressionManual(true);
+    setState((s) => ({ ...s, impressionOverride: text }));
+    if (result.criticalFirst.length) {
+      toast.warning("Critical finding in impression — log the referring-doctor call before finalize", {
+        duration: 8000,
+      });
+    } else {
+      toast.success("Impression auto-filled — review and edit before finalize");
+    }
+  };
+
   return (
     <>
       {state.studyKey === "breast" && enableBirads && !isFinal ? (
@@ -260,6 +334,48 @@ export const ImpressionZone = memo(function ImpressionZone({
           })}
         </div>
       ) : null}
+
+      {!isFinal ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 border-sky-200 bg-sky-50/70 px-2.5 text-[10px] font-semibold text-sky-800 hover:bg-sky-100"
+            title="Compose impression from selected chips + OB data (deterministic)"
+            onClick={() => {
+              if (impressionHasText) setConfirmAutoFill(true);
+              else runAutoFill();
+            }}
+          >
+            <Sparkles className="mr-1 h-3 w-3" />
+            Auto-fill Impression
+          </Button>
+        </div>
+      ) : null}
+
+      <AlertDialog open={confirmAutoFill} onOpenChange={setConfirmAutoFill}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Replace existing impression?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Auto-fill will overwrite the current impression text with a deterministic draft from
+              selected chips. You can still edit before finalize.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmAutoFill(false);
+                runAutoFill();
+              }}
+            >
+              Replace
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <UsgTriadZones
         impressionLines={impressionLines}

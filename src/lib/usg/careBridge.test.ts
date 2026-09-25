@@ -318,7 +318,7 @@ describe("pregnancyTimeline", () => {
 
 describe("organSuggestions", () => {
   it("returns suggestions for a known pathology", () => {
-    const suggestions = getSuggestionsForPathology("gb_cholelithiasis");
+    const suggestions = getSuggestionsForPathology("gb-calculus");
     expect(suggestions.length).toBeGreaterThanOrEqual(2);
     expect(suggestions.some((s) => s.kind === "measure")).toBe(true);
     expect(suggestions.some((s) => s.kind === "check")).toBe(true);
@@ -330,7 +330,7 @@ describe("organSuggestions", () => {
   });
 
   it("deduplicates suggestions for multiple pathologies", () => {
-    const suggestions = getSuggestionsForPathologies(["gb_cholelithiasis", "gb-sludge"]);
+    const suggestions = getSuggestionsForPathologies(["gb-calculus", "gb-calculus-few"]);
     const texts = suggestions.map((s) => s.text);
     const unique = new Set(texts);
     expect(unique.size).toBe(texts.length);
@@ -346,11 +346,11 @@ describe("organSuggestions", () => {
     expect(suggestionColour("recommend")).toContain("violet");
   });
 
-  it("returns emergency suggestion for testicular torsion", () => {
-    const suggestions = getSuggestionsForPathology("testis-torsion-rt");
+  it("returns recommend suggestion for anencephaly", () => {
+    const suggestions = getSuggestionsForPathology("anatomy-anencephaly");
     expect(suggestions).toHaveLength(1);
     expect(suggestions[0]!.kind).toBe("recommend");
-    expect(suggestions[0]!.text).toContain("EMERGENCY");
+    expect(suggestions[0]!.text).toMatch(/fetal medicine|karyotyping/i);
   });
 });
 

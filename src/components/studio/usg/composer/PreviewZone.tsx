@@ -339,13 +339,36 @@ export async function persistReport(
 
 export function printInIframe(printRef: React.RefObject<HTMLIFrameElement | null>, html: string) {
   const frame = printRef.current;
-  if (!frame) return;
-  frame.srcdoc = html;
-  const win = frame.contentWindow;
-  if (win) {
-    win.focus();
-    setTimeout(() => win.print(), 150);
+  if (!frame) {
+    toast.error("Print frame missing — reload the page");
+    return;
   }
+  let printed = false;
+  const doPrint = () => {
+    if (printed) return;
+    printed = true;
+    const win = frame.contentWindow;
+    if (!win) {
+      toast.error("Print window unavailable");
+      return;
+    }
+    win.focus();
+    win.print();
+  };
+  const onLoad = () => {
+    frame.removeEventListener("load", onLoad);
+    // Allow layout/paint one tick after load before opening the dialog.
+    requestAnimationFrame(() => doPrint());
+  };
+  frame.addEventListener("load", onLoad);
+  frame.srcdoc = html;
+  // Safety: if onload never fires (blank/race), toast honestly — never silent blank print.
+  window.setTimeout(() => {
+    if (!printed) {
+      frame.removeEventListener("load", onLoad);
+      toast.error("Print preview did not load in time — try Print again");
+    }
+  }, 1500);
 }
 
 export async function printFrozenReport(
@@ -424,6 +447,8 @@ export async function finalizeFastReport(opts: {
   printRef: React.RefObject<HTMLIFrameElement | null>;
   setQualityOpen: (v: boolean) => void;
   alsoPrint?: boolean;
+  /** Set when opening QC from Ctrl+Shift+Enter so Finalize still auto-prints. */
+  pendingPrintAfterQc?: React.MutableRefObject<boolean>;
 }) {
   if (opts.isFinal || opts.busyRef.current) return;
   if (isCleanRushFinalize(opts.state)) {
@@ -434,9 +459,12 @@ export async function finalizeFastReport(opts: {
     }
     return;
   }
+  if (opts.alsoPrint && opts.pendingPrintAfterQc) {
+    opts.pendingPrintAfterQc.current = true;
+  }
   if (opts.alsoPrint) {
     opts.setQualityOpen(true);
-    toast.message("Review quality checklist, then finalize — print after");
+    toast.message("Review quality checklist, then Finalize — print follows automatically");
     return;
   }
   opts.setQualityOpen(true);
@@ -456,6 +484,9 @@ export function ComposerDialogs(p: {
   commOpen: boolean; setCommOpen: (v: boolean) => void; savedIdRef: React.MutableRefObject<string | null>;
   patientName: string; impressionManual: boolean; setImpressionManual: (v: boolean) => void;
   referredBy: string; settings: any; isPregnancyStudy: boolean; orderUid: string | null;
+  pendingPrintAfterQc?: React.MutableRefObject<boolean>;
+  frozenHtmlRef?: React.MutableRefObject<string | null>;
+  printRef?: React.RefObject<HTMLIFrameElement | null>;
 }) {
   const {
     dicomOpen, setDicomOpen, formFOpen, setFormFOpen, formFDefaults, order, report, onSaved,
@@ -464,6 +495,7 @@ export function ComposerDialogs(p: {
     reviewSrResult, reviewOpen, setReviewOpen, reviewSrMeasurements, setState,
     commOpen, setCommOpen, savedIdRef, patientName, impressionManual, setImpressionManual,
     referredBy, settings, isPregnancyStudy, orderUid,
+    pendingPrintAfterQc, frozenHtmlRef, printRef,
   } = p;
   return (
     <>
@@ -517,7 +549,14 @@ export function ComposerDialogs(p: {
         onOpenChange={setQualityOpen}
         state={state}
         resolved={resolved}
-        onForceFinalize={() => void persist("finalize")}
+        onForceFinalize={async () => {
+          const id = await persist("finalize");
+          if (id && pendingPrintAfterQc?.current && frozenHtmlRef && printRef) {
+            pendingPrintAfterQc.current = false;
+            const ok = await printFrozenReport(id, frozenHtmlRef, printRef);
+            if (!ok) toast.error("Finalized, but could not load the print snapshot");
+          }
+        }}
       />
 
       {reviewSrResult && (

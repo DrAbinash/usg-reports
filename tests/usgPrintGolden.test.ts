@@ -2,15 +2,17 @@
  * Golden HTML snapshots for the USG print letterhead.
  *
  * These catch P0 print fossils (stray masthead quotes, absolute signature pin,
- * sidebar demography duplication) so they cannot silently return.
+ * sidebar demography duplication) and abnormal-finding <strong> wrapping
+ * (fatty-liver section is abnormal in the fixture).
  *
- * Update ONLY via:
- *   npx vitest run -u tests/usgPrintGolden.test.ts
+ * FORBIDDEN: do not regenerate with `npx vitest run -u tests/usgPrintGolden.test.ts`.
+ * If a deliberate contract change is required, update the fixture intentionally
+ * and inspect the golden diff — only the intended structural/print changes may land.
  */
 import { describe, expect, test } from "vitest";
 import { buildUsgReportHtml } from "@/lib/usg/print";
 import { initialState } from "@/lib/usg/studies";
-import { makeLookup, resolve } from "@/lib/usg/composer";
+import { applyPathology, makeLookup, resolve } from "@/lib/usg/composer";
 import { USG_PATHOLOGIES_ALL } from "@/lib/usg/pathologies";
 
 const SETTINGS = {
@@ -51,7 +53,10 @@ const PATIENT = {
 };
 
 function resolved() {
-  return resolve(initialState("wa-female"), makeLookup(USG_PATHOLOGIES_ALL), "Routine transabdominal scan.");
+  const lookup = makeLookup(USG_PATHOLOGIES_ALL);
+  // Fatty Gr I selected → liver section is abnormal (must print bold / <strong>).
+  const state = applyPathology(initialState("wa-female"), "liver", "liver-fatty-g1", lookup);
+  return resolve(state, lookup, "Routine transabdominal scan.");
 }
 
 function normalize(html: string): string {

@@ -97,8 +97,9 @@ export const ChipRow = memo(function ChipRow({
           Normal · no size
         </button>
       ) : null}
-      {visible.map((p) => {
+      {visible.map((p, i) => {
         const on = selectedKeys.includes(p.key);
+        const hotkey = i < 9 ? i + 1 : null;
         return (
           <button
             key={p.key}
@@ -107,14 +108,27 @@ export const ChipRow = memo(function ChipRow({
               onToggle(p.key);
             }}
             className={cn(
-              "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
+              "relative rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
               on
                 ? "border-rose-300 bg-rose-50 text-rose-700"
                 : "border-border bg-muted/40 text-muted-foreground hover:border-rose-200 hover:text-rose-700",
               !p.builtin ? "italic" : "",
             )}
-            title={p.builtin ? (on ? "Selected — click to remove" : "Click to add (combine with others)") : `Custom entry${on ? " — click to remove" : ""}`}
+            title={
+              p.builtin
+                ? on
+                  ? "Selected — click to remove"
+                  : hotkey
+                    ? `Click to add (hotkey ${hotkey})`
+                    : "Click to add (combine with others)"
+                : `Custom entry${on ? " — click to remove" : ""}`
+            }
           >
+            {hotkey ? (
+              <span className="mr-1 inline-flex h-3.5 min-w-[0.9rem] items-center justify-center rounded bg-black/10 px-0.5 font-mono text-[9px] font-bold tabular-nums opacity-70">
+                {hotkey}
+              </span>
+            ) : null}
             {p.label}
           </button>
         );

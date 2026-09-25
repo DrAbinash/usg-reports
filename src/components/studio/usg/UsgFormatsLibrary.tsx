@@ -29,20 +29,25 @@ export function UsgFormatsLibrary({ organs, onApply }: {
   const apply = (f: Format) => {
     const text = f.text ?? "";
     const headers = ["LIVER", "G. B", "PANCREAS", "SPLEEN", "RT KIDNEY", "LT KIDNEY", "UTERUS", "ADNEXA", "P.O.D", "OTHERS", "IMPRESSION"];
+    // Composer organ keys are kidney_rt / kidney_lt (legacy library used rt_kidney / lt_kidney).
     const keyMap: Record<string, string> = {
       "LIVER": "liver", "G. B": "gb", "PANCREAS": "pancreas", "SPLEEN": "spleen",
-      "RT KIDNEY": "rt_kidney", "LT KIDNEY": "lt_kidney", "UTERUS": "uterus",
+      "RT KIDNEY": "kidney_rt", "LT KIDNEY": "kidney_lt", "UTERUS": "uterus",
       "ADNEXA": "adnexa", "P.O.D": "pod", "OTHERS": "others",
+      // Legacy aliases still accepted at import time:
+      "rt_kidney": "kidney_rt", "lt_kidney": "kidney_lt",
     };
     const findings: Record<string, string> = {};
     let impression: string | null = null;
     const lines = text.split(/\n/);
     let cur = "", curTxt = "";
+    const dropped: string[] = [];
     const save = () => {
       if (cur) {
         const clean = curTxt.replace(/\s+/g, " ").trim();
         if (cur === "IMPRESSION") impression = clean;
         else if (keyMap[cur]) findings[keyMap[cur]] = clean;
+        else if (cur && cur !== "IMPRESSION") dropped.push(cur);
       }
     };
     for (const line of lines) {
@@ -52,13 +57,21 @@ export function UsgFormatsLibrary({ organs, onApply }: {
     }
     save();
 
+    const organKeys = new Set(organs.map((o) => o.organ));
+    const unused = Object.keys(findings).filter((k) => !organKeys.has(k));
+    for (const k of unused) dropped.push(k);
+
     const next = organs.map((o) => {
-      if (findings[o.organ]) return { ...o, text: findings[o.organ] };
+      if (findings[o.organ]) return { ...o, text: findings[o.organ], custom: true };
       return o;
     });
     onApply(next, impression);
     setOpen(false);
-    toast.success(`Applied: ${f.title}`);
+    if (dropped.length) {
+      toast.message(`Applied: ${f.title} — skipped unmapped sections: ${[...new Set(dropped)].join(", ")}`);
+    } else {
+      toast.success(`Applied: ${f.title}`);
+    }
   };
 
   const filtered = data.filter((f) => {

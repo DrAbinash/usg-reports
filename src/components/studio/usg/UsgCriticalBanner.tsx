@@ -19,13 +19,15 @@ import type { UsgPathologyDef } from "@/lib/usg/types";
 export type UsgCriticalBannerProps = {
   /** Currently selected pathology keys with their definitions. */
   selectedPathologies: Array<{ key: string; label: string; organ: string }>;
+  /** Opens the existing critical-comm log dialog. */
+  onLogCall?: () => void;
 };
 
 const ICON_MAP: Record<string, typeof AlertOctagon> = {
   AlertOctagon, AlertTriangle, Info,
 };
 
-export function UsgCriticalBanner({ selectedPathologies }: UsgCriticalBannerProps) {
+export function UsgCriticalBanner({ selectedPathologies, onLogCall }: UsgCriticalBannerProps) {
   const [dismissed, setDismissed] = useState(false);
   const [expanded, setExpanded] = useState(true);
 
@@ -66,13 +68,25 @@ export function UsgCriticalBanner({ selectedPathologies }: UsgCriticalBannerProp
           {alerts.length} Critical Finding{alerts.length > 1 ? "s" : ""} Detected
           {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </button>
-        <button
-          type="button"
-          onClick={() => setDismissed(true)}
-          className="text-red-600 hover:text-red-800"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          {onLogCall ? (
+            <button
+              type="button"
+              onClick={onLogCall}
+              className="rounded-md bg-red-600 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-red-700"
+              title="Open critical finding communication log"
+            >
+              Log call
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setDismissed(true)}
+            className="text-red-600 hover:text-red-800"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {/* Alert cards */}

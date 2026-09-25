@@ -273,7 +273,8 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
   section("Findings", n++);
   const labelW = a5 ? 60 : 78;
   for (const s of resolved.sections) {
-    const lines = wrap(S(s.text), fonts.reg, base, contentW - labelW - 8);
+    const bodyFont = s.abnormal ? fonts.bold : fonts.reg;
+    const lines = wrap(S(s.text), bodyFont, base, contentW - labelW - 8);
     const blockH = Math.max(lines.length * lead, a5 ? 14 : 17);
     if (ctx.y - blockH < ctx.margin + 30) {
       newPage(ctx);
@@ -281,7 +282,7 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
     ctx.page.drawText(S(s.label), { x: margin, y: ctx.y, size: a5 ? 6.5 : 7.5, font: fonts.bold, color: NAVY });
     let ly = ctx.y;
     for (const line of lines) {
-      ctx.page.drawText(line, { x: margin + labelW, y: ly, size: base, font: fonts.reg, color: INK });
+      ctx.page.drawText(line, { x: margin + labelW, y: ly, size: base, font: bodyFont, color: INK });
       ly -= lead;
     }
     ctx.y -= Math.max(blockH, a5 ? 14 : 17) + gap(a5 ? 2 : 3);

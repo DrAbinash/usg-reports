@@ -83,6 +83,7 @@ export type ComposerOrganCardProps = {
   setState: React.Dispatch<React.SetStateAction<UsgComposerState>>;
   onAddCustom: (organKey: string) => void;
   lookupPathology: (key: string) => UsgPathologyDef | undefined;
+  triadAdviceTexts?: string[];
 };
 
 function organCardEqual(a: ComposerOrganCardProps, b: ComposerOrganCardProps): boolean {
@@ -101,7 +102,8 @@ function organCardEqual(a: ComposerOrganCardProps, b: ComposerOrganCardProps): b
     a.onTogglePathology === b.onTogglePathology &&
     a.setState === b.setState &&
     a.onAddCustom === b.onAddCustom &&
-    a.lookupPathology === b.lookupPathology
+    a.lookupPathology === b.lookupPathology &&
+    a.triadAdviceTexts === b.triadAdviceTexts
   );
 }
 
@@ -121,6 +123,7 @@ export const OrganCard = memo(function OrganCard({
   setState,
   onAddCustom,
   lookupPathology,
+  triadAdviceTexts,
 }: ComposerOrganCardProps) {
   const onToggle = useCallback(
     (k: string | null) => onTogglePathology(def.key, k),
@@ -147,6 +150,16 @@ export const OrganCard = memo(function OrganCard({
       setState((s) => setOrganText(s, def.key, t));
     },
     [lookupPathology, onTogglePathology, setState, def.key],
+  );
+  const onApplySuggestion = useCallback(
+    (pathologyKey: string, text: string) => {
+      setState((s) => ({
+        ...s,
+        adviceEdits: { ...(s.adviceEdits ?? {}), [pathologyKey]: text },
+      }));
+      toast.success("Suggestion applied to advice — review triad");
+    },
+    [setState],
   );
   const onRows = useCallback(
     (next: UsgOrganState) => setState((s) => setOrganRows(s, def.key, next.rows)),
@@ -184,6 +197,8 @@ export const OrganCard = memo(function OrganCard({
           onVar={onVar}
           onText={onText}
           onAddCustom={onAddCustom}
+          triadAdviceTexts={triadAdviceTexts}
+          onApplySuggestion={onApplySuggestion}
         />
       )}
     </div>

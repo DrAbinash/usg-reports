@@ -55,6 +55,7 @@ function TriadBadge({
       return;
     }
     if (line.pathologyKey) onEdit(line.pathologyKey, next);
+    else if (line.legacy) onEdit("", next);
     setEditing(false);
   };
 
@@ -75,6 +76,19 @@ function TriadBadge({
         <span className="shrink-0 rounded bg-amber-200/80 px-1 text-[8px] font-bold uppercase tracking-wide text-amber-800">
           legacy
         </span>
+      ) : null}
+      {line.legacy && !disabled && !editing ? (
+        <button
+          type="button"
+          className="shrink-0 rounded bg-amber-600 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-white hover:bg-amber-700"
+          title="Convert legacy override via the edit path"
+          onClick={() => {
+            setDraft(line.text);
+            setEditing(true);
+          }}
+        >
+          Convert
+        </button>
       ) : null}
       {editing && !disabled ? (
         <input

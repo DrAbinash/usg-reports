@@ -49,6 +49,7 @@ import {
   finalizeFastReport,
   ComposerDialogs,
 } from "./composer/PreviewZone";
+import { StickyActionBar } from "./composer/StickyActionBar";
 import type { DiffSource } from "./UsgDiffPanel";
 
 /** v6: the bill-desk order a report came from (banner, PACS, Form F). */
@@ -105,7 +106,16 @@ function fmtPrintDate(iso: string): string {
 }
 
 export function UsgComposer({ pathologies, settings, report, prefill, diffSource, normalOverrides, pathologyWording, onPathologyWordingChange, order, formFDefaults, onBack, onSaved }: UsgComposerProps) {
-  const studyKey0 = report?.studyKey ?? studyKeyForBillTest((report as any)?.testName ?? (prefill as any)?.testName ?? "", (report as any)?.sex ?? (report as any)?.gender ?? (report as any)?.patientGender ?? "") ?? "wa-female";
+  const lastStudyKey =
+    typeof window !== "undefined" ? localStorage.getItem("usg:lastStudyKey") : null;
+  const studyKey0 =
+    report?.studyKey ??
+    studyKeyForBillTest(
+      (report as any)?.testName ?? (prefill as any)?.testName ?? "",
+      (report as any)?.sex ?? (report as any)?.gender ?? (report as any)?.patientGender ?? "",
+    ) ??
+    (lastStudyKey && getStudy(lastStudyKey) ? lastStudyKey : null) ??
+    "wa-female";
 
   const initial = useMemo(() => {
     if (!report) return null;
@@ -143,6 +153,10 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
       try { localStorage.setItem("usg:lastReferredBy", referredBy); } catch {}
     }
   }, [referredBy]);
+  useEffect(() => {
+    if (!studyKey || typeof window === "undefined") return;
+    try { localStorage.setItem("usg:lastStudyKey", studyKey); } catch {}
+  }, [studyKey]);
   const [lmp, setLmp] = useState("");
   const [impressionManual, setImpressionManual] = useState(!!initial?.impressionOverride);
   const [showTechnique, setShowTechnique] = useState(false);
@@ -153,7 +167,8 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   );
   const [finalizedHere, setFinalizedHere] = useState(report?.status === "FINALIZED");
   const [qualityOpen, setQualityOpen] = useState(false);
-  const [headerCollapsed, setHeaderCollapsed] = useState(true);
+  // Blank new reports open header-EXPANDED; continuing a draft/final stays collapsed.
+  const [headerCollapsed, setHeaderCollapsed] = useState(!!report);
   const [focusMode, setFocusMode] = useState<'workspace' | 'preview' | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -238,15 +253,34 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const patientReports = patientReportsQ.data ?? [];
 
   const priorFinalizedQ = useQuery({
-    queryKey: ["usg", "reports", "prior-finalized", patientPhone.trim(), report?.id ?? ""],
-    enabled: patientPhone.trim().length >= 6,
+    queryKey: ["usg", "reports", "prior-finalized", patientPhone.trim(), patientName.trim().toLowerCase(), report?.id ?? ""],
+    enabled: patientPhone.trim().length >= 6 || patientName.trim().length >= 2,
     queryFn: async () => {
       const phone = patientPhone.trim();
-      const r = await fetch(`/api/usg/reports?patientPhone=${encodeURIComponent(phone)}&status=FINALIZED&limit=8`);
+      const name = patientName.trim();
+      const url =
+        phone.length >= 6
+          ? `/api/usg/reports?patientPhone=${encodeURIComponent(phone)}&status=FINALIZED&limit=8`
+          : `/api/usg/reports?patientName=${encodeURIComponent(name)}&status=FINALIZED&limit=20`;
+      const r = await fetch(url);
       if (!r.ok) return [] as Array<{ id: string; scanDate: string | null; stateJson: string | null; studyKey: string | null }>;
       const d = await r.json();
-      return ((d.reports ?? []) as Array<{ id: string; scanDate: string | null; stateJson: string | null; studyKey: string | null; status: string }>)
+      const rows = (d.reports ?? []) as Array<{
+        id: string;
+        scanDate: string | null;
+        stateJson: string | null;
+        studyKey: string | null;
+        status: string;
+        patientName?: string;
+      }>;
+      const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+      return rows
         .filter((row) => row.status === "FINALIZED" && row.stateJson && row.id !== report?.id)
+        .filter((row) =>
+          phone.length >= 6
+            ? true
+            : norm(row.patientName ?? "") === norm(name),
+        )
         .slice(0, 5);
     },
   });
@@ -312,7 +346,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     if (!dirtyRef.current) return;
     const t = setTimeout(() => {
       if (saveDraft(dKey, { ...currentSnap, savedAt: Date.now() })) setLastAutosave(Date.now());
-    }, 1200);
+    }, 400);
     return () => clearTimeout(t);
   }, [dKey, currentSnap, isFinal, initialSnap]);
 
@@ -331,6 +365,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const printRefFn = useRef<() => Promise<void>>(async () => {});
   const finalizeFastRef = useRef<(alsoPrint?: boolean) => Promise<void>>(async () => {});
   const togglePathologyRef = useRef<(organKey: string, key: string | null) => void>(() => {});
+  const pendingPrintAfterQc = useRef(false);
   const [focusedOrganIdx, setFocusedOrganIdx] = useState(0);
 
   const restoreDraft = () => {
@@ -368,6 +403,12 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
       ),
     [settings, patientName, patientAge, patientSex, referredBy, scanDate, serial, resolved, isFinal, images, pendingImages],
   );
+  // Debounce iframe srcDoc + share the same 400 ms window as autosave (Ctrl+S stays immediate).
+  const [debouncedPreviewHtml, setDebouncedPreviewHtml] = useState(previewHtml);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedPreviewHtml(previewHtml), 400);
+    return () => clearTimeout(t);
+  }, [previewHtml]);
 
   const pickStudy = (k: string) => {
     const target = getStudy(k);
@@ -445,6 +486,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
       printRef,
       setQualityOpen,
       alsoPrint,
+      pendingPrintAfterQc,
     });
   finalizeFastRef.current = finalizeFast;
   printRefFn.current = print;
@@ -568,7 +610,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
       <div className={`grid min-h-0 flex-1 gap-4 overflow-hidden p-4 ${focusMode === 'preview' ? "lg:grid-cols-[minmax(0,2fr)_minmax(360px,1fr)] xl:grid-cols-[minmax(0,2fr)_minmax(400px,1fr)]" : "lg:grid-cols-[minmax(360px,1fr)_minmax(0,2fr)] xl:grid-cols-[minmax(400px,1fr)_minmax(0,2fr)]"}`}>
         <PreviewZone
           focusMode={focusMode}
-          previewHtml={previewHtml}
+          previewHtml={debouncedPreviewHtml}
           orderUid={orderUid}
           onEnlarge={onEnlargePreview}
           onResetFocus={onResetFocus}
@@ -599,6 +641,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
                   setState={setState}
                   onAddCustom={onAddCustom}
                   lookupPathology={lookupPathology}
+                  triadAdviceTexts={resolved.advice}
                 />
               );
             })}
@@ -652,7 +695,12 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         </div>
       </div>
 
-      <iframe ref={printRef} title="print" className="hidden" />
+      <iframe
+        ref={printRef}
+        title="print"
+        className="pointer-events-none fixed left-[-10000px] top-0 h-[1px] w-[1px] opacity-0"
+        aria-hidden
+      />
       <ComposerDialogs
         dicomOpen={dicomOpen} setDicomOpen={setDicomOpen}
         formFOpen={formFOpen} setFormFOpen={setFormFOpen}
@@ -665,6 +713,20 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         commOpen={commOpen} setCommOpen={setCommOpen} savedIdRef={savedIdRef}
         patientName={patientName} impressionManual={impressionManual} setImpressionManual={setImpressionManual}
         referredBy={referredBy} settings={settings} isPregnancyStudy={isPregnancyStudy} orderUid={orderUid}
+        pendingPrintAfterQc={pendingPrintAfterQc}
+        frozenHtmlRef={frozenHtmlRef}
+        printRef={printRef}
+      />
+      <StickyActionBar
+        hidden={
+          qualityOpen || pickerOpen || dicomOpen || formFOpen || commOpen || reviewOpen || dialogOrgan !== null
+        }
+        busy={busy}
+        isFinal={isFinal}
+        onSave={() => void persist("")}
+        onFinalize={() => void finalizeFast(false)}
+        onPrint={() => void print()}
+        onNext={onBack}
       />
     </div>
   );

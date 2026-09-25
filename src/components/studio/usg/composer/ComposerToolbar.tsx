@@ -17,7 +17,7 @@ import type { UsgComposerState, UsgPathologyDef, UsgResolved, UsgStudyDef } from
 import { USG_SEX_CHILD } from "@/lib/usg/types";
 import { USG_STUDIES, STUDY_GROUPS, getStudy, type NormalOverrides } from "@/lib/usg/studies";
 import { isObStudyKey } from "@/lib/usg/orderStudy";
-import { normaliseState, pathologiesForOrgan, selectedPathologies, setOrganVar, switchStudy } from "@/lib/usg/composer";
+import { pathologiesForOrgan, selectedPathologies, setOrganVar, sortPathologiesForChips, switchStudy } from "@/lib/usg/composer";
 import {
   applyRushNormalStudy,
   applyRushPreset,
@@ -329,7 +329,11 @@ export function ComposerHotkeys(props: {
       if (!mod && !typing && /^[1-9]$/.test(e.key) && !e.altKey) {
         const organ = study.organs[focusedOrganIdx];
         if (!organ || isFinal) return;
-        const chips = pathologiesForOrgan(pathologies, organ.key);
+        const preferNoSize = studyAllowsRushNormals(study);
+        const chips = sortPathologiesForChips(
+          pathologiesForOrgan(pathologies, organ.key),
+          preferNoSize,
+        ).slice(0, 9);
         const chip = chips[Number(e.key) - 1];
         if (!chip) return;
         e.preventDefault();
@@ -744,6 +748,7 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
             key: k, label: k, organ: o.organ,
           })),
         )}
+        onLogCall={settings.enableCriticalComm === false ? undefined : () => setCommOpen(true)}
       />
 
       {/* Crash recovery banner */}

@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>USG THYROID</title>
+<style>
+
+@page { margin: 0; size: A4; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { margin: 0; padding: 0; background: #fff; }
+body {
+  font-family: var(--font-fam, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif);
+  font-size: 10pt;
+  line-height: 1.45;
+  color: #1a1a2e;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.page { width: 210mm; min-height: 297mm; position: relative; overflow: hidden; }
+
+/* ── Top bar (logo + address) ────────────────────────────────────────────── */
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 8mm 10mm 4mm 10mm;
+}
+.top-bar .logo-block { display: flex; align-items: center; gap: 8px; }
+.top-bar .logo-block img { height: 14mm; width: auto; }
+.top-bar .logo-block .logo-fallback {
+  height: 14mm; width: 14mm; border-radius: 50%;
+  background: linear-gradient(135deg, #0ea5e9, #6366f1);
+  color: #fff; font-size: 8pt; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.top-bar .logo-block .hospital-name { font-size: 15pt; font-weight: 800; color: #1e3a5f; line-height: 1.1; }
+.top-bar .logo-block .tagline { font-size: 8pt; color: #64748b; font-style: italic; }
+.top-bar .contact-block { text-align: right; font-size: 8.5pt; color: #475569; line-height: 1.4; }
+.top-bar .contact-block .line { display: flex; align-items: center; gap: 4px; justify-content: flex-end; }
+.top-bar.center .logo-block { order: 2; }
+.top-bar.center .contact-block { order: 1; }
+.top-bar.center { justify-content: center; gap: 20px; }
+.top-bar.right .logo-block { order: 2; }
+.top-bar.right .contact-block { order: 1; text-align: left; }
+.top-bar.right .contact-block .line { justify-content: flex-start; }
+
+/* ── Patient strip ────────────────────────────────────────────────────────── */
+.patient-strip {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  padding: 0 10mm;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+.patient-strip .field { padding: 4px 8px; }
+.patient-strip .label { font-size: 7.5pt; text-transform: uppercase; color: #94a3b8; font-weight: 600; }
+.patient-strip .value { font-size: 10pt; font-weight: 600; color: #1e293b; }
+
+/* ── Two-column body ──────────────────────────────────────────────────────── */
+.body-grid {
+  display: grid;
+  grid-template-columns: var(--sidebar-w, 60mm) 1fr;
+  gap: 0;
+  min-height: 200mm;
+}
+.body-grid.sidebar-left { grid-template-columns: 1fr var(--sidebar-w, 60mm); }
+.body-grid.sidebar-left .sidebar { order: 2; }
+.body-grid.sidebar-left .main-col { order: 1; }
+
+/* ── Image sidebar ────────────────────────────────────────────────────────── */
+.sidebar {
+  background: #0f172a;
+  padding: 6mm 4mm;
+  display: flex;
+  flex-direction: column;
+  gap: 4mm;
+}
+.sidebar .sidebar-header {
+  color: #94a3b8;
+  font-size: 8pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding-bottom: 2mm;
+  border-bottom: 1px solid #334155;
+}
+.sidebar .sidebar-subheader {
+  color: #64748b;
+  font-size: 7pt;
+  font-weight: 600;
+  margin-bottom: 2mm;
+}
+.sidebar .img-item {
+  position: relative;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.sidebar .img-item img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 4px;
+}
+.sidebar .img-item .badge {
+  position: absolute;
+  top: 3px; left: 3px;
+  background: #3b82f6;
+  color: #fff;
+  font-size: 7pt;
+  font-weight: 700;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+}
+.sidebar .img-item .caption {
+  font-size: 7pt;
+  color: #94a3b8;
+  padding: 2px 4px;
+  text-align: center;
+}
+
+/* ── Main column (findings + impression) ──────────────────────────────────── */
+.main-col { padding: 6mm 8mm 4mm 8mm; }
+.main-col .section { margin-bottom: 4mm; }
+.main-col .section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #1e3a5f;
+  padding-bottom: 1mm;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 2mm;
+}
+.main-col .section-body {
+  font-size: var(--body-fs, 10pt);
+  line-height: var(--body-lh, 1.45);
+  color: #1a1a2e;
+}
+.main-col .section-body p { margin-bottom: 1.5mm; }
+.main-col .section-body .table-row {
+  display: grid;
+  grid-template-columns: 120px 80px 1fr;
+  gap: 4px;
+  font-size: 9pt;
+  padding: 1px 0;
+  border-bottom: 1px dotted #e2e8f0;
+}
+.main-col .section-body .table-row .label { font-weight: 600; color: #475569; }
+.main-col .section-body .table-row .value { font-weight: 700; }
+.main-col .section-body .table-row .range { font-size: 8pt; color: #94a3b8; }
+
+/* ── Impression box ──────────────────────────────────────────────────────── */
+.impression-box {
+  background: #f1f5f9;
+  border-left: 3px solid #3b82f6;
+  border-radius: 0 6px 6px 0;
+  padding: 3mm 4mm;
+  margin: 2mm 0;
+}
+.impression-box .header {
+  font-size: 9pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #1e3a5f;
+  margin-bottom: 1.5mm;
+}
+.impression-box .body { font-size: 10pt; line-height: 1.5; }
+.impression-box .body p { margin-bottom: 1mm; }
+
+/* ── Signature block ──────────────────────────────────────────────────────── */
+.signature-block {
+  display: flex;
+  justify-content: space-between;
+  padding: 8mm 10mm 4mm 10mm;
+  gap: 20mm;
+}
+.signature-block .sig-item { flex: 1; }
+.signature-block .sig-line {
+  border-top: 1px solid #1e293b;
+  margin-top: 10mm;
+  padding-top: 1mm;
+}
+.signature-block .sig-name { font-size: 9pt; font-weight: 700; }
+.signature-block .sig-qual { font-size: 8pt; color: #64748b; }
+.signature-block .sig-reg { font-size: 7.5pt; color: #94a3b8; }
+.signature-block .sig-img {
+  max-height: 12mm; width: auto;
+  margin-bottom: -2mm;
+}
+
+/* ── Footer band ──────────────────────────────────────────────────────────── */
+.footer-band {
+  background: #0f172a;
+  color: #94a3b8;
+  text-align: center;
+  font-size: 8pt;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  padding: 3mm 10mm;
+  text-transform: uppercase;
+}
+.footer-band .qr { float: right; }
+.footer-band .serial { float: left; color: #64748b; font-family: monospace; }
+
+/* ── Provisional watermark ──────────────────────────────────────────────── */
+.watermark {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%) rotate(-30deg);
+  font-size: 60pt;
+  color: rgba(239, 68, 68, 0.08);
+  font-weight: 900;
+  pointer-events: none;
+  z-index: 1000;
+}
+.provisional-tag {
+  position: absolute;
+  top: 6mm; right: 6mm;
+  background: #ef4444;
+  color: #fff;
+  font-size: 8pt;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  z-index: 1001;
+}
+
+:root {
+  --font-fam: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --body-fs: 10pt;
+  --body-lh: 1.4;
+  --sidebar-w: 55mm;
+}
+</style>
+<style id="usg-justify-kill">p, li, td, th, div, span, .organ-body, .ob-body, .pbody { text-align: left !important; hyphens: none !important; word-spacing: normal !important; letter-spacing: normal !important; }</style><style id="usg-sig-fit">.signature-block,.sig-wrap,.sig-pin{position:static !important;bottom:auto !important;right:auto !important;transform:none !important;}</style><script>window.addEventListener("beforeprint",function(){var mm=277/25.4*96;var h=document.body.scrollHeight;if(h>mm){document.body.style.zoom=(mm/h).toFixed(3);}});</script></head><body>
+<div class="page">
+  
+  
+
+  <!-- Top bar: logo + contact -->
+  <div class="top-bar ">
+    <div class="logo-block">
+      <div class="logo-fallback">USG</div>
+      <div>
+        <div class="hospital-name">CARE Diagnostics</div>
+        
+      </div>
+    </div>
+    <div class="contact-block"><div class="line">Subhash Chowk, Deoghar</div><div class="line">📞 06432-123456</div><div class="line">✉ care@example.com</div></div>
+  </div>
+
+  <!-- Patient strip -->
+  <div class="patient-strip">
+    <div class="strip-row">
+      <div class="field"><div class="label">NAME</div><div class="value" style="font-weight:700;">Meera Devi</div></div>
+      <div class="field"><div class="label">AGE/SEX</div><div class="value">45 / F</div></div>
+    </div>
+    <div class="strip-row">
+      <div class="field"><div class="label">REFERRED BY</div><div class="value">Dr. Kumar</div></div>
+      <div class="field"><div class="label">DATE</div><div class="value">01-Sep-2026</div></div>
+    </div>
+    <div class="strip-row"><div class="field"><div class="label">USG No.</div><div class="value">USG-0003</div></div><div class="field"><div class="label">Study</div><div class="value">USG THYROID</div></div></div>
+  </div>
+
+  <!-- Two-column body -->
+  <div class="body-grid ">
+    <!-- Image sidebar -->
+    
+    <div class="sidebar">
+      <div class="sidebar-header">Key Images</div>
+      <div class="sidebar-subheader">USG THYROID</div>
+      
+      <div class="img-item">
+        <img src="data:image/png;base64,AAAA" alt="USG" />
+        <div class="badge">1</div>
+        <div class="caption">thyroid still</div>
+      </div>
+    </div>
+
+    <!-- Main column: findings + impression + signature -->
+    <div class="main-col">
+      <div class="section">
+        <div class="section-header">Technique</div>
+        <div class="section-body">High-resolution thyroid ultrasound.</div>
+      </div>
+      
+    <div class="section">
+      <div class="section-header">RIGHT LOBE</div>
+      <div class="section-body">Right lobe measures ___ X ___ mm in AP diameter. It is normal in echotexture. No SOL or calcification seen. Color Doppler shows normal blood flow.</div>
+    </div>
+    <div class="section">
+      <div class="section-header">LEFT LOBE</div>
+      <div class="section-body">Left lobe measures ___ X ___ mm in AP diameter. It is normal in echotexture. No SOL or calcification seen. Color Doppler shows normal blood flow.</div>
+    </div>
+    <div class="section">
+      <div class="section-header">ISTHMUS</div>
+      <div class="section-body">Isthmus measure ___ mm. Normal in size and echotexture. Color Doppler shows normal blood flow.</div>
+    </div>
+    <div class="section">
+      <div class="section-header">SUBMANDIBULAR</div>
+      <div class="section-body">Bilateral submandibular glands are normal in echotexture. No SOL or calcification seen. Color Doppler shows normal blood flow.</div>
+    </div>
+    <div class="section">
+      <div class="section-header">PAROTID</div>
+      <div class="section-body">Bilateral parotid glands are normal in echotexture. No SOL or calcification seen. Color Doppler shows normal blood flow.</div>
+    </div>
+    <div class="section">
+      <div class="section-header">LYMPH NODES</div>
+      <div class="section-body">There is no e/o cervical lymphadenopathy.</div>
+    </div>
+    <div class="section">
+      <div class="section-header">NECK VESSELS</div>
+      <div class="section-body">Neck vessels are normal.</div>
+    </div>
+      <div class="impression-box">
+        <div class="header">Impression</div>
+        <div class="body"><p>No significant abnormality detected.</p></div>
+      </div>
+      
+      
+
+      <!-- Signature -->
+      <div class="signature-block">
+        <div class="sig-item">
+          
+          <div class="sig-line"></div>
+          <div class="sig-name">Dr. Sugandha</div>
+          <div class="sig-qual">MBBS, MD</div>
+          <div class="sig-reg">Reg. No: J/12345</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer band -->
+  <div class="footer-band">
+    <div class="serial">USG-0003</div>
+    Correlate clinically.
+    
+  </div>
+</div>
+</body></html>

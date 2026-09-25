@@ -19,7 +19,7 @@ import { UsgQualityChecklist } from "../UsgQualityChecklist";
 import { UsgMeasurementReviewDialog } from "../UsgMeasurementReviewDialog";
 import { UsgCriticalCommDialog } from "../UsgCriticalCommDialog";
 import { UsgAiDraftPanel } from "../UsgAiDraftPanel";
-import { setOrganVar } from "@/lib/usg/composer";
+import { selectedPathologies, setOrganVar } from "@/lib/usg/composer";
 
 
 export type PreviewZoneProps = {
@@ -487,6 +487,8 @@ export function ComposerDialogs(p: {
   pendingPrintAfterQc?: React.MutableRefObject<boolean>;
   frozenHtmlRef?: React.MutableRefObject<string | null>;
   printRef?: React.RefObject<HTMLIFrameElement | null>;
+  technique: string;
+  togglePathology: (organKey: string, key: string | null) => void;
 }) {
   const {
     dicomOpen, setDicomOpen, formFOpen, setFormFOpen, formFDefaults, order, report, onSaved,
@@ -496,6 +498,7 @@ export function ComposerDialogs(p: {
     commOpen, setCommOpen, savedIdRef, patientName, impressionManual, setImpressionManual,
     referredBy, settings, isPregnancyStudy, orderUid,
     pendingPrintAfterQc, frozenHtmlRef, printRef,
+    technique, togglePathology,
   } = p;
   return (
     <>
@@ -595,10 +598,28 @@ export function ComposerDialogs(p: {
       {settings.enableAiDraft !== false ? (
         <UsgAiDraftPanel
           reportId={savedIdRef.current ?? report?.id ?? null}
+          technique={technique}
+          togglePathology={togglePathology}
+          organHasPathology={(organKey) => {
+            const o = state.organs.find((x) => x.organ === organKey);
+            return selectedPathologies(o ?? { pathology: null }).length > 0;
+          }}
           onInsertImpression={(text) => {
             setImpressionManual(true);
             setState((s) => ({ ...s, impressionOverride: text }));
             toast.success("AI impression inserted — review and edit");
+          }}
+          onInsertAdvice={(lines) => {
+            // Free-text advice has no separate override field — land as conclusion
+            // addendum lines the doctor can edit/dismiss in the triad impression zone.
+            setState((s) => {
+              const prev = (s.impressionAddendum ?? "").trim();
+              const next = [...(prev ? prev.split(/\n+/) : []), ...lines]
+                .map((l) => l.trim())
+                .filter(Boolean);
+              return { ...s, impressionAddendum: [...new Set(next)].join("\n") };
+            });
+            toast.success("AI advice added as conclusion lines — review");
           }}
         />
       ) : null}

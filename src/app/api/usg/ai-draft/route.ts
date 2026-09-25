@@ -1,18 +1,23 @@
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { generateAiDraft, isAiDraftEnabled } from "@/lib/usg/aiDraft";
+import { generateAiDraft, isAiDraftEnabled, type AiDraftOrganInput } from "@/lib/usg/aiDraft";
 import { audit } from "@/lib/usg/audit";
+import { pathologiesForOrgan } from "@/lib/usg/composer";
+import { USG_PATHOLOGIES_ALL } from "@/lib/usg/pathologies";
+import { getStudy } from "@/lib/usg/studies";
+import { isGridOrgan } from "@/lib/usg/gridOrgans";
 
 /**
- * POST /api/usg/ai-draft — generate a findings+impression draft via Ollama.
+ * POST /api/usg/ai-draft — generate a full-report skeleton via Ollama.
  *
- * Body: { reportId: string }
+ * Body: { reportId: string, clinicalIndication?: string, technique?: string }
  *
- * Reads the report's current state (organ findings + impression), passes
- * it to the local Ollama server, and returns the AI's draft. The
- * radiologist reviews and edits — the AI never writes to the report.
+ * Builds study organ list + allowed pathology keys, asks Ollama for strict
+ * JSON (per-organ finding keys + impression/advice), returns AiDraftResult.
+ * The radiologist reviews chips and applies via togglePathology — the AI
+ * never writes to the report.
  *
- * v6.10 — gated by the enableAiDraft feature toggle (per-clinic).
+ * Gated by the enableAiDraft feature toggle (per-clinic).
  */
 export async function POST(req: Request) {
   const guard = await requireSession();
@@ -29,21 +34,41 @@ export async function POST(req: Request) {
   const report = await db.usgReport.findUnique({ where: { id: reportId } });
   if (!report) return Response.json({ error: "Report not found" }, { status: 404 });
 
+  const study = getStudy(report.studyKey);
+  const organs: AiDraftOrganInput[] = (study?.organs ?? [])
+    .filter((o) => !isGridOrgan(o) && !!o.normal?.trim())
+    .map((o) => ({
+      key: o.key,
+      label: o.label,
+      allowedKeys: pathologiesForOrgan(USG_PATHOLOGIES_ALL, o.key).map((p) => p.key),
+    }));
+
+  const clinicalIndication =
+    typeof body.clinicalIndication === "string" ? body.clinicalIndication.trim() : "";
+  const technique =
+    (typeof body.technique === "string" && body.technique.trim()) ||
+    report.technique ||
+    study?.technique ||
+    "";
+
   const result = await generateAiDraft({
-    studyTitle: report.studyTitle || report.studyKey,
+    studyTitle: report.studyTitle || study?.title || report.studyKey,
+    studyKey: report.studyKey,
     patientName: report.patientName,
     patientAge: report.patientAge,
     patientSex: report.patientSex,
     referredBy: report.referredBy,
     currentFindings: report.findings,
-    clinicalIndication: body.clinicalIndication,
+    clinicalIndication: clinicalIndication || undefined,
+    technique: technique || undefined,
+    organs,
   });
 
   await audit({
     action: "ai.draft",
     reportId,
     detail: result.ok
-      ? `AI draft generated (${result.ms}ms, ${result.model})`
+      ? `AI skeleton drafted (${result.ms}ms, ${result.model}, ${result.skeleton?.organs.length ?? 0} organs)`
       : `AI draft failed: ${result.error}`,
   });
 

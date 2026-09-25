@@ -32,7 +32,6 @@ import { UsgStudyPicker } from "./UsgStudyPicker";
 import { UsgQualityChecklist } from "./UsgQualityChecklist";
 import { UsgMeasurementReviewDialog } from "./UsgMeasurementReviewDialog";
 import { UsgCriticalCommDialog } from "./UsgCriticalCommDialog";
-import { UsgAiDraftPanel } from "./UsgAiDraftPanel";
 import { clearDraft, draftKey, loadDraft, saveDraft, snapshotDiffers, type DraftSnapshot } from "@/lib/usg/drafts";
 import { type BiradsCategory } from "@/lib/usg/birads";
 import { ComposerToolbar, ComposerHotkeys, pullFromMachine as pullFromMachineFn } from "./composer/ComposerToolbar";
@@ -716,6 +715,8 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         pendingPrintAfterQc={pendingPrintAfterQc}
         frozenHtmlRef={frozenHtmlRef}
         printRef={printRef}
+        technique={technique}
+        togglePathology={togglePathology}
       />
       <StickyActionBar
         hidden={

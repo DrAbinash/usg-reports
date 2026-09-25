@@ -575,6 +575,14 @@ const TAIL_CSS = `
   .tail { page-break-inside: avoid; }
 `;
 
+/**
+ * Shared print patches appended after every letterhead's `<style>` block:
+ * force left-aligned body text, unpin absolute signature fossils, and
+ * auto-zoom oversized sheets to one printable page height.
+ * Byte-identical across classic / premium / sidebar generators.
+ */
+const PRINT_CSS = `<style id="usg-justify-kill">p, li, td, th, div, span, .organ-body, .ob-body, .pbody { text-align: left !important; hyphens: none !important; word-spacing: normal !important; letter-spacing: normal !important; }</style><style id="usg-sig-fit">.signature-block,.sig-wrap,.sig-pin{position:static !important;bottom:auto !important;right:auto !important;transform:none !important;}</style><script>window.addEventListener("beforeprint",function(){var mm=277/25.4*96;var h=document.body.scrollHeight;if(h>mm){document.body.style.zoom=(mm/h).toFixed(3);}});</script>`;
+
 /** Clamp a numeric setting to a safe range (bad/absent values fall back). */
 function clampNum(v: unknown, min: number, max: number, dflt: number): number {
   const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
@@ -651,7 +659,6 @@ export function buildUsgReportHtml(
 ): string {
   // v6.7 — route to the two-column sidebar layout when selected
   if (settings.usgPrintStyle === "premium_sidebar") {
-    if (String((settings as any)?.usgPrintStyle ?? "").toLowerCase() === "couture") return buildPremiumReportHtml(settings, patient, resolved, images, qr);
     return buildSidebarReportHtml(settings, patient, resolved, images, qr);
   }
 
@@ -766,7 +773,7 @@ export function buildUsgReportHtml(
 .top-bar .logo-block img { height: var(--logo-h, 14mm); }
 .top-bar .logo-block .hospital-name { font-size: var(--name-fs, 15pt); }
 .top-bar .contact-block { font-size: var(--addr-fs, 8.5pt); }
-</style><style id="usg-justify-kill">p, li, td, th, div, span, .organ-body, .ob-body, .pbody { text-align: left !important; hyphens: none !important; word-spacing: normal !important; letter-spacing: normal !important; }</style><style id="usg-sig-fit">.signature-block,.sig-wrap,.sig-pin{position:static !important;bottom:auto !important;right:auto !important;transform:none !important;}</style><script>window.addEventListener("beforeprint",function(){var mm=277/25.4*96;var h=document.body.scrollHeight;if(h>mm){document.body.style.zoom=(mm/h).toFixed(3);}});</script></head>
+</style>${PRINT_CSS}</head>
 <body>
 ${watermark}
 <div class="sheet">
@@ -1181,7 +1188,7 @@ ${SIDEBAR_CSS}
   --sidebar-w: ${images.length > 2 ? "65mm" : "55mm"};
 }
 </style>
-<style id="usg-justify-kill">p, li, td, th, div, span, .organ-body, .ob-body, .pbody { text-align: left !important; hyphens: none !important; word-spacing: normal !important; letter-spacing: normal !important; }</style><style id="usg-sig-fit">.signature-block,.sig-wrap,.sig-pin{position:static !important;bottom:auto !important;right:auto !important;transform:none !important;}</style><script>window.addEventListener("beforeprint",function(){var mm=277/25.4*96;var h=document.body.scrollHeight;if(h>mm){document.body.style.zoom=(mm/h).toFixed(3);}});</script></head><body>
+${PRINT_CSS}</head><body>
 <div class="page">
   ${watermark}
   ${provisionalTag}
@@ -1248,136 +1255,6 @@ ${SIDEBAR_CSS}
     ${showThanks ? esc(footerMsg) : ""}
     ${qrHtml}
   </div>
-</div>
-</body></html>`;
-}
-
-
-/** v6.18 premium port — ERP-grade couture for USG: navy key-image rail,
- *  demographic grid, tinted impression, signature block, navy footer band.
- *  Gated by HospitalSettings.usgPrintStyle === "premium"; other styles untouched. */
-export function buildPremiumReportHtml(settings: any, patient: any, resolved: any, images: any, qr: any): string {
-  const e = (v: any) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  const s = settings ?? {};
-  const p = patient ?? {};
-  const name = p.name || p.patientName || "";
-  const age = p.age || p.patientAge || "";
-  const sex = p.sex || p.patientSex || "";
-  const ref = p.referredBy || p.referringDoctor || "";
-  const studyTitle = p.studyTitle || p.study || p.testName || "";
-  const scanDate = p.scanDate || p.scanDateText || p.date || "";
-  const imgs: any[] = Array.isArray(images) ? images : [];
-  const sections: { label: string; text: string }[] = [];
-  let impression = "";
-  const pushSec = (label: any, text: any) => {
-    const L = String(label ?? "").trim(); const T = String(text ?? "").trim();
-    if (!T) return;
-    if (/^impression$/i.test(L)) { impression += (impression ? "\n" : "") + T; return; }
-    if (L) sections.push({ label: L.toUpperCase(), text: T });
-  };
-  if (Array.isArray(resolved)) for (const r of resolved as any[]) pushSec(r?.label ?? r?.organLabel ?? r?.organ ?? r?.title, r?.text ?? r?.findings ?? r?.body);
-  else if (resolved && typeof resolved === "object") {
-    const ro = resolved as any;
-    if (Array.isArray(ro.organs)) for (const o of ro.organs) pushSec(o?.label ?? o?.organ, o?.text ?? o?.findings);
-    if (ro.impression) impression += String(ro.impression);
-  }
-  if (!impression) impression = String(p.impression ?? "");
-  const adviceArr: string[] = Array.isArray((resolved as any)?.advice)
-    ? ((resolved as any).advice as string[]).filter(Boolean)
-    : Array.isArray((resolved as any)?.suggestions)
-      ? ((resolved as any).suggestions as string[]).filter(Boolean)
-      : [];
-  const adviceHtml = adviceArr.length
-    ? `<div class="psec">ADVICE</div><div class="pimp" style="margin-top:1mm;"><ul style="margin:0;padding-left:4.5mm;">${adviceArr.map((l) => `<li>${e(l)}</li>`).join("")}</ul></div>`
-    : "";
-  const sig = s.usgSignatureUrl ? `<img class="psig-img" src="${e(s.usgSignatureUrl)}" alt="signature" />` : `<span class="psig-line"></span>`;
-  const qrHtml = qr?.dataUrl ? `<span class="pqr"><img src="${e(qr.dataUrl)}" alt="verification QR" /><span>scan to verify</span></span>` : "";
-  const rail = imgs.length ? `
-    <aside class="prail">
-      <div class="prail-h">KEY IMAGES</div>
-      <div class="prail-m">${e(studyTitle || "USG")}</div>
-      ${imgs.slice(0, 6).map((im, i) => {
-        const src = im?.dataUrl || im?.url || im?.src || "";
-        if (!src) return "";
-        return `<figure class="pkey"><span class="pnum">${i + 1}</span><img src="${e(src)}" alt="key image ${i + 1}" />${im?.caption || im?.label ? `<figcaption>${e(im.caption || im.label)}</figcaption>` : ""}</figure>`;
-      }).join("")}
-    </aside>` : "";
-  const gen = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
-  return `<!DOCTYPE html>
-<html><head><meta charset="utf-8" /><title>${e(name)} — USG report</title>
-<style>
-  @page { size: A4; margin: 0; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; font-family: "Segoe UI", Arial, sans-serif; color: #16202b; }
-  .pwrap { display: flex; min-height: 297mm; }
-  .prail { flex: 0 0 52mm; background: #0e2a3f; color: #eaf2f8; padding: 8mm 4mm 6mm 4mm; }
-  .prail-h { font-size: 11pt; font-weight: 800; letter-spacing: 1.2px; }
-  .prail-m { font-size: 7.5pt; opacity: .85; margin: 1mm 0 4mm 0; text-transform: uppercase; letter-spacing: .4px; }
-  .pkey { position: relative; margin: 0 0 5mm 0; }
-  .pkey img { width: 100%; height: 34mm; object-fit: cover; border: 1px solid #35566e; border-radius: 1.5mm; background: #000; }
-  .pnum { position: absolute; top: -1.5mm; left: -1.5mm; width: 6mm; height: 6mm; background: #2f80ed; color: #fff; font-size: 8pt; font-weight: 700; border-radius: 1mm; display: flex; align-items: center; justify-content: center; }
-  .pkey figcaption { font-size: 6.5pt; margin-top: 1mm; opacity: .9; }
-  .pmain { flex: 1; padding: 8mm 8mm 6mm 8mm; min-width: 0; }
-  .phead { display: flex; align-items: flex-start; gap: 6mm; }
-  .plogo { width: 30mm; height: 30mm; object-fit: contain; }
-  .phosp { flex: 1; }
-  .phosp h1 { margin: 0; font-size: 17pt; letter-spacing: .5px; color: #0e2a3f; }
-  .phosp .tag { font-size: 7.5pt; color: #5a6b7c; margin-top: .5mm; }
-  .phosp .addr { font-size: 8pt; color: #33475b; margin-top: 1.5mm; line-height: 1.45; text-align: right; }
-  .pqr { display: flex; flex-direction: column; align-items: center; gap: 1px; }
-  .pqr img { width: 20mm; height: 20mm; }
-  .pqr span { font-size: 6.5pt; font-weight: 700; letter-spacing: .5px; color: #33475b; }
-  .pdemo { border: .35mm solid #c9d6e2; border-radius: 1.5mm; margin: 3mm 0 1.5mm 0; padding: 1.6mm 4mm; display: grid; grid-template-columns: 1.5fr 1.5fr 0.9fr 0.9fr; gap: 0 6mm; font-size: 8.5pt; }
-  .pstudy { text-align: center; font-weight: 800; font-size: 11pt; letter-spacing: .6px; margin: 1.5mm 0 2.5mm 0; color: #0e2a3f; }
-  .pdemo div { display: flex; gap: 2mm; }
-  .pdemo b { color: #51606f; font-weight: 600; min-width: 24mm; }
-  .psec { margin: 4mm 0 2.5mm 0; font-size: 10.5pt; font-weight: 800; color: #0e2a3f; letter-spacing: .4px; display: flex; align-items: center; gap: 2mm; }
-  .psec::before { content: ""; width: 3mm; height: 3mm; border-radius: 50%; border: .5mm solid #2f80ed; }
-  .pcenter { justify-content: center; }
-  .pbody { font-size: 9pt; line-height: 1.5; text-align: left; margin: 0 0 2mm 0; white-space: pre-wrap; }
-  .pimp { background: #eef3f8; border-left: 1.2mm solid #2f80ed; border-radius: 1.5mm; padding: 3mm 4mm; margin-top: 4mm; }
-  .pimp .psec { margin-top: 0; }
-  .pimp-list { margin: 0; padding-left: 6mm; font-size: 9pt; line-height: 1.5; }
-  .pdisc { font-size: 7.5pt; color: #5a6b7c; margin: 4mm 0 3mm 0; }
-  .psig { display: flex; justify-content: flex-end; margin-top: 6mm; }
-  .psig-box { text-align: center; font-size: 8.5pt; }
-  .psig-img { height: 12mm; object-fit: contain; }
-  .psig-line { display: block; width: 45mm; border-bottom: .3mm solid #7a8a99; height: 10mm; }
-  .psig-box .nm { font-weight: 700; margin-top: 1mm; }
-  .psig-box .ql { font-size: 7.5pt; color: #51606f; }
-  .pfoot { background: #0e2a3f; color: #dfe9f2; text-align: center; font-size: 8pt; letter-spacing: 1.4px; padding: 2.6mm 0; margin-top: 6mm; text-transform: uppercase; }
-  .pgen { font-size: 7pt; color: #7a8a99; text-align: right; margin-top: 1.5mm; text-transform: none; letter-spacing: 0; }
-</style><style id="usg-justify-kill">p, li, td, th, div, span, .organ-body, .ob-body, .pbody { text-align: left !important; hyphens: none !important; word-spacing: normal !important; letter-spacing: normal !important; }</style><style id="usg-sig-fit">.signature-block,.sig-wrap,.sig-pin{position:static !important;bottom:auto !important;right:auto !important;transform:none !important;}</style><script>window.addEventListener("beforeprint",function(){var mm=277/25.4*96;var h=document.body.scrollHeight;if(h>mm){document.body.style.zoom=(mm/h).toFixed(3);}});</script></head>
-<body>
-<div class="pwrap">
-${rail}
-<main class="pmain">
-  <div class="phead">
-    ${s.logoUrl ? `<img class="plogo" src="${e(s.logoUrl)}" alt="logo" />` : ""}
-    <div class="phosp">
-      <h1>${e(s.hospitalName || "CARE DIAGNOSTICS")}</h1>
-      <div class="tag">${e(s.footerMessage || "Precision. Compassion. Care.")}</div>
-      <div class="addr">${e(s.addressLine)}<br/>${e(s.phone || "")}<br/>${e(s.email || "")}<br/>www.caredeoghar.com</div>
-    </div>
-    ${qrHtml}
-  </div>
-  <div class="pdemo">
-    <div><b>Patient</b><span>: ${e(name)}</span></div>
-    <div><b>Ref. By</b><span>: ${e(ref || "—")}</span></div>
-    <div><b>Age/Sex</b><span>: ${e(age)}${sex ? ` / ${e(sex)}` : ""}</span></div>
-    <div><b>Date</b><span>: ${e(scanDate)}</span></div>
-  </div>
-  <div class="pstudy">${e(studyTitle || "ULTRASOUND")}</div>
-  <div class="psec">FINDINGS</div>
-  ${sections.map((sec) => `<div class="psec" style="font-size:9.5pt;">${e(sec.label)}</div><p class="pbody">${e(sec.text)}</p>`).join("")}
-  ${impression ? `<div class="psec">IMPRESSION</div>
-  <div class="pimp" style="margin-top:1mm;"><ol class="pimp-list">${impression.split(/\n+/).filter(Boolean).map((l) => `<li>${e(l)}</li>`).join("")}</ol></div>` : ""}
-  ${adviceHtml}
-  <p class="pdisc">${e(s.usgDeclarationLine || "This report is based on the images and clinical information provided. Kindly correlate clinically.")}</p>
-  <div class="psig"><div class="psig-box">${sig}<div class="nm">${e(s.usgDoctorName || "")}</div><div class="ql">${e(s.usgDoctorQual || "MBBS, MD (Radiology)")}<br/>RADIOLOGIST${s.usgDoctorRegNo ? ` · Reg. No: ${e(s.usgDoctorRegNo)}` : ""}</div></div></div>
-  <div class="pfoot">Thank you for choosing ${e(s.hospitalName || "CARE DIAGNOSTICS")}</div>
-  <div class="pgen">Report generated on ${e(gen)} IST</div>
-</main>
 </div>
 </body></html>`;
 }

@@ -163,6 +163,10 @@ model HospitalSettings {
   enableBirads        Boolean  @default(true) // BI-RADS structured reporting for breast
   enableDicomSr       Boolean  @default(true) // DICOM SR PDF attachment (reserved)
 
+  // Secure WhatsApp share routing (Rung 5): who receives the wa.me deep link.
+  // patient_only | patient_and_doctor | doctor_only
+  whatsappRouting     String   @default("patient_only")
+
   updatedAt       DateTime @updatedAt
 }
 

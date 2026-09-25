@@ -34,7 +34,7 @@ import type { PathologyWordingOverrides } from "@/lib/usg/triad";
 import { UsgComposer, type UsgReportRow, type ReportOrderLite } from "./UsgComposer";
 import type { FormFDefaults } from "./UsgFormFDialog";
 import type { DiffSource } from "./UsgDiffPanel";
-import { shareReportPdf } from "./sharePdf";
+import { shareReportWhatsapp } from "./shareWhatsapp";
 import { UsgPacsReturnButton } from "./UsgPacsReturnButton";
 import { UsgFollowUpWidget } from "./UsgFollowUpWidget";
 
@@ -1076,14 +1076,14 @@ function ReprintOverlay({
             size="sm"
             variant="outline"
             className="h-8 border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-            title="Share on WhatsApp — PDF via the mobile share sheet, or download + wa.me on desktop"
+            title="Share via WhatsApp — secure 7-day link (wa.me deep link)"
             onClick={() => {
-              void shareReportPdf({ reportId, patientName, serial, date }).then((r) => {
-                if (r === "failed") toast.error("Could not build the PDF");
+              void shareReportWhatsapp(reportId).then((r) => {
+                if (r === "failed") toast.error("Could not create share link");
               });
             }}
           >
-            <MessageCircle className="mr-1.5 h-4 w-4" /> WhatsApp
+            <MessageCircle className="mr-1.5 h-4 w-4" /> Share via WhatsApp
           </Button>
           <Button
             size="sm"

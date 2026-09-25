@@ -3,6 +3,7 @@ import { normalizeBirthday } from "@/lib/usg/birthday";
 import { decryptSecret, encryptSecret, isEncryptedSecret } from "@/lib/secretCrypto";
 import { getActiveClinicId } from "@/lib/auth";
 import { ensureDefaultClinic } from "@/lib/clinic";
+import { normalizeWhatsappRouting } from "@/lib/usg/secureShare";
 
 export type HospitalSettingsRow = Awaited<ReturnType<typeof getSettings>>;
 
@@ -233,6 +234,7 @@ export async function updateSettings(patch: SettingsUpdate) {
     "usgFormFEnabled",
     // v6.10 feature toggles (per-clinic) — handled as string-checkboxes below.
     "enableCriticalComm", "enableFollowUps", "enableAiDraft", "enableBirads", "enableDicomSr",
+    "whatsappRouting",
   ];
   const data: Record<string, string | number | boolean> = {};
   // URL-valued integration fields are normalized on save so "172.16.1.139:8888"
@@ -350,6 +352,10 @@ export async function updateSettings(patch: SettingsUpdate) {
     } else if (typeof v === "boolean") {
       data[k] = v;
     }
+  }
+  // WhatsApp secure-share routing preference.
+  if (typeof patch.whatsappRouting === "string") {
+    data.whatsappRouting = normalizeWhatsappRouting(patch.whatsappRouting.trim());
   }
   // v6 integration secrets — write-only from the client. An empty string is
   // IGNORED (never clears an existing key by accident); the literal "__clear__"

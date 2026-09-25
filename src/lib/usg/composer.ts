@@ -400,6 +400,23 @@ export function pathologiesForOrgan(all: UsgPathologyDef[], organKey: string): U
   return all.filter((p) => pathologyAppliesTo(p.organ, organKey));
 }
 
+/**
+ * Same sort ChipRow / UsgOrganCard use for the visible chip strip:
+ * when preferNoSizeChips, ·no-size keys float to the front.
+ * Hotkeys 1–9 MUST index this array (not raw pathologiesForOrgan order).
+ */
+export function sortPathologiesForChips(
+  pathologies: UsgPathologyDef[],
+  preferNoSizeChips = false,
+): UsgPathologyDef[] {
+  if (!preferNoSizeChips) return pathologies;
+  return [...pathologies].sort((a, b) => {
+    const an = /-nosize$/.test(a.key) ? 0 : 1;
+    const bn = /-nosize$/.test(b.key) ? 0 : 1;
+    return an - bn;
+  });
+}
+
 /** Resolve the full printable report from a state. */
 export function resolve(
   state: UsgComposerState,
@@ -453,11 +470,15 @@ export function resolve(
           }
         : undefined;
       const prose = gridRowsToProse(def, o.rows);
+      const chipAbnormal = selectedPathologies(o).length > 0;
+      const scoreAbnormal =
+        !!total && typeof total.max === "number" && total.value < total.max;
       sections.push({
         organ: o.organ,
         label: def.label,
         text: prose,
         kind: "grid",
+        abnormal: chipAbnormal || scoreAbnormal,
         grid: {
           columns: def.grid.columns,
           rows: o.rows,
@@ -467,7 +488,13 @@ export function resolve(
       });
     } else {
       const text = substitute(o.text, organVars, o.organ);
-      sections.push({ organ: o.organ, label: def.label, text, kind: def.kind === "grid" ? "rows" : def.kind });
+      sections.push({
+        organ: o.organ,
+        label: def.label,
+        text,
+        kind: def.kind === "grid" ? "rows" : def.kind,
+        abnormal: selectedPathologies(o).length > 0,
+      });
     }
 
     // Title fragments only — impression / advice come from the triad helpers.

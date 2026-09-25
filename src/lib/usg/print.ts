@@ -240,7 +240,7 @@ function gridSectionHtml(s: UsgResolved["sections"][number]): string {
     g.total != null
       ? `<tr class="grid-total"><td><strong>Total</strong></td><td class="grid-score"><strong>${esc(String(g.total.value))}/${esc(String(g.total.max))}</strong></td></tr>`
       : "";
-  return `<div class="grid-block"><div class="grid-cap">${esc(s.label)}</div>${twin}<table class="grid-score-table"><thead><tr>${head}</tr></thead><tbody>${body}${totalRow}</tbody></table></div>`;
+  return `<div class="grid-block"><div class="grid-cap">${s.abnormal ? `<strong>${esc(s.label)}</strong>` : esc(s.label)}</div>${twin}<table class="grid-score-table"><thead><tr>${head}</tr></thead><tbody>${body}${totalRow}</tbody></table></div>`;
 }
 
 /** Section blocks in organ order; table sections render as measurement tables.
@@ -253,6 +253,10 @@ function renderSections(resolved: UsgResolved): string {
     parts.push(`<table class="organs">${rows.join("\n")}</table>`);
     rows.length = 0;
   };
+  const wrapAbn = (label: string, textHtml: string, abnormal?: boolean) =>
+    abnormal
+      ? { label: `<strong>${esc(label)}</strong>`, text: `<strong>${textHtml}</strong>` }
+      : { label: esc(label), text: textHtml };
   const sections = resolved.sections;
   for (let i = 0; i < sections.length; i++) {
     const s = sections[i]!;
@@ -264,7 +268,9 @@ function renderSections(resolved: UsgResolved): string {
         .filter(Boolean)
         .map(measurementRow)
         .join("\n");
-      parts.push(`<div class="meas-block"><div class="meas-cap">${esc(s.label)}</div><table class="meas"><tbody>${body}</tbody></table></div>`);
+      const cap = s.abnormal ? `<strong>${esc(s.label)}</strong>` : esc(s.label);
+      const tableBody = s.abnormal ? body.replace(/>([^<]+)</g, "><strong>$1</strong><") : body;
+      parts.push(`<div class="meas-block"><div class="meas-cap">${cap}</div><table class="meas"><tbody>${tableBody}</tbody></table></div>`);
     } else if (s.kind === "grid" && s.grid) {
       flushRows();
       const next = sections[i + 1];
@@ -282,7 +288,9 @@ function renderSections(resolved: UsgResolved): string {
         parts.push(gridSectionHtml(s));
       }
     } else {
-      rows.push(`<tr class="organ"><th>${esc(s.label)}</th><td>${esc(s.text).replace(/\n/g, "<br/>")}</td></tr>`);
+      const textHtml = esc(s.text).replace(/\n/g, "<br/>");
+      const w = wrapAbn(s.label, textHtml, s.abnormal);
+      rows.push(`<tr class="organ"><th>${w.label}</th><td>${w.text}</td></tr>`);
     }
   }
   flushRows();
@@ -1128,11 +1136,17 @@ function buildSidebarReportHtml(
     : "";
 
   // Findings sections
-  const sectionsHtml = resolved.sections.map((s) => `
+  const sectionsHtml = resolved.sections.map((s) => {
+    const label = s.abnormal ? `<strong>${esc(s.label)}</strong>` : esc(s.label);
+    const body = s.abnormal
+      ? `<strong>${esc(s.text).replace(/\n/g, "<br>")}</strong>`
+      : esc(s.text).replace(/\n/g, "<br>");
+    return `
     <div class="section">
-      <div class="section-header">${esc(s.label)}</div>
-      <div class="section-body">${esc(s.text).replace(/\n/g, "<br>")}</div>
-    </div>`).join("");
+      <div class="section-header">${label}</div>
+      <div class="section-body">${body}</div>
+    </div>`;
+  }).join("");
 
   // Technique section
   const techniqueHtml = showTechnique

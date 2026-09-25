@@ -260,13 +260,34 @@ export function UsgFormFDialog({
       if (!id && !form.patientName.trim()) return;
       const html = buildFormFPrintHtml(form);
       const frame = printRef.current;
-      if (!frame) return;
-      frame.srcdoc = html;
-      const win = frame.contentWindow;
-      if (win) {
-        win.focus();
-        setTimeout(() => win.print(), 200);
+      if (!frame) {
+        toast.error("Print frame missing — reload the page");
+        return;
       }
+      let printed = false;
+      const doPrint = () => {
+        if (printed) return;
+        printed = true;
+        const win = frame.contentWindow;
+        if (!win) {
+          toast.error("Print window unavailable");
+          return;
+        }
+        win.focus();
+        win.print();
+      };
+      const onLoad = () => {
+        frame.removeEventListener("load", onLoad);
+        requestAnimationFrame(() => doPrint());
+      };
+      frame.addEventListener("load", onLoad);
+      frame.srcdoc = html;
+      window.setTimeout(() => {
+        if (!printed) {
+          frame.removeEventListener("load", onLoad);
+          toast.error("Print preview did not load in time — try Print again");
+        }
+      }, 1500);
     } finally {
       setPrinting(false);
     }
@@ -472,7 +493,12 @@ export function UsgFormFDialog({
             </div>
           </div>
         )}
-        <iframe ref={printRef} title="formf-print" className="hidden" />
+        <iframe
+          ref={printRef}
+          title="formf-print"
+          className="pointer-events-none fixed left-[-10000px] top-0 h-[1px] w-[1px] opacity-0"
+          aria-hidden
+        />
       </DialogContent>
     </Dialog>
   );

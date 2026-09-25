@@ -2,9 +2,9 @@
 /**
  * UsgSuggestionsPanel — organ-specific deterministic suggestions.
  *
- * When a pathology is selected, shows related clinical actions
- * (measure, check, recommend, compare) as coloured chips below the
- * pathology selector. No AI — purely deterministic from a lookup table.
+ * When a pathology is selected, shows related clinical actions as coloured
+ * chips. Items already present in triad advice are hidden (one authoritative
+ * advice surface). Clicking Apply writes through adviceEdits (triad ownership).
  */
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
@@ -20,6 +20,10 @@ import {
 export type UsgSuggestionsPanelProps = {
   /** All currently selected pathology keys across all organs. */
   selectedPathologyKeys: string[];
+  /** Exact triad advice strings already shown — suggestions matching these are hidden. */
+  triadAdviceTexts?: string[];
+  /** Apply a suggestion into triad ownership (adviceEdits). */
+  onApplySuggestion?: (pathologyKey: string, text: string) => void;
 };
 
 const ICON_MAP: Record<SuggestionKind, LucideIcon> = {
@@ -29,10 +33,14 @@ const ICON_MAP: Record<SuggestionKind, LucideIcon> = {
   compare: GitCompare,
 };
 
-export function UsgSuggestionsPanel({ selectedPathologyKeys }: UsgSuggestionsPanelProps) {
+export function UsgSuggestionsPanel({
+  selectedPathologyKeys,
+  triadAdviceTexts,
+  onApplySuggestion,
+}: UsgSuggestionsPanelProps) {
   const suggestions = useMemo(
-    () => getSuggestionsForPathologies(selectedPathologyKeys),
-    [selectedPathologyKeys],
+    () => getSuggestionsForPathologies(selectedPathologyKeys, triadAdviceTexts),
+    [selectedPathologyKeys, triadAdviceTexts],
   );
 
   if (suggestions.length === 0) return null;
@@ -44,26 +52,41 @@ export function UsgSuggestionsPanel({ selectedPathologyKeys }: UsgSuggestionsPan
         Suggested
       </span>
       {suggestions.map((s, i) => (
-        <SuggestionChip key={`${s.pathologyKey}-${i}`} suggestion={s} />
+        <SuggestionChip
+          key={`${s.pathologyKey}-${i}`}
+          suggestion={s}
+          onApply={onApplySuggestion}
+        />
       ))}
     </div>
   );
 }
 
-function SuggestionChip({ suggestion: s }: { suggestion: OrganSuggestion }) {
+function SuggestionChip({
+  suggestion: s,
+  onApply,
+}: {
+  suggestion: OrganSuggestion;
+  onApply?: (pathologyKey: string, text: string) => void;
+}) {
   const Icon = ICON_MAP[s.kind] ?? ClipboardList;
   const colour = suggestionColour(s.kind);
+  const clickable = !!onApply && (s.kind === "recommend" || s.kind === "check" || s.kind === "compare");
 
   return (
-    <span
+    <button
+      type="button"
+      disabled={!clickable}
+      onClick={() => onApply?.(s.pathologyKey, s.text)}
       className={cn(
-        "inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-medium leading-tight",
+        "inline-flex max-w-full items-center gap-1 rounded border px-1.5 py-0.5 text-left text-[9px] font-medium leading-tight",
         colour,
+        clickable ? "cursor-pointer hover:opacity-90" : "cursor-default",
       )}
-      title={s.text}
+      title={clickable ? `Apply to advice: ${s.text}` : s.text}
     >
       <Icon className="h-2.5 w-2.5 shrink-0" />
       <span className="truncate max-w-[200px]">{s.text}</span>
-    </span>
+    </button>
   );
 }

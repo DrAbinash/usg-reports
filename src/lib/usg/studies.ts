@@ -793,14 +793,24 @@ USG_STUDIES.push(
   ),
 );
 
-/** Study groups shown in the composer dropdown and the studio filter chips. */
+/** Study groups shown in the composer dropdown and the studio filter chips.
+ *  Includes late-batch keys (ob/gyn/msk/…) so filtered pickers never hide studies. */
 export const STUDY_GROUPS: { key: string; label: string }[] = [
   { key: "abd", label: "Abdomen" },
   { key: "kubp", label: "KUB & Prostate" },
   { key: "obg", label: "Obstetric & Gynae" },
+  { key: "ob", label: "Obstetric (extra)" },
+  { key: "gyn", label: "Gynaecology (extra)" },
   { key: "small", label: "Small Parts & Others" },
+  { key: "soft_tissue", label: "Soft Tissue" },
+  { key: "msk", label: "MSK / Joints" },
   { key: "doppler", label: "Doppler & Vascular" },
+  { key: "vascular", label: "Vascular (extra)" },
   { key: "cardiac", label: "Cardiac" },
+  { key: "gu", label: "Genitourinary" },
+  { key: "head", label: "Head & Neck" },
+  { key: "xray", label: "X-ray / Other imaging" },
+  { key: "other", label: "Other studies" },
 ];
 
 /** 4D anomaly + twin anomaly studies (must live on USG_STUDIES so getStudy /

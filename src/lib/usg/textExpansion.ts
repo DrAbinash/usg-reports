@@ -61,7 +61,7 @@ function liveSnippets(): SnippetExpansion[] {
  * Exact match preferred; prefix match when ≥3 chars typed.
  */
 export function matchSnippet(text: string): SnippetExpansion | null {
-  const lower = text.trim().toLowerCase();
+  const lower = text.trim().toLowerCase().replace(/^:/, "");
   if (!lower) return null;
   const list = liveSnippets();
 
@@ -75,9 +75,9 @@ export function matchSnippet(text: string): SnippetExpansion | null {
   return prefix ?? null;
 }
 
-/** Exact-only match used when the doctor finishes a trigger (space/enter). */
+/** Exact-only match used when the doctor finishes a trigger (Tab / blur). */
 export function matchSnippetExact(text: string): SnippetExpansion | null {
-  const lower = text.trim().toLowerCase();
+  const lower = text.trim().toLowerCase().replace(/^:/, "");
   if (!lower) return null;
   return liveSnippets().find((s) => s.trigger === lower) ?? null;
 }

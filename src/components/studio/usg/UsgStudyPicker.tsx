@@ -106,22 +106,35 @@ export function UsgStudyPicker({
               </div>
             );
           })}
-          {!q && USG_STUDIES.some((s) => !s.group || !STUDY_GROUPS.some((g) => g.key === s.group)) ? (
-            <div>
-              <p className="mb-1 px-1 text-[10px] font-bold uppercase tracking-wider text-faint">Other</p>
-              <div className="grid gap-1">
-                {USG_STUDIES.filter((s) => !s.group || !STUDY_GROUPS.some((g) => g.key === s.group)).map((s) => (
-                  <button
-                    key={s.key}
-                    onClick={() => pick(s.key)}
-                    className="rounded-lg bg-panel px-3 py-2 text-left text-[12.5px] font-semibold hover:bg-rose-50 hover:text-rose-700"
-                  >
-                    {s.label}
-                  </button>
-                ))}
+          {(() => {
+            // Other = studies matching the filter whose group is missing from STUDY_GROUPS
+            // (render while filtering too — otherwise matches vanish mid-type).
+            const others = filtered.filter(
+              (s) => !s.group || !STUDY_GROUPS.some((g) => g.key === s.group),
+            );
+            if (!others.length) return null;
+            return (
+              <div>
+                <p className="mb-1 px-1 text-[10px] font-bold uppercase tracking-wider text-faint">Other</p>
+                <div className="grid gap-1">
+                  {others.map((s) => (
+                    <button
+                      key={s.key}
+                      onClick={() => pick(s.key)}
+                      className={cn(
+                        "rounded-lg px-3 py-2 text-left text-[12.5px] font-semibold transition-colors",
+                        s.key === currentKey
+                          ? "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
+                          : "bg-panel text-foreground hover:bg-rose-50 hover:text-rose-700",
+                      )}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          ) : null}
+            );
+          })()}
         </div>
       </DialogContent>
     </Dialog>

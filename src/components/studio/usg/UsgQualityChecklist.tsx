@@ -28,7 +28,7 @@ export type UsgQualityChecklistProps = {
   onOpenChange: (open: boolean) => void;
   state: UsgComposerState;
   resolved: UsgResolved;
-  onForceFinalize: () => void;
+  onForceFinalize: () => void | Promise<void>;
 };
 
 export function UsgQualityChecklist({
@@ -41,11 +41,21 @@ export function UsgQualityChecklist({
   useMemo(() => { setResult(initial); }, [initial, open]);
 
   const handleAcknowledge = (i: number) => setResult(acknowledgeItem(result, i));
-  const handleFinalize = () => { onForceFinalize(); onOpenChange(false); };
+  const handleFinalize = () => { void onForceFinalize(); onOpenChange(false); };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent
+        className="max-w-md"
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
+          const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+          if (tag === "textarea" || tag === "input") return;
+          if (!result.canFinalize) return;
+          e.preventDefault();
+          handleFinalize();
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {result.canFinalize ? (

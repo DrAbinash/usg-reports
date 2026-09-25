@@ -15,6 +15,10 @@ import { deriveAdvice, deriveImpressions, pathologyOverrideKey } from "@/lib/usg
 import { adviceForPathology } from "@/lib/usg/pathologyAdvice";
 import { buildUsgReportHtml } from "@/lib/usg/print";
 import { copyForwardFindings } from "@/lib/usg/quickActions";
+import {
+  getSuggestionsForPathologies,
+  suggestionRegistryKeys,
+} from "@/lib/usg/organSuggestions";
 
 const lookup = makeLookup(USG_PATHOLOGIES_ALL);
 
@@ -188,6 +192,27 @@ describe("pathology advice catalog", () => {
     expect(adviceForPathology("adnexa-cyst-simple").join(" ")).toMatch(/6 weeks/i);
     const p = getPathologyAny("liver-fatty-g1");
     expect(p?.advice?.length || p?.suggestions?.length || adviceForPathology("liver-fatty-g1").length).toBeGreaterThan(0);
+  });
+});
+
+describe("suggestion registry drift", () => {
+  test("every SUGGESTION_REGISTRY key exists in the pathology catalog", () => {
+    const catalogKeys = new Set(USG_PATHOLOGIES_ALL.map((p) => p.key));
+    const keys = suggestionRegistryKeys();
+    expect(keys.length).toBeGreaterThan(0);
+    const orphans = keys.filter((k) => !catalogKeys.has(k));
+    expect(orphans, `orphan suggestion keys: ${orphans.join(", ")}`).toEqual([]);
+  });
+
+  test("suggestions exclude texts already present in triad advice", () => {
+    const advice = adviceForPathology("liver-fatty-g1");
+    const all = getSuggestionsForPathologies(["liver-fatty-g1"]);
+    const filtered = getSuggestionsForPathologies(["liver-fatty-g1"], advice);
+    for (const s of filtered) {
+      expect(advice.map((a) => a.trim()).includes(s.text.trim())).toBe(false);
+    }
+    // Without exclude, registry may still return items (measure/check lines).
+    expect(all.length).toBeGreaterThanOrEqual(filtered.length);
   });
 });
 

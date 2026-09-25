@@ -20,13 +20,15 @@ import {
 import { cn } from "@/lib/utils";
 import { Check, Pencil, RotateCcw, Stethoscope, Type } from "lucide-react";
 import type { UsgOrganDef, UsgOrganState, UsgPathologyDef, UsgVarDef } from "@/lib/usg/types";
-import { extractTokens, ORGAN_SIDE, selectedPathologies, substitute } from "@/lib/usg/composer";
+import { extractTokens, ORGAN_SIDE, selectedPathologies, sortPathologiesForChips, substitute } from "@/lib/usg/composer";
 import { isSelectToken, getTokenOptions } from "@/lib/usg/tokenTypes";
 import { organNormalHasMeasurements } from "@/lib/usg/quickActions";
+import { matchSnippetExact } from "@/lib/usg/textExpansion";
 import { appendTranscript } from "@/lib/usg/dictation";
 import { DictationButton } from "./DictationButton";
 import { UsgSuggestionsPanel } from "./UsgSuggestionsPanel";
 import { ChipRow } from "./composer/ChipRow";
+import { toast } from "sonner";
 
 export type OrganCardProps = {
   def: UsgOrganDef;
@@ -50,6 +52,10 @@ export type OrganCardProps = {
   onVar: (key: string, value: string) => void;
   onText: (text: string) => void;
   onAddCustom: (organKey: string, after?: string) => void;
+  /** Triad advice lines already shown — suggestions matching these stay hidden. */
+  triadAdviceTexts?: string[];
+  /** Apply a suggestion via adviceEdits (triad ownership). */
+  onApplySuggestion?: (pathologyKey: string, text: string) => void;
 };
 
 function varLabel(defs: UsgVarDef[] | undefined, token: string): { label: string; unit?: string } {
@@ -58,7 +64,7 @@ function varLabel(defs: UsgVarDef[] | undefined, token: string): { label: string
   return { label: token.replace(/_/g, " ") };
 }
 
-export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, normalOverride, onSaveNormal, onResetNormal, onToggle, onQuickNormal, onVar, onText, onAddCustom }: OrganCardProps) {
+export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, normalOverride, onSaveNormal, onResetNormal, onToggle, onQuickNormal, onVar, onText, onAddCustom, triadAdviceTexts, onApplySuggestion }: OrganCardProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(state.text);
   const [showAll, setShowAll] = useState(false);
@@ -86,14 +92,10 @@ export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, norma
     state.text.trim() === def.normalQuick.trim();
 
   // Peak mode: ·no-size chips float to the front of the visible row.
-  const sortedPathologies = useMemo(() => {
-    if (!preferNoSizeChips) return pathologies;
-    return [...pathologies].sort((a, b) => {
-      const an = /-nosize$/.test(a.key) ? 0 : 1;
-      const bn = /-nosize$/.test(b.key) ? 0 : 1;
-      return an - bn;
-    });
-  }, [pathologies, preferNoSizeChips]);
+  const sortedPathologies = useMemo(
+    () => sortPathologiesForChips(pathologies, !!preferNoSizeChips),
+    [pathologies, preferNoSizeChips],
+  );
 
   const isKidneySlot = def.key === "kidney_rt" || def.key === "kidney_lt";
   const visible = showAll ? sortedPathologies : sortedPathologies.slice(0, 6);
@@ -302,7 +304,11 @@ export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, norma
 
       {/* Organ-specific suggestions (deterministic, no AI) */}
       {anySelected && (
-        <UsgSuggestionsPanel selectedPathologyKeys={selectedKeys} />
+        <UsgSuggestionsPanel
+          selectedPathologyKeys={selectedKeys}
+          triadAdviceTexts={triadAdviceTexts}
+          onApplySuggestion={onApplySuggestion}
+        />
       )}
 
       {/* Finding text + mic (always available; feature-detect inside DictationButton) */}
@@ -312,13 +318,33 @@ export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, norma
             <Textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Tab") return;
+                // Expand the trailing token (or whole draft) in place — caret preserved after.
+                const el = e.currentTarget;
+                const caret = el.selectionStart ?? draft.length;
+                const before = draft.slice(0, caret);
+                const after = draft.slice(caret);
+                const m = before.match(/([:\w-]+)$/);
+                const token = (m?.[1] ?? before).replace(/^:/, "");
+                const snip = matchSnippetExact(token);
+                if (!snip) return;
+                e.preventDefault();
+                const start = m ? before.length - m[1]!.length : 0;
+                const next = before.slice(0, start) + after;
+                // Apply via chip path (same as blur expansion).
+                onToggle(snip.pathologyKey);
+                toast.success(snip.confirm);
+                setDraft(next.trim() ? next : state.text);
+                setEditing(false);
+              }}
               onBlur={() => {
                 setEditing(false);
                 if (draft !== state.text) onText(draft);
               }}
               rows={5}
               className="resize-y flex-1 text-[12px] leading-relaxed"
-              placeholder="Finding text…"
+              placeholder="Finding text… (Tab expands :fatty1 / fatty1)"
             />
             <DictationButton
               onText={(t) => setDraft((prev) => appendTranscript(prev, t))}

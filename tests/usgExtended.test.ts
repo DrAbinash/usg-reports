@@ -245,6 +245,52 @@ describe("Echo study", () => {
     expect(r.impression).toEqual(["Moderate mitral regurgitation."]);
     expect(r.sections.find((s) => s.organ === "echo-mmode")!.text).toContain("LVEF");
   });
+
+  test("clinic corpus chips: ASD dilated RA/RV, PDA+ASD, RHD, PS, hypokinesia", () => {
+    const valves = pathologiesForOrgan(USG_PATHOLOGIES_ALL, "echo-valves").map((p) => p.key);
+    const others = pathologiesForOrgan(USG_PATHOLOGIES_ALL, "echo-others").map((p) => p.key);
+    expect(valves).toEqual(expect.arrayContaining([
+      "echo-ps-mild",
+      "echo-tr-severe",
+      "echo-rhd-hf",
+    ]));
+    expect(others).toEqual(expect.arrayContaining([
+      "echo-asd",
+      "echo-asd-dilated-ra-rv",
+      "echo-asd-primum-dilated",
+      "echo-asd-secundum-tr-pah",
+      "echo-asd-primum-severe",
+      "echo-pda-asd",
+      "echo-rwma-hypokinesia",
+      "echo-rhd-hf-others",
+    ]));
+
+    let state = withPathology("echo", "echo-others", "echo-asd-dilated-ra-rv");
+    state = setOrganVar(state, "echo-others", "d1", "1.5");
+    state = setOrganVar(state, "echo-others", "asdpg", "54.5");
+    state = setOrganVar(state, "echo-others", "lvef", "67");
+    const asd = resolve(state, lookupAll, "t");
+    expect(asd.sections.find((s) => s.organ === "echo-others")!.text).toContain("Ostium secundum");
+    expect(asd.sections.find((s) => s.organ === "echo-others")!.text).toContain("1.5 cm");
+    expect(asd.impression.some((l) => /Ostium secundum ASD/i.test(l))).toBe(true);
+    expect(asd.impression.some((l) => /dilated RA and RV/i.test(l))).toBe(true);
+
+    const rhd = resolve(withPathology("echo", "echo-valves", "echo-rhd-hf"), lookupAll, "t");
+    expect(rhd.sections.find((s) => s.organ === "echo-valves")!.text).toContain("fish-mouth");
+    expect(rhd.impression[0]).toMatch(/Rheumatic heart disease/i);
+
+    const hypo = resolve(withPathology("echo", "echo-others", "echo-rwma-hypokinesia"), lookupAll, "t");
+    expect(hypo.sections.find((s) => s.organ === "echo-others")!.text).toContain("Antero-apical");
+    expect(hypo.impression[0]).toMatch(/hypokinesia/i);
+  });
+
+  test("fetal echo clinic normal chips land on fetal-echo organs", () => {
+    const conc = pathologiesForOrgan(USG_PATHOLOGIES_ALL, "concordance").map((p) => p.key);
+    expect(conc).toContain("fetal-echo-normal-concordance");
+    const r = resolve(withPathology("ob-fetal-echo", "conclusion", "fetal-echo-normal-conclusion"), lookupAll, "t");
+    expect(r.impression.some((l) => /no significant cardiac abnormality/i.test(l))).toBe(true);
+    expect(r.impression.some((l) => /Post-natal echocardiography/i.test(l))).toBe(true);
+  });
 });
 
 describe("Doppler studies", () => {

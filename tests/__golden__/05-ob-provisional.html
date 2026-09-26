@@ -23,8 +23,8 @@
 
   .thanks { text-align: center; font-style: italic; font-weight: 600; color: #4A6581; font-size: 9.5pt; margin-top: 6px; }
 
-  .study { margin-top: 12px; text-align: center; page-break-after: avoid; }
-  .study .name { font-size: 14.5pt; font-weight: 800; color: #143E6E; letter-spacing: 2px; text-transform: uppercase; }
+  .study { margin-top: 12px; width: 100%; text-align: center; page-break-after: avoid; }
+  .study .name { display: block; width: 100%; font-size: 14.5pt; font-weight: 800; color: #143E6E; letter-spacing: 2px; text-transform: uppercase; text-align: center; }
   .study .rule { height: 3.5px; background: linear-gradient(90deg, transparent 4%, #2E6DA4 25%, #3E86C4 50%, #2E6DA4 75%, transparent 96%); border-radius: 3px; margin: 5px 18px 0; }
 
   .machine { text-align: center; font-size: 9.5pt; font-weight: 700; color: #2E6DA4; font-style: italic; margin-top: 7px; }
@@ -147,7 +147,7 @@ body { font-size: 10pt; line-height: 1.4; }
 .top-bar .logo-block img { height: var(--logo-h, 14mm); }
 .top-bar .logo-block .hospital-name { font-size: var(--name-fs, 15pt); }
 .top-bar .contact-block { font-size: var(--addr-fs, 8.5pt); }
-</style><style id="usg-justify-kill">p, li, td, th, div, span, .organ-body, .ob-body, .pbody { text-align: left !important; hyphens: none !important; word-spacing: normal !important; letter-spacing: normal !important; }</style><style id="usg-sig-fit">.signature-block,.sig-wrap,.sig-pin{position:static !important;bottom:auto !important;right:auto !important;transform:none !important;}</style><script>window.addEventListener("beforeprint",function(){var mm=277/25.4*96;var h=document.body.scrollHeight;if(h>mm){document.body.style.zoom=(mm/h).toFixed(3);}});</script></head>
+</style><style id="usg-justify-kill">p, li, td, th, div, span, .organ-body, .ob-body, .pbody { text-align: left !important; hyphens: none !important; word-spacing: normal !important; letter-spacing: normal !important; }</style><style id="usg-study-center">.study,.study .name,.thanks,.machine{text-align:center !important;}</style><style id="usg-sig-fit">.signature-block,.sig-wrap,.sig-pin{position:static !important;bottom:auto !important;right:auto !important;transform:none !important;}</style><script>window.addEventListener("beforeprint",function(){var mm=277/25.4*96;var h=document.body.scrollHeight;if(h>mm){document.body.style.zoom=(mm/h).toFixed(3);}});</script></head>
 <body>
 <div class="watermark">PROVISIONAL</div>
 <div class="sheet">
@@ -181,10 +181,10 @@ body { font-size: 10pt; line-height: 1.4; }
   </div>
   <p class="machine">GE Voluson Pro</p>
 
-  <h2 class="band"><span class="n">1</span>Technique</h2>
+  <h2 class="band">Technique</h2>
   <p class="technique">Antenatal scan.</p>
 
-  <h2 class="band"><span class="n">2</span>Findings</h2>
+  <h2 class="band">Findings</h2>
   <table class="organs"><tr class="organ"><th>FETUS &amp; PRESENTATION</th><td>There is a Single live intrauterine fetus in cephalic presentation at the time of examination.</td></tr>
 <tr class="organ"><th>FETAL BIOMETRY</th><td>Fetal parameters-<br/>B.P.D ___ mm    ___ Weeks  ___ Days<br/>H.C ___ mm    ___ Weeks  ___ Days<br/>A.C ___ mm    ___ Weeks  ___ Days<br/>F.L. ___ mm.   ___ Weeks  ___ Days<br/><br/>Parameters corresponding to mean GA : ___ weeks ___ days ( ± 2 weeks)<br/><br/>E.D.D. as per scan : ___<br/><br/>Fetal weight in grams : ___ ( ± ___ ) g<br/><br/>FHR : ___ B/Min &amp; Regular.</td></tr>
 <tr class="organ"><th>FETAL SURVEY</th><td>Heart is 4 chambered with apex towards left. The stomach, kidney, neck and spine were scanned and examined which appears normal. The fetal thoracic movements are normal during respiration. Fetal limb movements are present.</td></tr>
@@ -194,7 +194,7 @@ body { font-size: 10pt; line-height: 1.4; }
   
   
 
-  <h2 class="band"><span class="n">3</span>Impression</h2>
+  <h2 class="band">Impression</h2>
   <div class="impression-box"><ol class="impression"><li>A single live intrauterine fetus at ___ wk ___ days of average gestational age in cephalic presentation.</li></ol></div>
   <div class="advice-box"><div class="advice-h">Advice</div><div class="suggestions"><p>Suggested: Clinical correlation as indicated.</p></div></div>
 
@@ -204,7 +204,6 @@ body { font-size: 10pt; line-height: 1.4; }
     <div class="name">Dr. Sugandha</div>
     <div class="sub">MBBS, MD</div>
     <div class="sub">Reg. No: J/12345</div>
-    <div class="sub">Sonologist</div>
   </div></div>
 
   <div class="pcpndt">

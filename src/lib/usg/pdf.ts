@@ -255,18 +255,17 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
     ctx.y -= a5 ? 10 : 13;
   }
 
-  // ── Section helper ────────────────────────────────────────────────────
-  const section = (label: string, n: number) => {
+  // ── Section helper (no numeric badges — short reports read cleaner) ───
+  const section = (label: string) => {
     ensure(ctx, base + (a5 ? 12 : 16));
     ctx.page.drawRectangle({ x: margin, y: ctx.y - (a5 ? 12 : 15), width: contentW, height: a5 ? 12 : 15, color: rgb(0.08, 0.24, 0.43) });
-    ctx.page.drawText(S(`${n}. ${label.toUpperCase()}`), { x: margin + 5, y: ctx.y - (a5 ? 9 : 11), size: a5 ? 7 : 8.5, font: fonts.bold, color: rgb(1, 1, 1) });
+    ctx.page.drawText(S(label.toUpperCase()), { x: margin + 5, y: ctx.y - (a5 ? 9 : 11), size: a5 ? 7 : 8.5, font: fonts.bold, color: rgb(1, 1, 1) });
     ctx.y -= a5 ? 12 : 15;
     ctx.y -= a5 ? 5 : 7;
   };
 
-  let n = 1;
   if (settings.usgPrintShowTechnique !== false && resolved.technique?.trim()) {
-    section("Technique", n++);
+    section("Technique");
     for (const line of wrap(S(resolved.technique), fonts.reg, base, contentW)) {
       ensure(ctx, base + 3);
       ctx.page.drawText(line, { x: margin, y: ctx.y, size: base, font: fonts.reg, color: INK });
@@ -276,7 +275,7 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
   }
 
   // ── Findings ──────────────────────────────────────────────────────────
-  section("Findings", n++);
+  section("Findings");
   const labelW = a5 ? 60 : 78;
   for (const s of resolved.sections) {
     const bodyFont = s.abnormal ? fonts.bold : fonts.reg;
@@ -298,7 +297,7 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
 
   // ── Images ────────────────────────────────────────────────────────────
   if (images.length) {
-    section("USG Images", n++);
+    section("USG Images");
     const cols = 2;
     const gap = a5 ? 6 : 10;
     const cellW = (contentW - gap) / cols;
@@ -335,7 +334,7 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
   }
 
   // ── Impression ────────────────────────────────────────────────────────
-  section("Impression", n++);
+  section("Impression");
   for (const [i, line] of resolved.impression.entries()) {
     const numbered = `${i + 1}. ${S(line)}`;
     for (const l of wrap(numbered, fonts.bold, base, contentW - 6)) {
@@ -347,7 +346,7 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
   ctx.y -= gap(4);
 
   if (resolved.suggestions.length) {
-    section("Advice", n++);
+    section("Advice");
     for (const s of resolved.suggestions) {
       for (const l of wrap(S(s), fonts.bold, base - (a5 ? 0.5 : 1), contentW)) {
         ensure(ctx, base);

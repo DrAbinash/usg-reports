@@ -5,8 +5,8 @@
  *
  *   • Font size + line-height dials land in the printed CSS, and stray
  *     values are clamped so the letterhead can never be wrecked.
- *   • The Technique band is switchable; section numbering follows whatever
- *     actually prints (both HTML and server-side PDF).
+ *   • The Technique band is switchable; Findings / Impression print as
+ *     unnumbered bands (both HTML and server-side PDF).
  *   • The "Thanks For Your Referral." tagline is switchable.
  *   • The trailing block (signature + PC-PNDT + declaration + footer) moves
  *     to a second page as ONE unit — a lone signature never spills — and
@@ -109,15 +109,16 @@ describe("font size and line-height dials", () => {
 // ── Technique band toggle + numbering ──────────────────────────────────────
 
 describe("technique row toggle", () => {
-  test("on (default) — Technique prints and Findings is numbered 2", () => {
+  test("on (default) — Technique prints; Findings / Impression stay unnumbered", () => {
     const html = buildUsgReportHtml(BASE_SETTINGS, PATIENT, resolvedReport("Routine scan."));
     expect(html).toContain("Technique</h2>");
     expect(html).toContain("Routine scan.");
-    expect(html).toMatch(/<span class="n">2<\/span>Findings/);
-    expect(html).toMatch(/<span class="n">3<\/span>Impression/);
+    expect(html).toContain("<h2 class=\"band\">Findings</h2>");
+    expect(html).toContain("<h2 class=\"band\">Impression</h2>");
+    expect(html).not.toMatch(/<span class="n">\d+<\/span>/);
   });
 
-  test("off — no Technique band; Findings starts at 1; text never prints", () => {
+  test("off — no Technique band; Findings / Impression unnumbered; text never prints", () => {
     const html = buildUsgReportHtml(
       { ...BASE_SETTINGS, usgPrintShowTechnique: false },
       PATIENT,
@@ -125,8 +126,9 @@ describe("technique row toggle", () => {
     );
     expect(html).not.toContain("Technique</h2>");
     expect(html).not.toContain("Routine scan.");
-    expect(html).toMatch(/<span class="n">1<\/span>Findings/);
-    expect(html).toMatch(/<span class="n">2<\/span>Impression/);
+    expect(html).toContain("<h2 class=\"band\">Findings</h2>");
+    expect(html).toContain("<h2 class=\"band\">Impression</h2>");
+    expect(html).not.toMatch(/<span class="n">\d+<\/span>/);
   });
 
   test("blank technique never prints a band even with the toggle on", () => {
@@ -134,14 +136,22 @@ describe("technique row toggle", () => {
     expect(html).not.toContain("Technique</h2>");
   });
 
-  test("PDF honours the toggle — TECHNIQUE absent, FINDINGS numbered 1", async () => {
+  test("PDF honours the toggle — TECHNIQUE absent, FINDINGS unnumbered", async () => {
     const withTech = await pdfText(buildUsgReportPdf({ settings: BASE_SETTINGS, patient: PATIENT, resolved: resolvedReport("Routine scan.") }));
     expect(withTech).toContain(hex("TECHNIQUE"));
     const withoutTech = await pdfText(
       buildUsgReportPdf({ settings: { ...BASE_SETTINGS, usgPrintShowTechnique: false }, patient: PATIENT, resolved: resolvedReport("Routine scan.") }),
     );
     expect(withoutTech).not.toContain(hex("TECHNIQUE"));
-    expect(withoutTech).toContain(hex("1. FINDINGS"));
+    expect(withoutTech).toContain(hex("FINDINGS"));
+    expect(withoutTech).not.toContain(hex("1. FINDINGS"));
+  });
+
+  test("study title is forced center (beats the left-align body kill)", () => {
+    const html = buildUsgReportHtml(BASE_SETTINGS, PATIENT, resolvedReport());
+    expect(html).toContain('id="usg-study-center"');
+    expect(html).toMatch(/\.study,\s*\.study \.name,\s*\.thanks,\s*\.machine\s*\{\s*text-align:\s*center\s*!important/);
+    expect(html).not.toMatch(/Sonologist<\/div>/);
   });
 });
 

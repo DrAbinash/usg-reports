@@ -94,14 +94,16 @@ describe("print embeds the stills grid", () => {
     expect(html.match(/<figure class="img-cell">/g)?.length).toBe(2);
     expect(html).toContain("Longitudinal view");
     expect(html).toContain('alt="USG still"');
-    // Impression band renumbers to 3 (no technique, with images)
-    expect(html).toContain('<span class="n">3</span>Impression');
+    // Section bands stay unnumbered even when images insert between Findings / Impression
+    expect(html).toContain('<h2 class="band">Impression</h2>');
+    expect(html).not.toMatch(/<span class="n">\d+<\/span>/);
   });
 
-  it("no images → no band, Impression stays numbered 2", () => {
+  it("no images → no band; Impression still unnumbered", () => {
     const html = buildUsgReportHtml(SETTINGS, PATIENT, resolvedReport());
     expect(html).not.toContain("USG Images");
-    expect(html).toContain('<span class="n">2</span>Impression');
+    expect(html).toContain('<h2 class="band">Impression</h2>');
+    expect(html).not.toMatch(/<span class="n">\d+<\/span>/);
   });
 
   it("captions are HTML-escaped", () => {

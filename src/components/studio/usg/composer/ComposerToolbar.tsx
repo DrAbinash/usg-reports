@@ -197,6 +197,8 @@ export type ComposerToolbarProps = {
   pathologies: UsgPathologyDef[];
   patientReports: Array<{ id: number; scanDate: string | null; stateJson: string | null; studyKey: string | null; status: string }>;
   togglePathology: (organKey: string, key: string | null) => void;
+  /** Amber banner when the billed procedure has no USG format (ECHO etc.). */
+  billedBanner?: string | null;
 };
 
 function toolbarEqual(a: ComposerToolbarProps, b: ComposerToolbarProps): boolean {
@@ -234,6 +236,7 @@ function toolbarEqual(a: ComposerToolbarProps, b: ComposerToolbarProps): boolean
     a.diffSource === b.diffSource &&
     a.pathologies === b.pathologies &&
     a.patientReports === b.patientReports &&
+    a.billedBanner === b.billedBanner &&
     a.onBack === b.onBack &&
     a.persist === b.persist &&
     a.finalizeFast === b.finalizeFast &&
@@ -372,6 +375,7 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
     onNameChange, patients, patientPhone, setPatientPhone, setPatientAge, studyKey, setStudyKey, setTechnique,
     setPatientSex, showTechnique, setShowTechnique, isPregnancyStudy, lmp, setLmp, lmpInfo, technique,
     restoreSnap, setRestoreSnap, restoreDraft, dKey, diffSource, pathologies, patientReports, togglePathology,
+    billedBanner,
   } = p;
 
   const applyAllNormalMacro = () => {
@@ -464,6 +468,14 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
   return (
     <>
     <div className="shrink-0 border-b border-border bg-card/95 backdrop-blur">
+      {billedBanner ? (
+        <div
+          role="status"
+          className="border-b border-amber-300 bg-amber-50 px-3 py-1.5 text-[11px] font-semibold text-amber-900"
+        >
+          {billedBanner}
+        </div>
+      ) : null}
       {/* Patient/study line lives in the pink CARE header — only demography form stays here when expanded */}
       {!headerCollapsed ? (
         <div className="flex items-center gap-2 border-b border-border/60 px-3 py-1">

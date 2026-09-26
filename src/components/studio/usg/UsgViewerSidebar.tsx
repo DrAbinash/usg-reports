@@ -6,9 +6,9 @@ const TS_OHIF = "https://ohif-viewer.tail7005c0.ts.net";
 type Props = { studyInstanceUid: string | null };
 
 /** Expand modes for the embedded OHIF pane.
- *  - vertical (default): tall diagnostic box (~65% column height, square-ish)
+ *  - vertical (default): tall diagnostic box (~65% column height, portrait/square)
  *  - horizontal: legacy short ribbon (explicit opt-in)
- *  - collapsed: header only / thumbnail bar */
+ *  - collapsed: header only */
 type ExpandMode = "collapsed" | "vertical" | "horizontal";
 
 /** Stacked OHIF viewer above the letterpad preview.
@@ -26,9 +26,11 @@ export function UsgViewerSidebar({ studyInstanceUid }: Props) {
   const src = `${base}/viewer?StudyInstanceUIDs=${encodeURIComponent(studyInstanceUid)}`;
   const open = mode !== "collapsed";
 
+  // Vertical: ~65% of the preview column, width locked to a portrait/square aspect
+  // so the pane cannot collapse into a landscape ribbon. Horizontal: legacy 280px strip.
   const shellClass =
     mode === "vertical"
-      ? "mx-auto flex min-h-[280px] w-full max-w-[min(100%,70vh)] flex-[0_0_65%] flex-col overflow-hidden rounded-lg border border-border bg-white shadow-sm"
+      ? "mx-auto flex aspect-[4/5] w-auto max-w-full min-h-[300px] flex-[0_0_65%] flex-col self-center overflow-hidden rounded-lg border border-border bg-white shadow-sm"
       : mode === "horizontal"
         ? "flex w-full shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-white shadow-sm"
         : "w-full shrink-0 overflow-hidden rounded-lg border border-border bg-white shadow-sm";

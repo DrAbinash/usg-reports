@@ -50,7 +50,7 @@ export const PreviewZone = memo(function PreviewZone({
 }: PreviewZoneProps) {
   return (
     <div
-      className="relative flex h-full min-h-0 flex-col gap-3 overflow-hidden pr-1"
+      className="relative flex h-full min-h-0 flex-col gap-3 overflow-y-auto overflow-x-hidden pr-1"
       onDoubleClick={(e) => {
         e.stopPropagation();
         onResetFocus();
@@ -67,7 +67,7 @@ export const PreviewZone = memo(function PreviewZone({
         />
       )}
       {orderUid && <UsgViewerSidebar studyInstanceUid={orderUid} />}
-      <div className="flex-1 min-h-0 rounded-lg border border-border bg-white shadow-sm overflow-hidden">
+      <div className="min-h-[160px] flex-1 rounded-lg border border-border bg-white shadow-sm overflow-hidden">
         <iframe
           title="USG report preview"
           srcDoc={previewHtml}

@@ -8,6 +8,7 @@ import {
   resolveNormalBootstrapFormat,
   studyKeyForStudyType,
 } from "../src/lib/usg/billedStudyType";
+import { BUILTIN_NP_TEMPLATES } from "../src/lib/usg/npTemplates";
 
 describe("resolveBilledStudyType", () => {
   test("null / blank → null (no billed row → DICOM/manual fallback)", () => {
@@ -27,30 +28,38 @@ describe("resolveBilledStudyType", () => {
     expect(resolveBilledStudyType("OBSTETRIC")).toBe("ob");
   });
 
-  test("ECHO family → unmapped (no USG format)", () => {
-    expect(resolveBilledStudyType("ECHO")).toBe("unmapped");
-    expect(resolveBilledStudyType("2D ECHO")).toBe("unmapped");
-    expect(resolveBilledStudyType("ECHOCARDIOGRAPHY")).toBe("unmapped");
-    expect(resolveBilledStudyType("2D Echo / Colour Doppler")).toBe("unmapped");
+  test("ECHO family → study type echo (seeded Echo template)", () => {
+    expect(resolveBilledStudyType("ECHO")).toBe("echo");
+    expect(resolveBilledStudyType("2D ECHO")).toBe("echo");
+    expect(resolveBilledStudyType("ECHOCARDIOGRAPHY")).toBe("echo");
+    expect(resolveBilledStudyType("2D Echo / Colour Doppler")).toBe("echo");
+    expect(resolveBilledStudyType("CARDIAC")).toBe("echo");
   });
 
-  test("unknown string → unmapped (never whole-abdomen)", () => {
+  test("unknown / non-USG string → unmapped (never whole-abdomen)", () => {
     expect(resolveBilledStudyType("something unknown")).toBe("unmapped");
+    expect(resolveBilledStudyType("TMT")).toBe("unmapped");
     expect(resolveBilledStudyType("CT BRAIN")).toBe("unmapped");
     expect(resolveBilledStudyType("MRI Knee")).toBe("unmapped");
   });
 
-  test("settings override wins over defaults", () => {
+  test("settings override wins over defaults (incl. new echo rows)", () => {
     expect(
       resolveBilledStudyType("ECHO", { ECHO: "whole-abdomen" }),
     ).toBe("whole-abdomen");
+    expect(
+      resolveBilledStudyType("ECHO", { ECHO: "unmapped" }),
+    ).toBe("unmapped");
     expect(
       resolveBilledStudyType("CUSTOM PROC", { "CUSTOM PROC": "kub" }),
     ).toBe("kub");
   });
 
   test("default map exposes the shipped keys", () => {
-    expect(DEFAULT_BILLING_PROCEDURE_MAP.ECHO).toBe("unmapped");
+    expect(DEFAULT_BILLING_PROCEDURE_MAP.ECHO).toBe("echo");
+    expect(DEFAULT_BILLING_PROCEDURE_MAP["2D ECHO"]).toBe("echo");
+    expect(DEFAULT_BILLING_PROCEDURE_MAP.ECHOCARDIOGRAPHY).toBe("echo");
+    expect(DEFAULT_BILLING_PROCEDURE_MAP.CARDIAC).toBe("echo");
     expect(DEFAULT_BILLING_PROCEDURE_MAP["USG WHOLE ABDOMEN"]).toBe("whole-abdomen");
   });
 });
@@ -63,15 +72,36 @@ describe("studyKeyForStudyType + resolveNormalBootstrapFormat", () => {
     expect(studyKeyForStudyType("lower-abdomen", "M")).toBe("la-male");
   });
 
-  test("billed ECHO → unmapped bootstrap (banner, no format)", () => {
-    const boot = resolveNormalBootstrapFormat({
-      billedProcedure: "ECHO",
-      patientSex: "F",
-    });
-    expect(boot.kind).toBe("unmapped");
-    if (boot.kind === "unmapped") {
-      expect(boot.banner).toContain("Billed: ECHO");
-      expect(boot.banner).toContain("no matching USG report format");
+  test("billed ECHO / 2D ECHO / ECHOCARDIOGRAPHY → Echo template, no banner", () => {
+    const echoSeeds = BUILTIN_NP_TEMPLATES.filter((t) => t.studyKey === "echo");
+    expect(echoSeeds).toHaveLength(1);
+    expect(echoSeeds[0]!.name).toBe("Echo (2D Echocardiography)");
+
+    for (const proc of ["ECHO", "2D ECHO", "ECHOCARDIOGRAPHY"]) {
+      const boot = resolveNormalBootstrapFormat({
+        billedProcedure: proc,
+        patientSex: "F",
+      });
+      expect(boot.kind, proc).toBe("mapped");
+      if (boot.kind === "mapped") {
+        expect(boot.studyType).toBe("echo");
+        expect(boot.studyKey).toBe(echoSeeds[0]!.studyKey);
+        expect(boot.npTemplateName).toBe(echoSeeds[0]!.name);
+      }
+    }
+  });
+
+  test("billed TMT / gibberish → unmapped + banner", () => {
+    for (const proc of ["TMT", "xyzzy-not-a-study"]) {
+      const boot = resolveNormalBootstrapFormat({
+        billedProcedure: proc,
+        patientSex: "F",
+      });
+      expect(boot.kind, proc).toBe("unmapped");
+      if (boot.kind === "unmapped") {
+        expect(boot.banner).toContain(`Billed: ${proc}`);
+        expect(boot.banner).toContain("no matching USG report format");
+      }
     }
   });
 

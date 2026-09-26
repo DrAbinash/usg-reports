@@ -137,7 +137,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const billedStudyKey = boot.kind === "mapped" ? boot.studyKey : null;
 
   const studyKey0 = (() => {
-    // Unmapped bill (ECHO etc.) — never fall through to whole-abdomen.
+    // Unmapped bill — never fall through to whole-abdomen.
     if (billedUnmapped) return "";
     // Finalized reports are frozen.
     if (report?.status === "FINALIZED" && report.studyKey && getStudy(report.studyKey)) {

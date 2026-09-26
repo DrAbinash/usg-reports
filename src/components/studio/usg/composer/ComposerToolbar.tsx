@@ -197,7 +197,7 @@ export type ComposerToolbarProps = {
   pathologies: UsgPathologyDef[];
   patientReports: Array<{ id: number; scanDate: string | null; stateJson: string | null; studyKey: string | null; status: string }>;
   togglePathology: (organKey: string, key: string | null) => void;
-  /** Amber banner when the billed procedure has no USG format (ECHO etc.). */
+  /** Amber banner when the billed procedure has no matching USG format. */
   billedBanner?: string | null;
 };
 

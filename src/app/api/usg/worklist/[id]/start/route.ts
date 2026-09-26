@@ -17,8 +17,8 @@ type Ctx = { params: Promise<{ id: string }> };
  * Start a report from a bill-desk order — the typist-less entry point.
  * Creates the DRAFT with every demographic the bill desk already knows
  * (name, age, sex, referral doctor, scan date) plus the study resolved from
- * the billed procedure (source #1). Unmapped bills (e.g. ECHO) open an empty
- * canvas with a banner — Formats library stays fully manual.
+ * the billed procedure (source #1). Unmapped bills open an empty canvas with
+ * a banner — Formats library stays fully manual.
  * Idempotent: a second call opens the SAME draft, never a duplicate.
  *
  * Body `{ rushNormal: true }` (or `?rush=1`): pre-fill measurement-free
@@ -109,7 +109,7 @@ export async function POST(req: Request, ctx: Ctx) {
         ? "CHILD"
         : "F";
 
-  // Unmapped billed procedure (ECHO, cardiology, unknown) — empty canvas, no format.
+  // Unmapped billed procedure (unknown / non-USG) — empty canvas, no format.
   if (boot.kind === "unmapped") {
     const emptyState = { studyKey: "", organs: [], impressionOverride: null };
     const report = await db.usgReport.create({

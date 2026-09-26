@@ -2,8 +2,8 @@
  * orderStudy.ts — bill-desk test name → the studio's own study key.
  *
  * Delegates study-type decisions to `resolveBilledStudyType` (the only place
- * billing may choose a format). Unknown / ECHO bills return null so callers
- * can block auto-bootstrap instead of silently opening Whole Abdomen.
+ * billing may choose a format). Unmapped bills return null so callers can
+ * block auto-bootstrap instead of silently opening Whole Abdomen.
  */
 import { USG_STUDIES } from "./studies";
 import {
@@ -27,7 +27,7 @@ export function isObStudyKey(key: string): boolean {
 /**
  * Guess the studio study for a bill-desk test name.
  * @returns concrete study key, or null when there is no billed string / unmapped
- *   (ECHO, cardiology, unknown) — callers must NOT default to whole-abdomen.
+ *   (unknown / non-USG) — callers must NOT default to whole-abdomen.
  */
 export function guessStudyKey(
   testName: string,

@@ -41,13 +41,29 @@ function bootstrapComposerState(ctx: {
 }
 
 describe("billed study bootstrap integration", () => {
-  test("billed ECHO → NO format applied + banner flag set", () => {
+  test("billed ECHO → Echo format applied, no amber banner", () => {
     const r = bootstrapComposerState({ billedProcedure: "ECHO", patientSex: "M" });
-    expect(r.formatApplied).toBe(false);
-    expect(r.banner).toMatch(/Billed: ECHO/);
-    expect(r.state.studyKey).toBe("");
-    expect(r.state.organs).toEqual([]);
-    expect(getStudy(r.state.studyKey)).toBeUndefined();
+    expect(r.formatApplied).toBe(true);
+    expect(r.banner).toBeNull();
+    expect(r.boot.kind).toBe("mapped");
+    if (r.boot.kind === "mapped") {
+      expect(r.boot.studyType).toBe("echo");
+      expect(r.boot.studyKey).toBe("echo");
+      expect(r.boot.npTemplateName).toBe("Echo (2D Echocardiography)");
+    }
+    expect(r.state.studyKey).toBe("echo");
+    expect(r.state.organs.length).toBeGreaterThan(0);
+    expect(r.state.organs.some((o) => o.organ === "echo-mmode" || o.organ === "echo-valves")).toBe(true);
+    expect(getStudy(r.state.studyKey)?.title).toMatch(/ECHO|ECHOCARDIOGRAPHY/i);
+  });
+
+  test("billed 2D ECHO / ECHOCARDIOGRAPHY → same Echo canvas, banner false", () => {
+    for (const proc of ["2D ECHO", "ECHOCARDIOGRAPHY"]) {
+      const r = bootstrapComposerState({ billedProcedure: proc, patientSex: "F" });
+      expect(r.formatApplied, proc).toBe(true);
+      expect(r.banner, proc).toBeNull();
+      expect(r.state.studyKey, proc).toBe("echo");
+    }
   });
 
   test("billed USG WHOLE ABDOMEN + female → NP Whole Abdomen — Female applied", () => {
@@ -78,11 +94,13 @@ describe("billed study bootstrap integration", () => {
     expect(male.state.studyKey).toBe("wa-male");
   });
 
-  test("never defaults to whole-abdomen when a billed unmapped row exists", () => {
-    for (const proc of ["ECHO", "2D ECHO", "ECHOCARDIOGRAPHY", "CT PNS"]) {
+  test("genuinely unmapped bills → empty canvas + banner (never WA)", () => {
+    for (const proc of ["TMT", "CT PNS", "xyzzy-not-a-study"]) {
       const r = bootstrapComposerState({ billedProcedure: proc, patientSex: "F" });
+      expect(r.state.studyKey, proc).toBe("");
       expect(r.state.studyKey, proc).not.toMatch(/^wa-/);
       expect(r.formatApplied, proc).toBe(false);
+      expect(r.banner, proc).toMatch(/no matching USG report format/);
     }
   });
 });

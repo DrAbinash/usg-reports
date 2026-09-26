@@ -41,8 +41,9 @@ describe("guessStudyKey — bill-desk test names route to the right study", () =
     expect(guessStudyKey("Sonomammography both breasts", "F")).toBe("breast");
     expect(guessStudyKey("USG Scrotum", "M")).toBe("scrotum");
     expect(guessStudyKey("TRUS Prostate", "M")).toBe("trus");
-    // ECHO has no USG letterhead format — unmapped (null), never whole-abdomen.
-    expect(guessStudyKey("2D Echo", "M")).toBeNull();
+    // ECHO maps to the seeded Echo (2D Echocardiography) studyKey.
+    expect(guessStudyKey("2D Echo", "M")).toBe("echo");
+    expect(guessStudyKey("ECHO", "F")).toBe("echo");
     expect(guessStudyKey("Doppler both lower limbs", "M")).toBe("doppler-lower");
     expect(guessStudyKey("USG Cranium (infant)", "F")).toBe("cranium");
   });
@@ -52,6 +53,7 @@ describe("guessStudyKey — bill-desk test names route to the right study", () =
     expect(guessStudyKey("Paediatric abdomen screening", "M", true)).toBe("wa-child");
     expect(guessStudyKey("something unknown", "")).toBeNull();
     expect(guessStudyKey("something unknown", "M")).toBeNull();
+    expect(guessStudyKey("TMT", "M")).toBeNull();
     expect(guessStudyKey("", "F")).toBeNull();
   });
 

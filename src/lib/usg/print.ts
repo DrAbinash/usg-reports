@@ -60,6 +60,8 @@ export type UsgPrintSettings = {
   studioId?: string;
   /** Per-study technique defaults (studyKey → technique text). */
   studyTechniqueDefaults?: Record<string, string>;
+  /** Bill-desk procedure → study-type overrides (`usg_billing_procedure_map`). */
+  usgBillingProcedureMap?: Record<string, string>;
   usgFooterLine: string;
   usgDeclarationLine: string;
   /** "premium" (default) or "classic" (plain B/W letterhead). */
@@ -142,6 +144,7 @@ export function toUsgPrintSettings(s: Record<string, unknown> | UsgPrintSettings
     machineLineByStudio: (r.machineLineByStudio as Record<string, string> | undefined) ?? undefined,
     studioId: str(r.studioId || r.clinicId, "default"),
     studyTechniqueDefaults: (r.studyTechniqueDefaults as Record<string, string> | undefined) ?? undefined,
+    usgBillingProcedureMap: (r.usgBillingProcedureMap as Record<string, string> | undefined) ?? undefined,
     usgFooterLine: str(r.usgFooterLine),
     usgDeclarationLine: str(r.usgDeclarationLine),
     usgPrintStyle: str(r.usgPrintStyle, "premium") || "premium",

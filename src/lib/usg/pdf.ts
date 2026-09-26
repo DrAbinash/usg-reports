@@ -13,6 +13,7 @@
  */
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
 import type { UsgResolved } from "./types";
+import { clinicDisplayName, clinicFooterText } from "./branding";
 import { resolveMachineLine, type UsgPrintSettings, type UsgPrintImage } from "./print";
 
 export type UsgPrintPatient = {
@@ -151,8 +152,8 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
     doc, page: first, y: pageH - margin, fonts, pageW, pageH, margin, contentW, pages: [first],
   };
 
-  // ── Header ────────────────────────────────────────────────────────────
-  const hospital = S(settings.hospitalName || settings.appTitle || "USG Studio");
+  // ── Header (white-label clinic name + optional logo) ──────────────────
+  const hospital = S(clinicDisplayName(settings));
   const nameSize = clampNum(settings.usgNameSizePt, 10, 22, a5 ? 13 : 15);
   const addrSize = clampNum(settings.usgAddressSizePt, 6, 12, a5 ? 6.5 : 8);
   const logoSizeMm = clampNum(settings.usgLogoSizeMm, 8, 30, a5 ? 11 : 14);
@@ -170,7 +171,12 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
   
   // Address pinned to right edge when usgAddressPosition = "right"
   const addrPos = settings.usgAddressPosition ?? "right";
-  const addrLines = [settings.addressLine, settings.phone ? `Ph: ${settings.phone}` : null, settings.email ? `Email: ${settings.email}` : null].filter((x): x is string => !!x);
+  const addrLines = [
+    settings.addressLine,
+    settings.registrationNo?.trim() ? `Reg. No: ${settings.registrationNo.trim()}` : null,
+    settings.phone ? `Ph: ${settings.phone}` : null,
+    settings.email ? `Email: ${settings.email}` : null,
+  ].filter((x): x is string => !!x);
   if (addrLines.length > 0) {
     const addrY = ctx.y - nameSize - 4;
     if (addrPos === "right") {
@@ -414,7 +420,7 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
     p.drawLine({
       start: { x: margin, y: 34 }, end: { x: footerEndX, y: 34 }, thickness: 1, color: NAVY,
     });
-    const footer = S(settings.usgFooterLine || settings.footerMessage);
+    const footer = S(clinicFooterText(settings));
     if (footer) {
       const maxFooterW = footerEndX - margin - (a5 ? 4 : 8);
       // Truncate by approximate glyph width so the text stays left of the QR.
@@ -425,7 +431,7 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
       if (text.length < footer.length) text = `${text.trimEnd()}…`;
       p.drawText(S(text), { x: margin, y: 24, size: a5 ? 6 : 7, font: fonts.reg, color: GREY });
     }
-    const brand = S(settings.appTitle || "CARE USG Studio");
+    const brand = S(clinicDisplayName(settings));
     const bw = fonts.bold.widthOfTextAtSize(brand, a5 ? 6 : 7);
     const brandX = Math.min(
       pageW - margin - bw - (isLast && qrPng ? (a5 ? 30 : 38) : 0),

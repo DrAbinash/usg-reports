@@ -32,6 +32,7 @@
  *   • multi-line findings keep line breaks and print with hanging indents.
  */
 import type { UsgResolved } from "./types";
+import { clinicDisplayName, clinicFooterText } from "./branding";
 
 export type UsgPrintImage = { dataUrl: string; caption?: string };
 
@@ -46,6 +47,8 @@ export type UsgPrintSettings = {
   email: string;
   logoUrl: string;
   footerMessage: string;
+  /** Clinic / centre registration number (letterhead). */
+  registrationNo?: string;
   usgDoctorName: string;
   usgDoctorQual: string;
   usgDoctorRegNo: string;
@@ -130,6 +133,7 @@ export function toUsgPrintSettings(s: Record<string, unknown> | UsgPrintSettings
     email: str(r.email),
     logoUrl: str(r.logoUrl),
     footerMessage: str(r.footerMessage),
+    registrationNo: str(r.registrationNo),
     usgDoctorName: str(r.usgDoctorName),
     usgDoctorQual: str(r.usgDoctorQual),
     usgDoctorRegNo: str(r.usgDoctorRegNo),
@@ -761,7 +765,7 @@ export function buildUsgReportHtml(
 
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8" />
-<title>${esc(settings.hospitalName || settings.appTitle)} — ${esc(patient.name)} — ${esc(resolved.title)}</title>
+<title>${esc(clinicDisplayName(settings))} — ${esc(patient.name)} — ${esc(resolved.title)}</title>
 <style>${css}
 /* Flow layout for signature / PC-PNDT / footer — never pin to page-1 bottom
    so long reports push the tail cleanly onto page 2 as one unit. */
@@ -788,8 +792,8 @@ ${watermark}
   <div class="masthead">
     ${logo}
     <div>
-      <div class="hospital">${esc(settings.hospitalName || settings.appTitle)}</div>
-      <div class="addr">${esc(settings.addressLine)}${settings.phone ? ` &nbsp;·&nbsp; ${esc(settings.phone)}` : ""}${settings.email ? ` &nbsp;·&nbsp; ${esc(settings.email)}` : ""}</div>
+      <div class="hospital">${esc(clinicDisplayName(settings))}</div>
+      <div class="addr">${esc(settings.addressLine)}${settings.registrationNo?.trim() ? ` &nbsp;·&nbsp; Reg. No: ${esc(settings.registrationNo.trim())}` : ""}${settings.phone ? ` &nbsp;·&nbsp; ${esc(settings.phone)}` : ""}${settings.email ? ` &nbsp;·&nbsp; ${esc(settings.email)}` : ""}</div>
     </div>
   </div>
   ${provisionalTag}
@@ -841,9 +845,9 @@ ${watermark}
   ${declaration}
 
   <div class="footer">
-    <span>${esc(settings.usgFooterLine || settings.footerMessage)}</span>
+    <span>${esc(clinicFooterText(settings))}</span>
     ${qr ? `<span class="qr-wrap"><img class="qr" src="${esc(qr.dataUrl)}" alt="verification QR" /><span class="qr-cap">scan to verify</span></span>` : ""}
-    <span>${esc(settings.appTitle)}</span>
+    <span>${esc(clinicDisplayName(settings))}</span>
   </div>
   </div>
 </div>
@@ -1183,7 +1187,9 @@ function buildSidebarReportHtml(
   // Footer
   const serialNo = patient.serial ?? "";
   const qrHtml = qr?.dataUrl ? `<div class="qr"><img src="${esc(qr.dataUrl)}" alt="QR" style="height:12mm;width:auto;" /></div>` : "";
-  const footerMsg = settings.usgFooterLine?.trim() ? esc(settings.usgFooterLine) : "Kindly correlate with clinico-pathological findings.";
+  const footerMsg = clinicFooterText(settings)
+    ? esc(clinicFooterText(settings))
+    : "Kindly correlate with clinico-pathological findings.";
 
   const watermark = provisional ? `<div class="watermark">PROVISIONAL</div>` : "";
   const provisionalTag = provisional ? `<div class="provisional-tag">Provisional — not final</div>` : "";
@@ -1212,8 +1218,9 @@ ${PRINT_CSS}</head><body>
     <div class="logo-block">
       ${logo}
       <div>
-        ${settings.hospitalName?.trim() ? `<div class="hospital-name">${esc(settings.hospitalName)}</div>` : ""}
-        ${settings.appTitle && settings.appTitle !== "CARE USG Studio" ? `<div class="tagline">${esc(settings.appTitle)}</div>` : ""}
+        <div class="hospital-name">${esc(clinicDisplayName(settings))}</div>
+        ${settings.appTitle?.trim() && settings.appTitle.trim() !== clinicDisplayName(settings) ? `<div class="tagline">${esc(settings.appTitle.trim())}</div>` : ""}
+        ${settings.registrationNo?.trim() ? `<div class="tagline">Reg. No: ${esc(settings.registrationNo.trim())}</div>` : ""}
       </div>
     </div>
     <div class="contact-block">${addrHtml}${settings.phone ? `<div class="line">📞 ${esc(settings.phone)}</div>` : ""}${settings.email ? `<div class="line">✉ ${esc(settings.email)}</div>` : ""}</div>

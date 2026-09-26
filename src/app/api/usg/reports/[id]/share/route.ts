@@ -71,7 +71,7 @@ export async function POST(req: Request, ctx: Ctx) {
     shareUrl,
     patientPhone,
     doctorPhone,
-    hospitalName: settings.hospitalName || "CARE Diagnostics",
+    hospitalName: settings.hospitalName || settings.appTitle || "USG Studio",
   });
 
   return Response.json({

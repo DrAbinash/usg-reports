@@ -31,9 +31,9 @@ export function OnboardingLayer() {
 
   const items = settings ? [
     { label: "Sonologist name + registration", done: !!(settings.usgDoctorName && settings.usgDoctorRegNo), hint: "Settings → USG Studio" },
-    { label: "Hospital logo uploaded", done: !!settings.logoUrl, hint: "Settings → Hospital" },
+    { label: "Clinic logo uploaded", done: !!settings.logoUrl, hint: "Settings → Clinic Branding" },
     { label: "Scanned signature uploaded", done: !!settings.usgSignatureUrl, hint: "Settings → USG Studio" },
-    { label: "Letterhead address + phone", done: !!(settings.addressLine && settings.phone), hint: "Settings → Hospital" },
+    { label: "Letterhead address + phone", done: !!(settings.addressLine && settings.phone), hint: "Settings → Clinic Branding" },
   ] : [];
   const done = items.filter(i => i.done).length;
 

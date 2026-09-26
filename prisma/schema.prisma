@@ -64,6 +64,7 @@ model HospitalSettings {
   clinicId        String   @default("default")
 
   // Header / identity — the letterhead on every printed report
+  // White-label: hospitalName = clinic name on reports; appTitle = UI product name.
   appTitle        String   @default("CARE USG Studio")
   hospitalName    String   @default("")
   addressLine     String   @default("")
@@ -71,6 +72,8 @@ model HospitalSettings {
   email           String   @default("")
   footerMessage   String   @default("")
   logoUrl         String   @default("")
+  // Clinic / centre registration (letterhead) — not the sonologist Reg. No.
+  registrationNo  String   @default("")
 
   // Security
   pinHash         String?

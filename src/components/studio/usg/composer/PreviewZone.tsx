@@ -1,7 +1,8 @@
 "use client";
 /**
- * Preview column — letterhead iframe + optional OHIF sidebar + focusMode
- * click-catcher overlay (enlarge-on-click; removed once focused).
+ * Preview column — OHIF viewer (tall vertical by default) stacked above the
+ * letterhead iframe, plus focusMode click-catcher (enlarge-on-click; removed
+ * once focused). Composer/report preview always stays below the viewer.
  */
 import { memo } from "react";
 import { UsgViewerSidebar } from "../UsgViewerSidebar";
@@ -49,7 +50,7 @@ export const PreviewZone = memo(function PreviewZone({
 }: PreviewZoneProps) {
   return (
     <div
-      className="relative flex min-h-0 flex-col gap-3 overflow-hidden pr-1"
+      className="relative flex h-full min-h-0 flex-col gap-3 overflow-hidden pr-1"
       onDoubleClick={(e) => {
         e.stopPropagation();
         onResetFocus();

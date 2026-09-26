@@ -1,14 +1,13 @@
 "use client";
 /**
- * Embedded OHIF — CARE EmbeddedWadoViewer enlarge model, adapted to USG Studio:
- *   1. Column vertical (split / Viewer+) — grows inside the preview column
- *   2. Fullscreen overlay — fixed viewport cover (iframe kept mounted)
+ * Embedded OHIF — CARE enlarge model adapted to USG Studio:
+ *   1. Column vertical (split / Viewer+ / letterpad) — mutual resize with letterpad
+ *   2. Fullscreen overlay
  *   3. Open in new tab
  *
- * Layout modes mirror CARE Report / OHIF / Viewer+ (not a 1:1 port — we stack
- * OHIF above the letterpad instead of a third horizontal resizable pane).
+ * Click / iframe-focus → parent promotes Viewer+; letterpad click shrinks us.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Columns2, Maximize2, Minimize2, Monitor, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -20,9 +19,10 @@ import {
 
 type Props = {
   studyInstanceUid: string | null;
-  /** CARE-like layout mode for the preview column. */
   layout?: OhifLayoutMode;
   onLayoutChange?: (mode: OhifLayoutMode) => void;
+  /** Fired when user engages the OHIF pane (chrome click or iframe focus). */
+  onActivate?: () => void;
 };
 
 const LAYOUT_STORAGE = "care-usg-ohif-layout";
@@ -31,12 +31,14 @@ export function UsgViewerSidebar({
   studyInstanceUid,
   layout: layoutProp,
   onLayoutChange,
+  onActivate,
 }: Props) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const [route, setRoute] = useState<OhifRoute>("auto");
   const [localLayout, setLocalLayout] = useState<OhifLayoutMode>(() => {
     try {
       const v = sessionStorage.getItem(LAYOUT_STORAGE);
-      if (v === "report" || v === "split" || v === "viewerPlus") return v;
+      if (v === "report" || v === "split" || v === "viewerPlus" || v === "letterpad") return v;
     } catch {
       /* ignore */
     }
@@ -64,23 +66,35 @@ export function UsgViewerSidebar({
     return () => window.removeEventListener("keydown", onKey);
   }, [fullscreen]);
 
+  // CARE pattern: clicks inside the OHIF iframe do not bubble — detect via blur.
+  useEffect(() => {
+    const onBlur = () => {
+      requestAnimationFrame(() => {
+        const ae = document.activeElement;
+        if (ae instanceof HTMLIFrameElement && ae.dataset.testid === "ohif-embed") {
+          onActivate?.();
+        }
+      });
+    };
+    window.addEventListener("blur", onBlur);
+    return () => window.removeEventListener("blur", onBlur);
+  }, [onActivate]);
+
   if (!studyInstanceUid) return null;
 
   const src = ohifViewerUrl(studyInstanceUid, route);
   const routeLabel = ohifRouteLabel(route);
   const reportFocus = layout === "report" && !fullscreen;
 
-  // Viewport share inside the preview column (CARE column vertical enlarge):
-  //   Viewer+ → ~90% column height (letterpad strip only)
-  //   split   → ~62% column height
-  // Workspace WIDTH bias is applied by UsgComposer grid (≈65% in Viewer+).
+  // Height share vs letterpad (click either side to bias the other down).
   const shellClass = fullscreen
     ? "fixed inset-0 z-[60] flex flex-col bg-black shadow-2xl"
     : cn(
-        "flex w-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-black shadow-sm",
+        "flex w-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-black shadow-sm transition-[flex-basis,flex-grow] duration-200",
         reportFocus && "hidden",
         !reportFocus && layout === "viewerPlus" && "min-h-0 flex-[1_1_90%]",
-        !reportFocus && layout === "split" && "min-h-[240px] flex-[1_1_62%]",
+        !reportFocus && layout === "split" && "min-h-[240px] flex-[1_1_58%]",
+        !reportFocus && layout === "letterpad" && "min-h-[120px] max-h-[28%] flex-[0_0_22%]",
       );
 
   return (
@@ -97,7 +111,11 @@ export function UsgViewerSidebar({
         </button>
       ) : null}
 
-      <div className={shellClass} data-testid="embedded-ohif-shell">
+      <div
+        className={shellClass}
+        data-testid="embedded-ohif-shell"
+        onPointerDownCapture={() => onActivate?.()}
+      >
         <div className="flex shrink-0 items-center gap-1 border-b border-white/10 bg-slate-900 px-2 py-1 text-[10px] text-white">
           <span className="font-bold text-sky-300">DICOM</span>
           <span className="rounded bg-sky-500/20 px-1.5 py-0.5 font-semibold text-sky-200">{routeLabel}</span>
@@ -108,9 +126,9 @@ export function UsgViewerSidebar({
           >
             {(
               [
-                { mode: "report" as const, label: "Report", Icon: Minimize2, title: "Report focus — hide viewer" },
-                { mode: "split" as const, label: "OHIF", Icon: Columns2, title: "OHIF + letterpad stack" },
-                { mode: "viewerPlus" as const, label: "Viewer+", Icon: Monitor, title: "Larger embedded OHIF (column vertical)" },
+                { mode: "report" as const, label: "Report", Icon: Minimize2, title: "Hide viewer — writing focus" },
+                { mode: "split" as const, label: "Split", Icon: Columns2, title: "Balanced OHIF + letterpad" },
+                { mode: "viewerPlus" as const, label: "OHIF+", Icon: Monitor, title: "Enlarge OHIF (shrink letterpad)" },
               ] as const
             ).map(({ mode, label, Icon, title }) => (
               <button
@@ -118,7 +136,8 @@ export function UsgViewerSidebar({
                 type="button"
                 title={title}
                 aria-pressed={layout === mode && !fullscreen}
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   setFullscreen(false);
                   setLayout(mode);
                 }}
@@ -140,7 +159,10 @@ export function UsgViewerSidebar({
               <button
                 key={r}
                 type="button"
-                onClick={() => setRoute(r)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRoute(r);
+                }}
                 className={cn(
                   "rounded px-1.5 py-0.5 text-[9px] font-semibold",
                   route === r ? "bg-sky-500 text-white" : "bg-white/10 text-white/70 hover:bg-white/20",
@@ -153,6 +175,7 @@ export function UsgViewerSidebar({
               href={src}
               target="_blank"
               rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
               className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-semibold text-white/80 hover:bg-white/20"
               title="Open in new tab"
             >
@@ -160,7 +183,10 @@ export function UsgViewerSidebar({
             </a>
             <button
               type="button"
-              onClick={() => setFullscreen((v) => !v)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setFullscreen((v) => !v);
+              }}
               className={cn(
                 "rounded px-1.5 py-0.5 text-[9px] font-semibold hover:bg-white/20",
                 fullscreen ? "bg-amber-500 text-white" : "bg-white/10 text-white/80",
@@ -173,7 +199,9 @@ export function UsgViewerSidebar({
         </div>
 
         <iframe
+          ref={iframeRef}
           title="OHIF DICOM viewer"
+          data-testid="ohif-embed"
           src={src}
           className="block h-full min-h-0 w-full flex-1 border-0 bg-black"
           style={{ height: "100%" }}

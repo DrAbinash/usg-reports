@@ -173,8 +173,8 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const [headerCollapsed, setHeaderCollapsed] = useState(
     !!(report || order || prefill?.patientName),
   );
-  /** CARE-like pane bias: viewerPlus ≈ 65% viewport, report ≈ composer-heavy. */
-  const [ohifLayout, setOhifLayout] = useState<"report" | "split" | "viewerPlus">("split");
+  /** CARE-like pane bias: viewerPlus / letterpad swap height; report = writing. */
+  const [ohifLayout, setOhifLayout] = useState<"report" | "split" | "viewerPlus" | "letterpad">("split");
   const [focusMode, setFocusMode] = useState<"workspace" | "preview" | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -589,16 +589,16 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     setOhifLayout("report");
     setFocusMode("workspace");
   }, []);
-  const onOhifLayoutChange = useCallback((mode: "report" | "split" | "viewerPlus") => {
+  const onOhifLayoutChange = useCallback((mode: "report" | "split" | "viewerPlus" | "letterpad") => {
     setOhifLayout(mode);
-    // Match CARE resolveViewerReportPcts: Viewer+ widens the image column;
-    // Report focus hands width back to the clinical editor.
+    // Viewer+ widens image column; letterpad keeps preview col but shrinks OHIF height;
+    // Report hands width to the clinical editor.
     if (mode === "viewerPlus") setFocusMode("preview");
     else if (mode === "report") setFocusMode("workspace");
     else setFocusMode(null);
   }, []);
 
-  // CARE split≈32/65 viewer/report · viewerFocus≈65/32 — mapped to our 2-col grid.
+  // CARE split≈32/65 · viewerFocus≈65/32 — letterpad focus keeps ~half width (height swap only).
   const workspaceGridClass =
     ohifLayout === "viewerPlus" || focusMode === "preview"
       ? "lg:grid-cols-[minmax(0,2fr)_minmax(260px,1fr)] xl:grid-cols-[minmax(0,2.2fr)_minmax(280px,1fr)]"
@@ -700,7 +700,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
           onOhifLayoutChange={onOhifLayoutChange}
         />
 
-        <div className="studio-scroll min-h-0 space-y-3 overflow-y-auto pr-1 cursor-pointer" onClick={(e) => { e.stopPropagation(); onWorkspaceFocus(); }} onDoubleClick={(e) => { e.stopPropagation(); onResetFocus(); setOhifLayout("split"); }} title="Click to focus report writing · Double-click to restore OHIF split">
+        <div className="studio-scroll min-h-0 space-y-3 overflow-y-auto pr-1 cursor-pointer" onClick={(e) => { e.stopPropagation(); onWorkspaceFocus(); }} onDoubleClick={(e) => { e.stopPropagation(); onResetFocus(); setOhifLayout("split"); }} title="Click to focus writing (hides OHIF) · Double-click to restore split">
           <div className="space-y-3">
             {study.organs.map((def, organIdx) => {
               const st = state.organs.find((o) => o.organ === def.key);

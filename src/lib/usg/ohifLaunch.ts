@@ -8,8 +8,11 @@ export const TS_OHIF_BASE = "https://ohif-viewer.tail7005c0.ts.net";
 
 export type OhifRoute = "auto" | "lan" | "tailscale";
 
-/** Preview-column layout — CARE reportFocus / split / viewerFocus, adapted to stacked USG. */
-export type OhifLayoutMode = "report" | "split" | "viewerPlus";
+/**
+ * Preview-column layout — CARE reportFocus / split / viewerFocus, plus
+ * letterpad focus (click letterpad → OHIF shrinks; click OHIF → letterpad shrinks).
+ */
+export type OhifLayoutMode = "report" | "split" | "viewerPlus" | "letterpad";
 
 export function resolveOhifBase(route: OhifRoute): string {
   if (route === "lan") return LAN_OHIF_BASE;

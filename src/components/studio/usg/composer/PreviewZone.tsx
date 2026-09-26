@@ -1,9 +1,9 @@
 "use client";
 /**
- * Preview column — OHIF (CARE-like Report / OHIF / Viewer+ / fullscreen) stacked
- * above the letterhead iframe. No click-catcher overlay (that blocked OHIF).
+ * Preview column — OHIF stacked above letterpad with mutual click-focus:
+ * click letterpad → OHIF shrinks; click/focus OHIF → letterpad shrinks.
  */
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import { UsgViewerSidebar } from "../UsgViewerSidebar";
 import type { ImageRow, PendingImage } from "../UsgImagesCard";
 import { toast } from "sonner";
@@ -12,6 +12,7 @@ import { formatUsgSerial } from "@/lib/usg/print";
 import { isCleanRushFinalize } from "@/lib/usg/quickActions";
 import type { UsgComposerState } from "@/lib/usg/types";
 import type { OhifLayoutMode } from "@/lib/usg/ohifLaunch";
+import { cn } from "@/lib/utils";
 import { UsgDicomPicker } from "../UsgDicomPicker";
 import { UsgFormFDialog, type FormFOrderLite } from "../UsgFormFDialog";
 import { UsgPathologyDialog } from "../UsgPathologyDialog";
@@ -27,7 +28,7 @@ export type PreviewZoneProps = {
   focusMode: "workspace" | "preview" | null;
   previewHtml: string;
   orderUid: string | null;
-  /** Controlled CARE-like layout (Report / OHIF / Viewer+). */
+  /** Controlled CARE-like layout (Report / Split / Viewer+ / letterpad). */
   ohifLayout?: OhifLayoutMode;
   onEnlarge: () => void;
   onResetFocus: () => void;
@@ -65,33 +66,84 @@ export const PreviewZone = memo(function PreviewZone({
     [onOhifLayoutChange],
   );
 
-  // Column-height share (CARE columnExpanded): Viewer+ ≈ 90% OHIF; split ≈ 62%.
-  const letterpadClass =
+  const focusOhif = useCallback(() => {
+    if (layout === "viewerPlus") return;
+    handleLayout("viewerPlus");
+  }, [handleLayout, layout]);
+
+  const focusLetterpad = useCallback(() => {
+    if (!orderUid) return;
+    if (layout === "letterpad") return;
+    handleLayout("letterpad");
+  }, [handleLayout, layout, orderUid]);
+
+  // Letterpad iframe clicks also don't bubble — same CARE blur trick.
+  useEffect(() => {
+    if (!orderUid) return;
+    const onBlur = () => {
+      requestAnimationFrame(() => {
+        const ae = document.activeElement;
+        if (ae instanceof HTMLIFrameElement && ae.dataset.testid === "letterpad-preview") {
+          focusLetterpad();
+        }
+      });
+    };
+    window.addEventListener("blur", onBlur);
+    return () => window.removeEventListener("blur", onBlur);
+  }, [orderUid, focusLetterpad]);
+
+  const letterpadClass = cn(
+    "min-h-0 overflow-auto rounded-lg border bg-slate-100 shadow-sm transition-[flex-basis,flex-grow,max-height] duration-200",
     !orderUid || layout === "report"
-      ? "min-h-0 flex-1 overflow-auto rounded-lg border border-border bg-slate-100 shadow-sm"
+      ? "flex-1 border-border"
       : layout === "viewerPlus"
-        ? "min-h-0 flex-[0_0_10%] max-h-[120px] overflow-auto rounded-lg border border-border bg-slate-100 shadow-sm"
-        : "min-h-0 flex-[0_0_38%] overflow-auto rounded-lg border border-border bg-slate-100 shadow-sm";
+        ? "max-h-[120px] flex-[0_0_10%] border-border"
+        : layout === "letterpad"
+          ? "flex-1 border-sky-300 ring-1 ring-sky-200"
+          : "flex-[0_0_40%] border-border",
+  );
 
   return (
     <div
       className="relative flex h-full min-h-0 flex-col gap-1.5 overflow-hidden pr-1"
       data-ohif-layout={layout}
       data-focus-mode={focusMode ?? "default"}
+      title="Click OHIF to enlarge images · Click letterpad to enlarge print preview · Double-click to balance"
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        if (orderUid) handleLayout("split");
+      }}
     >
       {orderUid ? (
         <UsgViewerSidebar
           studyInstanceUid={orderUid}
           layout={layout}
           onLayoutChange={handleLayout}
+          onActivate={focusOhif}
         />
       ) : null}
-      <div className={letterpadClass}>
+      <div
+        className={letterpadClass}
+        data-testid="letterpad-pane"
+        onPointerDownCapture={focusLetterpad}
+      >
+        <div className="sticky top-0 z-[1] flex items-center justify-between border-b border-border/70 bg-slate-100/95 px-2 py-0.5 text-[10px] font-semibold text-slate-600 backdrop-blur">
+          <span>Letterpad preview</span>
+          {orderUid && layout === "letterpad" ? (
+            <span className="text-sky-700">OHIF shrunk — click DICOM to enlarge</span>
+          ) : orderUid && layout === "viewerPlus" ? (
+            <span className="text-slate-500">Click here to enlarge letterpad</span>
+          ) : null}
+        </div>
         <iframe
           title="USG report preview"
+          data-testid="letterpad-preview"
           srcDoc={previewHtml}
           className="block w-full border-0 bg-white"
-          style={{ minHeight: "100%", height: layout === "viewerPlus" ? "100%" : "1120px" }}
+          style={{
+            minHeight: "100%",
+            height: layout === "viewerPlus" ? "100%" : "1120px",
+          }}
           sandbox="allow-same-origin"
         />
       </div>

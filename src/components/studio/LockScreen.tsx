@@ -278,7 +278,7 @@ export function SetupScreen({ onDone }: { onDone: () => void }) {
       <style>{KEYFRAME_STYLE}</style>
       <LoginBackdrop theme={theme} bgUrl={branding.bgUrl} />
       <LockCard>
-        <StudioMark accent={theme.accent} title={branding.appTitle || "CARE USG Studio"} subtitle={branding.hospitalName || "Sonography · CARE Diagnostics"} />
+        <StudioMark accent={theme.accent} title={branding.appTitle || branding.hospitalName || "USG Studio"} subtitle={branding.hospitalName ? `Sonography · ${branding.hospitalName}` : "Sonography reporting"} />
         <div className="mt-6 flex items-center gap-2">
           <ShieldCheck className="h-4 w-4" style={{ color: theme.soft }} />
           <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">Welcome — set your PIN</span>
@@ -346,7 +346,7 @@ export function LockScreen({ onUnlock }: { onUnlock: () => void }) {
       <style>{KEYFRAME_STYLE}</style>
       <LoginBackdrop theme={theme} bgUrl={branding.bgUrl} />
       <LockCard>
-        <StudioMark accent={theme.accent} title={branding.appTitle || "CARE USG Studio"} subtitle={branding.hospitalName || "Sonography · CARE Diagnostics"} />
+        <StudioMark accent={theme.accent} title={branding.appTitle || branding.hospitalName || "USG Studio"} subtitle={branding.hospitalName ? `Sonography · ${branding.hospitalName}` : "Sonography reporting"} />
 
         <div className="mt-6 flex items-center gap-2">
           <HeartPulse className="h-4 w-4" style={{ color: theme.soft }} />

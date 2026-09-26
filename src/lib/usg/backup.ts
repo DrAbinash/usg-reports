@@ -17,6 +17,7 @@ export const BACKUP_SETTINGS_KEYS = [
   "email",
   "footerMessage",
   "logoUrl",
+  "registrationNo",
   "usgDoctorName",
   "usgDoctorQual",
   "usgDoctorRegNo",

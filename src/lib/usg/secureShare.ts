@@ -99,7 +99,7 @@ export function normalizeWaPhone(phone: string | null | undefined): string | nul
 
 export function buildShareMessage(
   shareUrl: string,
-  hospitalName = "CARE Diagnostics",
+  hospitalName = "USG Studio",
 ): string {
   return `Your Ultrasound Report from ${hospitalName} is ready. View securely here: ${shareUrl}. Valid for 7 days.`;
 }

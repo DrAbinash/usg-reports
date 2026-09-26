@@ -1,7 +1,7 @@
 "use client";
 /** App shell: brand + top nav + optional composer patient strip (no left sidebar). */
 import { useEffect, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useStudio } from "@/lib/store";
 import { SettingsView } from "./SettingsView";
 import { UsgStudioView } from "./usg/UsgStudioView";
@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import type { View } from "@/lib/store";
+import { clinicDisplayName, studioProductTitle } from "@/lib/usg/branding";
 
 const NAV: { id: View; label: string; icon: typeof Waves }[] = [
   { id: "worklist", label: "Worklist", icon: ClipboardList },
@@ -40,6 +41,19 @@ export function AppShell() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const composing = !!composerStrip;
+
+  const { data: branding } = useQuery({
+    queryKey: ["settings", "branding"],
+    queryFn: async () => {
+      const res = await fetch("/api/settings");
+      if (!res.ok) throw new Error("settings");
+      const d = await res.json();
+      return (d?.settings ?? d ?? {}) as { hospitalName?: string; appTitle?: string };
+    },
+    staleTime: 60_000,
+  });
+  const brandTitle = studioProductTitle(branding ?? {});
+  const brandClinic = clinicDisplayName(branding ?? {});
 
   useEffect(() => {
     void queryClient.prefetchQuery({
@@ -84,8 +98,12 @@ export function AppShell() {
           </div>
           {!composing ? (
             <div className="leading-tight">
-              <div className="text-[12px] font-bold tracking-tight">CARE USG Studio</div>
-              <div className="hidden text-[9px] text-faint sm:block">Sonography reporting</div>
+              <div className="max-w-[14rem] truncate text-[12px] font-bold tracking-tight" title={brandTitle}>
+                {brandTitle}
+              </div>
+              <div className="hidden max-w-[14rem] truncate text-[9px] text-faint sm:block" title={brandClinic}>
+                {brandClinic !== brandTitle ? brandClinic : "Sonography reporting"}
+              </div>
             </div>
           ) : null}
         </div>

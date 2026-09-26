@@ -33,7 +33,7 @@ export async function shareReportPdf(
 
   const filename = `${target.serial ? `${target.serial}-` : ""}${target.patientName.replace(/[^a-z0-9]+/gi, "-").slice(0, 30)}.pdf`;
   const file = new File([blob], filename, { type: "application/pdf" });
-  const message = `USG report${target.serial ? ` ${target.serial}` : ""} for ${target.patientName}${target.date ? ` (${target.date})` : ""} — from CARE USG Studio.`;
+  const message = `USG report${target.serial ? ` ${target.serial}` : ""} for ${target.patientName}${target.date ? ` (${target.date})` : ""} — from USG Studio.`;
 
   const nav = navigator as ShareNav;
   if (nav.canShare?.({ files: [file] }) && nav.share) {

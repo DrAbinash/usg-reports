@@ -90,7 +90,7 @@ export default async function ShareReportPage({ params }: PageProps) {
   }
 
   const pdfHref = `/api/usg/share/${encodeURIComponent(token)}/pdf`;
-  const hospital = settings.hospitalName || "CARE Diagnostics";
+  const hospital = settings.hospitalName || settings.appTitle || "USG Studio";
   const serial =
     report.serialNo != null ? formatUsgSerial(report.serialNo) : report.id.slice(0, 8);
 

@@ -17,7 +17,7 @@ import { UsgClinicsAdmin } from "./usg/UsgClinicsAdmin";
 
 type Settings = {
   appTitle: string; hospitalName: string; addressLine: string; phone: string; email: string;
-  footerMessage: string; logoUrl: string;
+  footerMessage: string; logoUrl: string; registrationNo?: string;
   loginTheme: string; loginBgUrl: string;
   pinSet: boolean;
   usgDoctorName: string; usgDoctorQual: string; usgDoctorRegNo: string;
@@ -397,7 +397,7 @@ export function SettingsView() {
       <Tabs defaultValue="appearance">
         <TabsList className="bg-panel">
           <TabsTrigger value="appearance" className="text-[12px]"><Palette className="mr-1.5 h-3.5 w-3.5" />Appearance</TabsTrigger>
-          <TabsTrigger value="hospital" className="text-[12px]"><Building2 className="mr-1.5 h-3.5 w-3.5" />Hospital</TabsTrigger>
+          <TabsTrigger value="hospital" className="text-[12px]"><Building2 className="mr-1.5 h-3.5 w-3.5" />Clinic Branding</TabsTrigger>
           <TabsTrigger value="usg" className="text-[12px]"><Waves className="mr-1.5 h-3.5 w-3.5" />USG Studio</TabsTrigger>
           <TabsTrigger value="integrations" className="text-[12px]"><Link2 className="mr-1.5 h-3.5 w-3.5" />Integrations</TabsTrigger>
           <TabsTrigger value="security" className="text-[12px]"><ShieldCheck className="mr-1.5 h-3.5 w-3.5" />Security</TabsTrigger>
@@ -480,14 +480,29 @@ export function SettingsView() {
         </TabsContent>
 
         <TabsContent value="hospital" className="mt-4 space-y-4 rounded-xl border border-border bg-card p-5">
-          <Field label="App title"><Input value={s.appTitle} onChange={(e) => set("appTitle", e.target.value)} className="h-9 text-[13px]" /></Field>
-          <Field label="Hospital name"><Input value={s.hospitalName} onChange={(e) => set("hospitalName", e.target.value)} className="h-9 text-[13px]" /></Field>
-          <Field label="Address (one line per row — prints exactly as entered)"><textarea value={s.addressLine} onChange={(e) => set("addressLine", e.target.value)} rows={3} className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-[13px] shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" /></Field>
+          <div className="rounded-lg border border-sky-200 bg-sky-50/80 px-3 py-2 text-[12px] text-sky-900">
+            <p className="font-bold">Clinic Branding (white-label)</p>
+            <p className="mt-0.5 text-[11px] leading-relaxed text-sky-800/90">
+              These details appear on every printed / PDF report and in the studio header. Use your own clinic name — nothing CARE-branded is required.
+            </p>
+          </div>
+          <Field label="Clinic name" hint="Printed large on the letterhead (e.g. Deoghar Ultrasound Centre).">
+            <Input value={s.hospitalName} onChange={(e) => set("hospitalName", e.target.value)} placeholder="Your clinic name" className="h-9 text-[13px]" />
+          </Field>
+          <Field label="Product title (UI)" hint="Short name in the app header / login (optional — defaults to clinic name).">
+            <Input value={s.appTitle} onChange={(e) => set("appTitle", e.target.value)} placeholder="USG Studio" className="h-9 text-[13px]" />
+          </Field>
+          <Field label="Address" hint="One line per row — prints exactly as entered on the letterhead.">
+            <textarea value={s.addressLine} onChange={(e) => set("addressLine", e.target.value)} rows={3} className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-[13px] shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
+          </Field>
+          <Field label="Clinic registration no." hint="Centre / clinic registration printed on the letterhead (not the sonologist’s Reg. No.).">
+            <Input value={s.registrationNo ?? ""} onChange={(e) => set("registrationNo", e.target.value)} placeholder="e.g. 34/2020" className="h-9 text-[13px]" />
+          </Field>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Phone"><Input value={s.phone} onChange={(e) => set("phone", e.target.value)} className="h-9 text-[13px]" /></Field>
             <Field label="Email"><Input value={s.email} onChange={(e) => set("email", e.target.value)} className="h-9 text-[13px]" /></Field>
           </div>
-          <Field label="Letter-pad logo" hint="Printed top-left on every report letterhead. Upload the clinic's logo file (PNG / JPG / WebP) — it is stored inside the studio, no hosting needed — or paste a URL.">
+          <Field label="Clinic logo" hint="Printed on every report letterhead. Upload PNG / JPG / WebP (stored in the studio) or paste a URL.">
             <div className="flex items-center gap-2">
               <Input value={s.logoUrl} onChange={(e) => set("logoUrl", e.target.value)} placeholder="https://… or upload →" className="h-9 text-[13px]" />
               <input
@@ -506,8 +521,10 @@ export function SettingsView() {
               ) : null}
             </div>
           </Field>
-          <Field label="Footer message"><Input value={s.footerMessage} onChange={(e) => set("footerMessage", e.target.value)} className="h-9 text-[13px]" /></Field>
-          <Button onClick={save} className="h-9 text-[12.5px]">Save</Button>
+          <Field label="Footer text" hint="Printed at the bottom of each report (e.g. Kindly correlate clinically.).">
+            <Input value={s.footerMessage} onChange={(e) => set("footerMessage", e.target.value)} className="h-9 text-[13px]" />
+          </Field>
+          <Button onClick={save} className="h-9 text-[12.5px]">Save clinic branding</Button>
         </TabsContent>
 
         <TabsContent value="usg" className="mt-4 space-y-4 rounded-xl border border-border bg-card p-5">

@@ -221,7 +221,7 @@ type SettingsUpdate = Partial<Record<string, string | boolean | number | Record<
 export async function updateSettings(patch: SettingsUpdate) {
   const allowed = [
     "appTitle", "hospitalName", "addressLine", "phone", "email", "footerMessage",
-    "logoUrl", "loginTheme", "loginBgUrl",
+    "logoUrl", "registrationNo", "loginTheme", "loginBgUrl",
     "usgDoctorName", "usgDoctorQual", "usgDoctorRegNo", "usgMachineLine",
     "usgDoctorBirthday",
     "usgFooterLine", "usgDeclarationLine", "usgPrintStyle",

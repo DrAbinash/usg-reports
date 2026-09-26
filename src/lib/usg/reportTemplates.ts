@@ -9,10 +9,19 @@
  *
  * v6.23: on first boot we seed pinned "NP …" templates (measurement-free
  * normals) so peak-time reporting works before the doctor saves anything.
+ *
+ * v6.24: Formats Library consumes this same collection (enriched with
+ * searchAliases / studyType / category from the seed catalog).
  */
 import { db } from "@/lib/db";
 import { getActiveClinicId } from "@/lib/auth";
-import { BUILTIN_NP_TEMPLATES, buildNpTemplateState } from "./npTemplates";
+import {
+  BUILTIN_NP_TEMPLATES,
+  buildNpTemplateState,
+  searchAliasesForStudyKey,
+  searchAliasesForTemplateName,
+} from "./npTemplates";
+import { formatMetaForStudyKey } from "./formatSearch";
 
 export type ReportTemplate = {
   id: string;
@@ -23,9 +32,47 @@ export type ReportTemplate = {
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
+  /** Enriched for Formats Library search / grouping (not necessarily persisted). */
+  studyType: string;
+  category: string;
+  searchAliases: string[];
+  organKeywords: string[];
 };
 
 export { BUILTIN_NP_TEMPLATES, buildNpTemplateState } from "./npTemplates";
+
+function enrichTemplate(row: {
+  id: string;
+  name: string;
+  studyKey: string;
+  stateJson: string;
+  pinned: boolean;
+  sortOrder: number;
+  createdAt: Date;
+  updatedAt: Date;
+}): ReportTemplate {
+  const meta = formatMetaForStudyKey(row.studyKey);
+  const aliases = [
+    ...searchAliasesForTemplateName(row.name),
+    ...searchAliasesForStudyKey(row.studyKey),
+  ];
+  // Dedupe aliases
+  const searchAliases = [...new Set(aliases)];
+  return {
+    id: row.id,
+    name: row.name,
+    studyKey: row.studyKey,
+    stateJson: row.stateJson,
+    pinned: row.pinned,
+    sortOrder: row.sortOrder,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    studyType: meta.studyType,
+    category: meta.category,
+    searchAliases,
+    organKeywords: meta.organKeywords,
+  };
+}
 
 /**
  * Seed pinned NP templates for a clinic. Idempotent — skips names that
@@ -65,16 +112,7 @@ export async function listTemplates(): Promise<ReportTemplate[]> {
     where: { clinicId },
     orderBy: [{ pinned: "desc" }, { sortOrder: "asc" }, { name: "asc" }],
   });
-  return rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    studyKey: r.studyKey,
-    stateJson: r.stateJson,
-    pinned: r.pinned,
-    sortOrder: r.sortOrder,
-    createdAt: r.createdAt.toISOString(),
-    updatedAt: r.updatedAt.toISOString(),
-  }));
+  return rows.map(enrichTemplate);
 }
 
 /** Save a new template (or update if name already exists for this clinic). */
@@ -100,16 +138,7 @@ export async function saveTemplate(input: {
       stateJson: input.stateJson,
     },
   });
-  return {
-    id: row.id,
-    name: row.name,
-    studyKey: row.studyKey,
-    stateJson: row.stateJson,
-    pinned: row.pinned,
-    sortOrder: row.sortOrder,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-  };
+  return enrichTemplate(row);
 }
 
 /** Delete a template. */

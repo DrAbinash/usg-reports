@@ -835,7 +835,22 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
           <Check className="mr-1 h-3.5 w-3.5" />
           Fill blank organs
         </Button>
-        <UsgFormatsLibrary organs={state.organs} onApply={(organs, imp) => setState((p) => ({ ...p, organs, impressionOverride: imp ?? p.impressionOverride }))} />
+        <UsgFormatsLibrary
+          onApply={(savedState, studyKey, name) => {
+            const target = getStudy(studyKey);
+            if (target) {
+              setStudyKey(studyKey);
+              const nextDefault =
+                settings.studyTechniqueDefaults?.[studyKey]?.trim() || target.technique;
+              setTechnique(nextDefault);
+              if (studyKey.includes("child")) setPatientSex(USG_SEX_CHILD);
+              else if (studyKey.includes("female") || studyKey === "tvs" || studyKey === "ob") setPatientSex("F");
+              else if (studyKey.includes("male")) setPatientSex("M");
+            }
+            setState(savedState);
+            toast.success(`Format applied: ${name}`);
+          }}
+        />
         <div className="min-w-0 flex-1 border-l border-emerald-200/80 pl-1.5">
           <UsgTemplateBar
             onApply={(template) => {

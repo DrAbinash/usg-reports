@@ -1,88 +1,54 @@
-import { useState } from "react";
+"use client";
+
+/**
+ * USG Formats Library — browses the SAME hydrated reportFormats collection
+ * as the toolbar NP chips (`useReportFormats` → GET /api/usg/templates).
+ */
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { BookOpen, X } from "lucide-react";
+import { BookOpen, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
-import type { UsgOrganState } from "@/lib/usg/types";
+import type { UsgComposerState } from "@/lib/usg/types";
+import { useReportFormats, type HydratedReportFormat } from "@/hooks/useReportFormats";
+import { filterFormatsByQuery, groupFormatsByCategory } from "@/lib/usg/formatSearch";
 
-type Format = { file: string; modality: string; title: string; text: string };
-
-export function UsgFormatsLibrary({ organs, onApply }: {
-  organs: UsgOrganState[];
-  onApply: (next: UsgOrganState[], impression: string | null) => void;
+export function UsgFormatsLibrary({
+  onApply,
+}: {
+  /** @deprecated organ-text apply path removed — templates apply full stateJson. */
+  organs?: unknown;
+  onApply: (state: UsgComposerState, studyKey: string, name: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<Format[]>([]);
   const [search, setSearch] = useState("");
+  const { formats, isLoading, isPending, refetch } = useReportFormats();
 
-  const load = async () => {
-    setLoading(true);
+  const filtered = useMemo(
+    () => filterFormatsByQuery(formats, search),
+    [formats, search],
+  );
+
+  const grouped = useMemo(() => groupFormatsByCategory(filtered), [filtered]);
+  const emptyQuery = !search.trim();
+
+  const apply = (f: HydratedReportFormat) => {
     try {
-      const r = await fetch("/formats-index.json");
-      const { templates } = await r.json();
-      setData(templates.filter((t: Format) => t.modality === "USG"));
-    } catch { toast.error("Failed to load formats library"); }
-    finally { setLoading(false); }
-  };
-
-  const apply = (f: Format) => {
-    const text = f.text ?? "";
-    const headers = ["LIVER", "G. B", "PANCREAS", "SPLEEN", "RT KIDNEY", "LT KIDNEY", "UTERUS", "ADNEXA", "P.O.D", "OTHERS", "IMPRESSION"];
-    // Composer organ keys are kidney_rt / kidney_lt (legacy library used rt_kidney / lt_kidney).
-    const keyMap: Record<string, string> = {
-      "LIVER": "liver", "G. B": "gb", "PANCREAS": "pancreas", "SPLEEN": "spleen",
-      "RT KIDNEY": "kidney_rt", "LT KIDNEY": "kidney_lt", "UTERUS": "uterus",
-      "ADNEXA": "adnexa", "P.O.D": "pod", "OTHERS": "others",
-      // Legacy aliases still accepted at import time:
-      "rt_kidney": "kidney_rt", "lt_kidney": "kidney_lt",
-    };
-    const findings: Record<string, string> = {};
-    let impression: string | null = null;
-    const lines = text.split(/\n/);
-    let cur = "", curTxt = "";
-    const dropped: string[] = [];
-    const save = () => {
-      if (cur) {
-        const clean = curTxt.replace(/\s+/g, " ").trim();
-        if (cur === "IMPRESSION") impression = clean;
-        else if (keyMap[cur]) findings[keyMap[cur]] = clean;
-        else if (cur && cur !== "IMPRESSION") dropped.push(cur);
-      }
-    };
-    for (const line of lines) {
-      const t = line.trim().toUpperCase();
-      if (headers.includes(t)) { save(); cur = t; curTxt = ""; }
-      else curTxt += line + "\n";
-    }
-    save();
-
-    const organKeys = new Set(organs.map((o) => o.organ));
-    const unused = Object.keys(findings).filter((k) => !organKeys.has(k));
-    for (const k of unused) dropped.push(k);
-
-    const next = organs.map((o) => {
-      if (findings[o.organ]) return { ...o, text: findings[o.organ], custom: true };
-      return o;
-    });
-    onApply(next, impression);
-    setOpen(false);
-    if (dropped.length) {
-      toast.message(`Applied: ${f.title} — skipped unmapped sections: ${[...new Set(dropped)].join(", ")}`);
-    } else {
-      toast.success(`Applied: ${f.title}`);
+      const state = JSON.parse(f.stateJson) as UsgComposerState;
+      onApply(state, f.studyKey, f.name);
+      setOpen(false);
+    } catch {
+      toast.error("Could not apply format — corrupted state");
     }
   };
-
-  const filtered = data.filter((f) => {
-    const q = search.toLowerCase();
-    return !q || f.title.toLowerCase().includes(q) || f.text.toLowerCase().includes(q);
-  });
 
   return (
     <>
       <Button
-        onClick={() => { setOpen(true); if (!data.length) load(); }}
+        onClick={() => {
+          setOpen(true);
+          void refetch();
+        }}
         variant="outline"
         size="sm"
         className="h-7 shrink-0 border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-900 hover:bg-slate-50"
@@ -92,24 +58,50 @@ export function UsgFormatsLibrary({ organs, onApply }: {
       </Button>
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[80vh] w-full max-w-3xl overflow-hidden rounded-lg bg-card shadow-2xl flex flex-col">
+          <div className="flex max-h-[80vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-card shadow-2xl">
             <div className="border-b border-border p-4">
               <div className="mb-2 flex items-center justify-between">
                 <h2 className="text-lg font-bold">USG Formats Library</h2>
-                <Button onClick={() => setOpen(false)} variant="ghost" size="sm"><X className="h-4 w-4" /></Button>
+                <Button onClick={() => setOpen(false)} variant="ghost" size="sm">
+                  <X className="h-4 w-4" />
+                </Button>
               </div>
-              <Input placeholder="Search formats (e.g. fatty liver, PCOD, fibroid)…" value={search} onChange={(e) => setSearch(e.target.value)} className="h-9 text-[13px]" />
+              <Input
+                placeholder="Search formats (e.g. abdomen, cardiac, whole)…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-9 text-[13px]"
+                autoFocus
+              />
             </div>
             <div className="flex-1 overflow-y-auto p-4">
-              {loading ? <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div> : (
-                <div className="space-y-2">
-                  {filtered.slice(0, 100).map((f, i) => (
-                    <button key={i} onClick={() => apply(f)} className="w-full rounded-md border border-border bg-panel p-3 text-left transition-colors hover:bg-accent">
-                      <div className="mb-1 text-[13px] font-semibold">{f.title}</div>
-                      <div className="line-clamp-2 text-[11px] text-muted-foreground">{f.text.slice(0, 300)}</div>
-                    </button>
+              {isPending || (isLoading && formats.length === 0) ? (
+                <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading formats…
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="py-8 text-center text-sm text-muted-foreground">No formats match.</div>
+              ) : emptyQuery ? (
+                <div className="space-y-5">
+                  {grouped.map((g) => (
+                    <div key={g.category}>
+                      <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        {g.category}
+                      </div>
+                      <div className="space-y-2">
+                        {g.formats.map((f) => (
+                          <FormatCard key={f.id} name={f.name} studyKey={f.studyKey} studyType={f.studyType} onClick={() => apply(f)} />
+                        ))}
+                      </div>
+                    </div>
                   ))}
-                  {filtered.length === 0 && <div className="py-8 text-center text-sm text-muted-foreground">No formats match.</div>}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filtered.map((f) => (
+                    <FormatCard key={f.id} name={f.name} studyKey={f.studyKey} studyType={f.studyType} onClick={() => apply(f)} />
+                  ))}
                 </div>
               )}
             </div>
@@ -117,5 +109,30 @@ export function UsgFormatsLibrary({ organs, onApply }: {
         </div>
       )}
     </>
+  );
+}
+
+function FormatCard({
+  name,
+  studyKey,
+  studyType,
+  onClick,
+}: {
+  name: string;
+  studyKey: string;
+  studyType: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full rounded-md border border-border bg-panel p-3 text-left transition-colors hover:bg-accent"
+    >
+      <div className="mb-0.5 text-[13px] font-semibold">{name}</div>
+      <div className="text-[11px] text-muted-foreground">
+        {studyType} · {studyKey}
+      </div>
+    </button>
   );
 }

@@ -554,7 +554,6 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   finalizeFastRef.current = finalizeFast;
   printRefFn.current = print;
 
-  const paperLabel = (settings.usgPrintPaper ?? "a4") === "a5" ? "A5" : "A4";
 
   
   const onAddImage = (dataUrl: string) =>
@@ -700,8 +699,8 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
           onOhifLayoutChange={onOhifLayoutChange}
         />
 
-        <div className="studio-scroll min-h-0 space-y-3 overflow-y-auto pr-1 cursor-pointer" onClick={(e) => { e.stopPropagation(); onWorkspaceFocus(); }} onDoubleClick={(e) => { e.stopPropagation(); onResetFocus(); setOhifLayout("split"); }} title="Click to focus writing (hides OHIF) · Double-click to restore split">
-          <div className="space-y-3">
+        <div className="studio-scroll min-h-0 space-y-1 overflow-y-auto pr-1 cursor-pointer" onClick={(e) => { e.stopPropagation(); onWorkspaceFocus(); }} onDoubleClick={(e) => { e.stopPropagation(); onResetFocus(); setOhifLayout("split"); }} title="Click to focus writing (hides OHIF) · Double-click to restore split">
+          <div className="space-y-1">
             {study.organs.map((def, organIdx) => {
               const st = state.organs.find((o) => o.organ === def.key);
               if (!st) return null;
@@ -767,7 +766,6 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
             impressionManual={impressionManual}
             setImpressionManual={setImpressionManual}
             declarationLine={settings.usgDeclarationLine}
-            paperLabel={paperLabel}
             enableBirads={settings.enableBirads !== false}
             birads={birads}
             setBirads={setBirads}

@@ -106,21 +106,32 @@ export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, norma
   return (
     <div
       className={cn(
-        "rounded-xl border bg-card p-3.5 shadow-sm transition-colors",
-        anySelected ? "border-rose-300 ring-1 ring-rose-200" : "border-border",
+        "flex overflow-hidden rounded-md border bg-card transition-colors",
+        anySelected ? "border-rose-400 ring-1 ring-rose-200" : "border-border",
       )}
     >
-      {/* Heading + quick-select chips share one ribbon row */}
-      <div className="mb-2.5 flex flex-wrap items-center gap-x-2 gap-y-1.5">
-        <span
-          className={cn(
-            "flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[10px] font-bold uppercase",
-            anySelected ? "bg-rose-100 text-rose-700" : "bg-muted text-muted-foreground",
-          )}
-        >
+      {/* Full-height organ name rail — black / white */}
+      <div
+        className={cn(
+          "flex w-7 shrink-0 flex-col items-center justify-center gap-1 self-stretch px-0.5 py-1",
+          anySelected ? "bg-rose-950" : "bg-slate-950",
+        )}
+        title={def.label}
+      >
+        <span className="text-[9px] font-bold leading-none text-white/90">
           {anySelected ? (selected.length > 1 ? selected.length : "!") : "✓"}
         </span>
-        <span className="shrink-0 text-[13px] font-bold tracking-wide uppercase">{def.label}</span>
+        <span
+          className="max-h-full text-[10px] font-extrabold uppercase tracking-[0.14em] text-white"
+          style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+        >
+          {def.label}
+        </span>
+      </div>
+
+      <div className="min-w-0 flex-1 p-1">
+      {/* Quick-select chips + edit actions */}
+      <div className="mb-1 flex flex-wrap items-center gap-x-1.5 gap-y-1">
         {selected.length > 1 ? (
           <Badge variant="outline" className="h-5 shrink-0 border-rose-300 bg-rose-50 px-1.5 text-[9px] font-semibold text-rose-700">
             combined ×{selected.length}
@@ -154,11 +165,11 @@ export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, norma
           onBeforeChip={() => setEditing(false)}
           className="min-w-0 flex-1"
         />
-        <div className="ml-auto flex shrink-0 items-center gap-1">
+        <div className="ml-auto flex shrink-0 items-center gap-0.5">
           <Button
             variant="ghost"
             size="sm"
-            className={cn("h-7 w-7 p-0", normalOverride ? "text-violet-500" : "text-muted-foreground")}
+            className={cn("h-6 w-6 p-0", normalOverride ? "text-violet-500" : "text-muted-foreground")}
             title={normalOverride ? "Customise the normal wording (currently your own)" : "Customise this organ's normal wording — saved for every future report"}
             onClick={() => {
               setNormalDraft(normalOverride ?? def.normal);
@@ -170,7 +181,7 @@ export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, norma
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 w-7 p-0 text-muted-foreground"
+            className="h-6 w-6 p-0 text-muted-foreground"
             title="Edit finding text"
             onClick={() => {
               if (editing) {
@@ -188,7 +199,7 @@ export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, norma
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 w-7 p-0 text-muted-foreground"
+              className="h-6 w-6 p-0 text-muted-foreground"
               title="Reset to selected wording"
               onClick={() => {
                 setEditing(false);
@@ -204,7 +215,7 @@ export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, norma
 
       {/* Normal-wording editor (v5) — retunes the builtin normal itself */}
       {editingNormal ? (
-        <div className="mb-2.5 rounded-lg border border-violet-200 bg-violet-50/60 p-2.5">
+        <div className="mb-1 rounded-md border border-violet-200 bg-violet-50/60 p-1.5">
           <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-violet-700">
             Normal wording — saved for every future {def.label} report
           </p>
@@ -256,7 +267,7 @@ export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, norma
 
       {/* Measurement inputs for {tokens} (side tokens auto-fill) */}
       {inputTokens.length > 0 ? (
-        <div className="mb-2.5 flex flex-wrap gap-1.5">
+        <div className="mb-1 flex flex-wrap gap-1">
           {inputTokens.map((t) => {
             const { label, unit } = varLabel(varDefs, t);
             const isSelect = isSelectToken(t);
@@ -357,7 +368,7 @@ export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, norma
         <div className="flex items-start gap-1.5">
           <p
             className={cn(
-              "min-w-0 flex-1 cursor-text rounded-lg bg-panel px-2.5 py-2 text-[12px] leading-relaxed text-muted-foreground",
+              "min-w-0 flex-1 cursor-text rounded bg-panel px-2 py-1 text-[12px] leading-snug text-muted-foreground",
               anySelected || state.custom ? "text-foreground" : "",
             )}
             onClick={() => {
@@ -386,7 +397,7 @@ export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, norma
 
       {/* Impression preview — every selected pathology's lines */}
       {selected.some((p) => p.impression?.length) ? (
-        <div className="mt-2 rounded-lg border-l-[3px] border-rose-300 bg-rose-50/60 px-2.5 py-1.5">
+        <div className="mt-1 rounded border-l-[3px] border-rose-300 bg-rose-50/60 px-2 py-1">
           {selected.flatMap((p) => p.impression).map((line, i) => (
             <p key={i} className="text-[11px] font-semibold leading-snug text-rose-800">
               ⇒ {substitute(line, state.vars, def.key)}
@@ -394,6 +405,7 @@ export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, norma
           ))}
         </div>
       ) : null}
+      </div>
     </div>
   );
 }

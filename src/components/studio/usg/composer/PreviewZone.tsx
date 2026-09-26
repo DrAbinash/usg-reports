@@ -347,22 +347,53 @@ export function printInIframe(printRef: React.RefObject<HTMLIFrameElement | null
     toast.error("Print frame missing — reload the page");
     return;
   }
+  // CRITICAL: the off-screen print iframe used to be 1×1px. The shared
+  // beforeprint auto-zoom then measured a huge wrapped scrollHeight and
+  // shrunk the A4 report to a postage stamp. Size to real A4 before print.
+  const prev = {
+    width: frame.style.width,
+    height: frame.style.height,
+    left: frame.style.left,
+    top: frame.style.top,
+    opacity: frame.style.opacity,
+  };
+  frame.style.width = "210mm";
+  frame.style.height = "297mm";
+  frame.style.left = "-10000px";
+  frame.style.top = "0";
+  frame.style.opacity = "0";
+
   let printed = false;
+  const restore = () => {
+    frame.style.width = prev.width || "1px";
+    frame.style.height = prev.height || "1px";
+    frame.style.left = prev.left || "-10000px";
+    frame.style.top = prev.top || "0";
+    frame.style.opacity = prev.opacity || "0";
+  };
   const doPrint = () => {
     if (printed) return;
     printed = true;
     const win = frame.contentWindow;
     if (!win) {
+      restore();
       toast.error("Print window unavailable");
       return;
     }
+    const onAfter = () => {
+      win.removeEventListener("afterprint", onAfter);
+      restore();
+    };
+    win.addEventListener("afterprint", onAfter);
     win.focus();
     win.print();
+    // Fallback restore if afterprint never fires (some browsers).
+    window.setTimeout(restore, 4000);
   };
   const onLoad = () => {
     frame.removeEventListener("load", onLoad);
     // Allow layout/paint one tick after load before opening the dialog.
-    requestAnimationFrame(() => doPrint());
+    requestAnimationFrame(() => requestAnimationFrame(() => doPrint()));
   };
   frame.addEventListener("load", onLoad);
   frame.srcdoc = html;
@@ -370,9 +401,10 @@ export function printInIframe(printRef: React.RefObject<HTMLIFrameElement | null
   window.setTimeout(() => {
     if (!printed) {
       frame.removeEventListener("load", onLoad);
+      restore();
       toast.error("Print preview did not load in time — try Print again");
     }
-  }, 1500);
+  }, 2500);
 }
 
 export async function printFrozenReport(

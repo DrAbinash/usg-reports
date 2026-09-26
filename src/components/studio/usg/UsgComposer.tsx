@@ -50,6 +50,7 @@ import {
 } from "./composer/PreviewZone";
 import { StickyActionBar } from "./composer/StickyActionBar";
 import { downloadReportPdf } from "./sharePdf";
+import { useStudio } from "@/lib/store";
 import type { DiffSource } from "./UsgDiffPanel";
 
 /** v6: the bill-desk order a report came from (banner, PACS, Form F). */
@@ -431,6 +432,63 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   };
 
   const abnormalCount = state.organs.filter((o) => selectedPathologies(o).length).length;
+
+  // Push patient/study strip into the pink CARE header; clear on unmount.
+  // Callbacks are ref-stable so parent inline onBack never infinite-loops the store.
+  const setComposerStrip = useStudio((s) => s.setComposerStrip);
+  const setComposerBack = useStudio((s) => s.setComposerBack);
+  const setExpandPatientForm = useStudio((s) => s.setExpandPatientForm);
+  const onBackRef = useRef(onBack);
+  onBackRef.current = onBack;
+  useEffect(() => {
+    setComposerBack(() => onBackRef.current());
+    setExpandPatientForm(() => setHeaderCollapsed(false));
+    return () => {
+      setComposerStrip(null);
+      setComposerBack(null);
+      setExpandPatientForm(null);
+    };
+  }, [setComposerBack, setExpandPatientForm, setComposerStrip]);
+  useEffect(() => {
+    const next = {
+      patientName,
+      patientAge,
+      patientSex: patientSex === USG_SEX_CHILD ? "C" : patientSex,
+      referredBy,
+      studyLabel: study.label,
+      title: resolved.title,
+      status: (isFinal ? "final" : "draft") as "draft" | "final",
+      allNormal: abnormalCount === 0,
+      serial,
+    };
+    const prev = useStudio.getState().composerStrip;
+    if (
+      prev &&
+      prev.patientName === next.patientName &&
+      prev.patientAge === next.patientAge &&
+      prev.patientSex === next.patientSex &&
+      prev.referredBy === next.referredBy &&
+      prev.studyLabel === next.studyLabel &&
+      prev.title === next.title &&
+      prev.status === next.status &&
+      prev.allNormal === next.allNormal &&
+      prev.serial === next.serial
+    ) {
+      return;
+    }
+    setComposerStrip(next);
+  }, [
+    patientName,
+    patientAge,
+    patientSex,
+    referredBy,
+    study.label,
+    resolved.title,
+    isFinal,
+    abnormalCount,
+    serial,
+    setComposerStrip,
+  ]);
 
   /** Chip toggle — null clears the organ to normal; a key toggles it, so an
    *  organ can carry several pathologies at once (combined findings). */

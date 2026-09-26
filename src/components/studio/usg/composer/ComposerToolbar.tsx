@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, CalendarDays, Check, ChevronDown, Loader2, Maximize2, Minimize2, Phone, Settings2, Zap } from "lucide-react";
+import { CalendarDays, Check, ChevronDown, Loader2, Maximize2, Minimize2, Phone, Settings2, Zap } from "lucide-react";
 import { MessageCircle, FileCheck2 as FileCheck2Icon, ScanLine, Link2 } from "lucide-react";
 import type { UsgComposerState, UsgPathologyDef, UsgResolved, UsgStudyDef } from "@/lib/usg/types";
 import { USG_SEX_CHILD } from "@/lib/usg/types";
@@ -465,82 +465,44 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
   return (
     <>
     <div className="shrink-0 border-b border-border bg-card/95 backdrop-blur">
-      {/* ── Row 1: compact patient line + fullscreen + actions ─────────── */}
-      <div
-        className={cn("flex items-center gap-2 px-3 py-1.5 cursor-pointer select-none", headerCollapsed ? "hover:bg-muted/40" : "")}
-        onClick={() => setHeaderCollapsed((v) => !v)}
-        title={headerCollapsed ? "Click to expand patient details" : "Click to collapse — start reporting"}
-      >
-        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onBack(); }} className="h-7 w-7 p-0 text-muted-foreground shrink-0">
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-
-        {headerCollapsed ? (
-          <div className="flex min-w-0 flex-1 items-center gap-2 text-[12px]">
-            <span className="truncate font-bold text-foreground">{patientName || "New report"}</span>
-            {patientAge ? <span className="text-muted-foreground shrink-0">{patientAge}y</span> : null}
-            <span className="text-muted-foreground shrink-0">{patientSex === USG_SEX_CHILD ? "Child" : patientSex}</span>
-            {referredBy ? <span className="truncate text-faint hidden sm:inline">· {referredBy}</span> : null}
-            <span className="text-faint shrink-0 hidden md:inline">{resolved.study.label}</span>
-            {abnormalCount ? (
-              <span className="shrink-0 rounded-full bg-rose-50 px-1.5 py-0.5 text-[9px] font-bold text-rose-700">{abnormalCount} organ{abnormalCount > 1 ? "s" : ""}</span>
-            ) : (
-              <span className="shrink-0 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">All normal</span>
-            )}
-            {serial ? <span className="shrink-0 rounded-full bg-sky-50 px-1.5 py-0.5 text-[9px] font-bold text-sky-700">{serial}</span> : null}
-            {isFinal ? <span className="shrink-0 text-[10px] font-bold text-amber-600">FINAL</span> : null}
+      {/* Patient/study line lives in the pink CARE header — only demography form stays here when expanded */}
+      {!headerCollapsed ? (
+        <div className="flex items-center gap-2 border-b border-border/60 px-3 py-1">
+          <button
+            type="button"
+            onClick={() => setHeaderCollapsed(true)}
+            className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-[12px] font-bold text-foreground hover:text-rose-700"
+            title="Collapse patient details"
+          >
+            <ChevronDown className="h-3.5 w-3.5 shrink-0 rotate-180 text-muted-foreground" />
+            <span className="truncate">{patientName || "New report"} — edit details</span>
+          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button variant="ghost" size="sm" onClick={() => void toggleFullscreen()}
+              className="h-7 w-7 shrink-0 p-0 text-muted-foreground hover:text-foreground"
+              title={fullscreen ? "Exit fullscreen (Esc)" : "Enter fullscreen"}>
+              {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            </Button>
+            {(() => {
+              if (settings.enableCriticalComm === false) return null;
+              const sel = state.organs.flatMap((o) =>
+                (o.pathologies ?? (o.pathology ? [o.pathology] : [])).map((k) => ({
+                  key: k, label: k, organ: o.organ,
+                })),
+              );
+              const criticalAlerts = scanForCriticalFindings(sel);
+              if (!criticalAlerts.length && !isFinal) return null;
+              return (
+                <Button size="sm" variant="outline" onClick={() => setCommOpen(true)}
+                  title="Critical finding communication log"
+                  className="h-7 border-rose-300 bg-rose-100 px-2 text-rose-700 hover:bg-rose-200">
+                  <Phone className="h-3.5 w-3.5" />
+                </Button>
+              );
+            })()}
           </div>
-        ) : (
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <span className="truncate text-[13px] font-bold text-foreground">{patientName || "New report"}</span>
-            <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground rotate-180" />
-          </div>
-        )}
-
-        {/* Fullscreen + critical-comm only — Save/Finalize/Print live in the sticky bottom bar */}
-        <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
-          <Button variant="ghost" size="sm" onClick={() => void toggleFullscreen()}
-            className="h-7 w-7 shrink-0 p-0 text-muted-foreground hover:text-foreground"
-            title={fullscreen ? "Exit fullscreen (Esc)" : "Enter fullscreen — hides browser tabs"}>
-            {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-          </Button>
-          {(() => {
-            if (settings.enableCriticalComm === false) return null;
-            const sel = state.organs.flatMap((o) =>
-              (o.pathologies ?? (o.pathology ? [o.pathology] : [])).map((k) => ({
-                key: k, label: k, organ: o.organ,
-              })),
-            );
-            const criticalAlerts = scanForCriticalFindings(sel);
-            const hasCritical = criticalAlerts.length > 0;
-            if (!hasCritical && !isFinal) return null;
-            return (
-              <Button size="sm" variant="outline" onClick={() => setCommOpen(true)}
-                title="Critical finding communication log (PCPNDT/NMC legal record)"
-                className="h-7 border-rose-300 bg-rose-100 px-2 text-rose-700 hover:bg-rose-200">
-                <Phone className="h-3.5 w-3.5" />
-              </Button>
-            );
-          })()}
         </div>
-      </div>
-
-      {/* ── Row 2: study title + status badges (thin line) ─────────────── */}
-      <div className="flex items-center gap-1.5 px-3 pb-1 text-[10px] text-muted-foreground">
-        <span className="font-semibold text-foreground">{resolved.title}</span>
-        <span className={cn("rounded-full px-1.5 py-0.5 font-semibold", abnormalCount ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700")}>
-          {abnormalCount ? `${abnormalCount} organ${abnormalCount > 1 ? "s" : ""} affected` : "All normal"}
-        </span>
-        {serial ? <span className="rounded-full bg-sky-50 px-1.5 py-0.5 font-bold text-sky-700">{serial}</span> : null}
-        {isFinal ? (
-          <span className="rounded-full bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-700">finalized</span>
-        ) : (
-          <span className="rounded-full bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-700">draft</span>
-        )}
-        {lastAutosave && !isFinal ? (
-          <span className="text-[9px] text-emerald-600">· autosaved {new Date(lastAutosave).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>
-        ) : null}
-      </div>
+      ) : null}
 
       <UsgTipsRibbon />
 

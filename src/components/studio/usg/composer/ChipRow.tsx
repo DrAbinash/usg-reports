@@ -24,6 +24,8 @@ export type ChipRowProps = {
   onAddCustom: (organKey: string, after?: string) => void;
   onShowAll: () => void;
   onBeforeChip: () => void;
+  /** Extra classes — used when chips sit on the organ heading row. */
+  className?: string;
 };
 
 function chipRowEqual(a: ChipRowProps, b: ChipRowProps): boolean {
@@ -42,7 +44,8 @@ function chipRowEqual(a: ChipRowProps, b: ChipRowProps): boolean {
     a.onShowAll === b.onShowAll &&
     a.onBeforeChip === b.onBeforeChip &&
     a.visible === b.visible &&
-    a.selectedKeys === b.selectedKeys
+    a.selectedKeys === b.selectedKeys &&
+    a.className === b.className
   );
 }
 
@@ -62,9 +65,10 @@ export const ChipRow = memo(function ChipRow({
   onAddCustom,
   onShowAll,
   onBeforeChip,
+  className,
 }: ChipRowProps) {
   return (
-    <div className="mb-2 flex flex-wrap items-center gap-1.5">
+    <div className={cn("flex flex-wrap items-center gap-1.5", className)}>
       <button
         onClick={() => {
           onBeforeChip();

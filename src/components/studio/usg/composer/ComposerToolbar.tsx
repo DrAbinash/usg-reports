@@ -1,7 +1,7 @@
 "use client";
 /**
- * Composer chrome — compact header, patient strip, tips, banners, and the
- * peak-time / All Normal / templates toolbar. Behaviour preserved verbatim.
+ * Composer chrome — compact header, patient strip, banners, and the
+ * peak-time / fill-blank / templates toolbar. Tips live on StickyActionBar.
  */
 import { memo, useEffect, useRef, type Dispatch, type SetStateAction, type MutableRefObject } from "react";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,6 @@ import { appendTranscript } from "@/lib/usg/dictation";
 import { clearDraft, type DraftSnapshot } from "@/lib/usg/drafts";
 import { buildPregnancyTimeline } from "@/lib/usg/pregnancyTimeline";
 import { shareReportWhatsapp } from "../shareWhatsapp";
-import { UsgTipsRibbon } from "../UsgTipsRibbon";
 import { UsgCriticalBanner } from "../UsgCriticalBanner";
 import { UsgDiffPanel, type DiffSource } from "../UsgDiffPanel";
 import { UsgPregnancyTimeline } from "../UsgPregnancyTimeline";
@@ -275,7 +274,7 @@ export function ComposerHotkeys(props: {
         return;
       }
       setState(next);
-      toast.success("All normal · no sizes — ready to print");
+      toast.success("NP · no sizes — ready to print");
     } else {
       setState((s) => markAllNormal(s, study));
       toast.success("All organs set to normal");
@@ -387,7 +386,7 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
       togglePathology(def.key, null);
       applied += 1;
     }
-    if (applied > 0) toast.success(`All Normal — ${applied} organ(s)`);
+    if (applied > 0) toast.success(`Fill blank organs — ${applied} organ(s)`);
     else toast.message("Abnormals preserved — nothing left to set normal");
   };
 
@@ -503,8 +502,6 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
           </div>
         </div>
       ) : null}
-
-      <UsgTipsRibbon />
 
       {/* ── Expanded: full patient input form ──────────────────────────── */}
       {!headerCollapsed && (
@@ -764,7 +761,7 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
               size="sm"
               variant="outline"
               className="h-7 shrink-0 border-amber-400 bg-amber-100 px-2 text-[11px] font-bold text-amber-950 hover:bg-amber-200"
-              title="Peak-time: mark every organ normal with no size measurements (keyboard: N)"
+              title="Peak-time: whole study normal with no size measurements (keyboard: N)"
               onClick={() => {
                 const next = applyRushNormalStudy(state, study);
                 if (!next) {
@@ -772,11 +769,11 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
                   return;
                 }
                 setState(next);
-                toast.success("All normal · no sizes — ready to print");
+                toast.success("NP · no sizes — ready to print");
               }}
             >
               <Zap className="mr-1 h-3.5 w-3.5" />
-              All normal
+              NP · no sizes
             </Button>
             {study.organs.some((o) => o.key === "liver") ? (
               <Button
@@ -824,7 +821,7 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
           onClick={applyAllNormalMacro}
         >
           <Check className="mr-1 h-3.5 w-3.5" />
-          All Normal
+          Fill blank organs
         </Button>
         <UsgFormatsLibrary organs={state.organs} onApply={(organs, imp) => setState((p) => ({ ...p, organs, impressionOverride: imp ?? p.impressionOverride }))} />
         <div className="min-w-0 flex-1 border-l border-emerald-200/80 pl-1.5">

@@ -594,10 +594,10 @@ export function UsgWorklistView() {
                           e.stopPropagation();
                           void startReport(o, { rush: true });
                         }}
-                        title="Start report as all normal · no sizes (keyboard: N)"
+                        title="Start report as NP · no sizes (keyboard: N)"
                       >
                         <Zap className="mr-1 h-3.5 w-3.5" />
-                        All normal
+                        NP · no sizes
                       </Button>
                     ) : null}
                     {orderAllowsFattyPreset(o) && !o.reportId ? (

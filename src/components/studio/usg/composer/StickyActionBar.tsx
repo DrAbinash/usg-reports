@@ -1,10 +1,12 @@
 "use client";
 /**
  * Sticky action bar — sole Save · Finalize · Print · PDF · Next cluster.
- * Top-toolbar duplicates were removed so actions live in one place.
+ * Tips ribbon + print tip sit here (not in the top chrome) to reclaim workspace.
  */
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FileCheck2, FileDown, Loader2, Printer, Save, ArrowRight } from "lucide-react";
+import { FileCheck2, FileDown, Loader2, Printer, Save, ArrowRight, X } from "lucide-react";
+import { UsgTipsRibbon } from "../UsgTipsRibbon";
 
 export type StickyActionBarProps = {
   hidden?: boolean;
@@ -28,10 +30,31 @@ export function StickyActionBar({
   onNext,
   onDownloadPdf,
 }: StickyActionBarProps) {
+  const [printTipHidden, setPrintTipHidden] = useState(false);
+
   if (hidden) return null;
   return (
-    <div className="sticky bottom-0 z-20 -mx-1 mt-auto border-t border-slate-200 bg-white/95 px-2 py-1.5 backdrop-blur supports-[backdrop-filter]:bg-white/90">
-      <div className="flex flex-wrap items-center justify-end gap-1.5">
+    <div className="sticky bottom-0 z-20 -mx-1 mt-auto border-t border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/90">
+      <UsgTipsRibbon className="border-t-0 border-b border-border/60 bg-transparent" />
+      <div className="flex flex-wrap items-center gap-1.5 px-2 py-1.5">
+        {!printTipHidden ? (
+          <div className="mr-auto flex min-w-0 max-w-full items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50/90 px-2 py-1 text-[10px] text-amber-900 sm:max-w-[min(100%,22rem)]">
+            <Printer className="h-3 w-3 shrink-0 text-amber-600" />
+            <span className="min-w-0 truncate sm:whitespace-normal">
+              Print tip: tick <b>Background graphics</b> so the letterhead prints.
+            </span>
+            <button
+              type="button"
+              onClick={() => setPrintTipHidden(true)}
+              className="shrink-0 text-amber-600 hover:text-amber-800"
+              aria-label="Dismiss print tip"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        ) : (
+          <div className="mr-auto" />
+        )}
         <Button
           size="sm"
           variant="outline"

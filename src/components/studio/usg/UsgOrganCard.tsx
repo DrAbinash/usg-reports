@@ -110,32 +110,51 @@ export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, norma
         anySelected ? "border-rose-300 ring-1 ring-rose-200" : "border-border",
       )}
     >
-      <div className="mb-2.5 flex items-center gap-2">
+      {/* Heading + quick-select chips share one ribbon row */}
+      <div className="mb-2.5 flex flex-wrap items-center gap-x-2 gap-y-1.5">
         <span
           className={cn(
-            "flex h-6 w-6 items-center justify-center rounded-md text-[10px] font-bold uppercase",
+            "flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[10px] font-bold uppercase",
             anySelected ? "bg-rose-100 text-rose-700" : "bg-muted text-muted-foreground",
           )}
         >
           {anySelected ? (selected.length > 1 ? selected.length : "!") : "✓"}
         </span>
-        <span className="text-[13px] font-bold tracking-wide">{def.label}</span>
+        <span className="shrink-0 text-[13px] font-bold tracking-wide uppercase">{def.label}</span>
         {selected.length > 1 ? (
-          <Badge variant="outline" className="h-5 border-rose-300 bg-rose-50 px-1.5 text-[9px] font-semibold text-rose-700">
+          <Badge variant="outline" className="h-5 shrink-0 border-rose-300 bg-rose-50 px-1.5 text-[9px] font-semibold text-rose-700">
             combined ×{selected.length}
           </Badge>
         ) : null}
         {state.custom && !editing ? (
-          <Badge variant="outline" className="h-5 border-amber-300 bg-amber-50 px-1.5 text-[9px] font-semibold text-amber-700">
+          <Badge variant="outline" className="h-5 shrink-0 border-amber-300 bg-amber-50 px-1.5 text-[9px] font-semibold text-amber-700">
             edited
           </Badge>
         ) : null}
         {normalOverride && !anySelected ? (
-          <Badge variant="outline" className="h-5 border-violet-300 bg-violet-50 px-1.5 text-[9px] font-semibold text-violet-700" title="The normal wording is the doctor's own (customised in settings-free one click)">
+          <Badge variant="outline" className="h-5 shrink-0 border-violet-300 bg-violet-50 px-1.5 text-[9px] font-semibold text-violet-700" title="The normal wording is the doctor's own (customised in settings-free one click)">
             my wording
           </Badge>
         ) : null}
-        <div className="ml-auto flex items-center gap-1">
+        <ChipRow
+          def={def}
+          selectedKeys={selectedKeys}
+          anySelected={anySelected}
+          custom={!!state.custom}
+          usingQuickNormal={usingQuickNormal}
+          showQuickNormal={showQuickNormal}
+          visible={visible}
+          pathologiesCount={pathologies.length}
+          showAll={showAll}
+          isKidneySlot={isKidneySlot}
+          onToggle={onToggle}
+          onQuickNormal={onQuickNormal}
+          onAddCustom={onAddCustom}
+          onShowAll={() => setShowAll(true)}
+          onBeforeChip={() => setEditing(false)}
+          className="min-w-0 flex-1"
+        />
+        <div className="ml-auto flex shrink-0 items-center gap-1">
           <Button
             variant="ghost"
             size="sm"
@@ -234,25 +253,6 @@ export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, norma
           </div>
         </div>
       ) : null}
-
-      {/* Pathology chips — multi-select toggles */}
-      <ChipRow
-        def={def}
-        selectedKeys={selectedKeys}
-        anySelected={anySelected}
-        custom={!!state.custom}
-        usingQuickNormal={usingQuickNormal}
-        showQuickNormal={showQuickNormal}
-        visible={visible}
-        pathologiesCount={pathologies.length}
-        showAll={showAll}
-        isKidneySlot={isKidneySlot}
-        onToggle={onToggle}
-        onQuickNormal={onQuickNormal}
-        onAddCustom={onAddCustom}
-        onShowAll={() => setShowAll(true)}
-        onBeforeChip={() => setEditing(false)}
-      />
 
       {/* Measurement inputs for {tokens} (side tokens auto-fill) */}
       {inputTokens.length > 0 ? (

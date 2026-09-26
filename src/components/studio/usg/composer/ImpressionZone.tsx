@@ -44,7 +44,6 @@ export type ImpressionZoneProps = {
   impressionManual: boolean;
   setImpressionManual: (v: boolean) => void;
   declarationLine?: string | null;
-  paperLabel: string;
   enableBirads: boolean;
   birads: BiradsCategory | null;
   setBirads: (v: BiradsCategory | null) => void;
@@ -67,7 +66,6 @@ function impressionEqual(a: ImpressionZoneProps, b: ImpressionZoneProps): boolea
     a.impressionManual === b.impressionManual &&
     a.setImpressionManual === b.setImpressionManual &&
     a.declarationLine === b.declarationLine &&
-    a.paperLabel === b.paperLabel &&
     a.enableBirads === b.enableBirads &&
     a.birads === b.birads &&
     a.setBirads === b.setBirads &&
@@ -90,7 +88,6 @@ export const ImpressionZone = memo(function ImpressionZone({
   impressionManual,
   setImpressionManual,
   declarationLine,
-  paperLabel,
   enableBirads,
   birads,
   setBirads,
@@ -499,13 +496,6 @@ export const ImpressionZone = memo(function ImpressionZone({
           {declarationLine}
         </div>
       ) : null}
-
-      <div className="flex min-h-[300px] flex-1 flex-col rounded-xl border border-border bg-card p-3.5 shadow-sm">
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-[12px] font-bold tracking-wide">Live preview — {paperLabel}</span>
-          {!isFinal ? <span className="text-[9px] font-bold text-rose-500">PROVISIONAL</span> : null}
-        </div>
-      </div>
     </>
   );
 }, impressionEqual);

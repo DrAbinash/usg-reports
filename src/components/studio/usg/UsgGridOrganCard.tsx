@@ -85,9 +85,20 @@ export function UsgGridOrganCard({
   };
 
   return (
-    <div className="rounded-lg border border-sky-200/80 bg-white p-3 shadow-sm">
-      <div className="mb-2 flex items-baseline justify-between gap-2">
-        <h3 className="text-[11px] font-extrabold uppercase tracking-wide text-sky-900">{def.label}</h3>
+    <div className="flex overflow-hidden rounded-md border border-sky-200/80 bg-white">
+      <div
+        className="flex w-7 shrink-0 flex-col items-center justify-center self-stretch bg-slate-950 px-0.5 py-1"
+        title={def.label}
+      >
+        <span
+          className="max-h-full text-[10px] font-extrabold uppercase tracking-[0.14em] text-white"
+          style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+        >
+          {def.label}
+        </span>
+      </div>
+      <div className="min-w-0 flex-1 p-1.5">
+      <div className="mb-1 flex items-baseline justify-end gap-2">
         {total != null && schema.scoreTotal ? (
           <div className="text-[13px] font-extrabold text-sky-800">
             {total}/{schema.scoreTotal.max}
@@ -156,6 +167,7 @@ export function UsgGridOrganCard({
           </tfoot>
         ) : null}
       </table>
+      </div>
     </div>
   );
 }

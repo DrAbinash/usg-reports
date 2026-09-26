@@ -48,9 +48,10 @@ export const PreviewZone = memo(function PreviewZone({
   onEnlarge,
   onResetFocus,
 }: PreviewZoneProps) {
+  const enlarged = focusMode === "preview";
   return (
     <div
-      className="relative flex h-full min-h-0 flex-col gap-3 overflow-y-auto overflow-x-hidden pr-1"
+      className="relative flex h-full min-h-0 flex-col gap-2 overflow-hidden pr-1"
       onDoubleClick={(e) => {
         e.stopPropagation();
         onResetFocus();
@@ -66,12 +67,14 @@ export const PreviewZone = memo(function PreviewZone({
           title="Click to enlarge viewer & letterpad"
         />
       )}
-      {orderUid && <UsgViewerSidebar studyInstanceUid={orderUid} />}
-      <div className="min-h-[160px] flex-1 rounded-lg border border-border bg-white shadow-sm overflow-hidden">
+      {orderUid && <UsgViewerSidebar studyInstanceUid={orderUid} enlarged={enlarged} />}
+      {/* Letterpad: remaining column height — scroll inside so A4 stays readable */}
+      <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-border bg-slate-100 shadow-sm">
         <iframe
           title="USG report preview"
           srcDoc={previewHtml}
-          className="h-full w-full border-0"
+          className="block w-full border-0 bg-white"
+          style={{ minHeight: "100%", height: "1120px" }}
           sandbox="allow-same-origin"
         />
       </div>

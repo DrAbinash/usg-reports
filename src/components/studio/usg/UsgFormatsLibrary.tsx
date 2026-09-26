@@ -81,9 +81,14 @@ export function UsgFormatsLibrary({ organs, onApply }: {
 
   return (
     <>
-      <Button onClick={() => { setOpen(true); if (!data.length) load(); }} variant="outline" size="sm" className="border-border text-[11px]">
-        <BookOpen className="mr-1 h-3 w-3" />
-        Formats Library ({data.length || "..."})
+      <Button
+        onClick={() => { setOpen(true); if (!data.length) load(); }}
+        variant="outline"
+        size="sm"
+        className="h-10 border-2 border-slate-300 bg-white px-3.5 text-[13px] font-bold text-slate-900 shadow-sm hover:border-slate-400 hover:bg-slate-50"
+      >
+        <BookOpen className="mr-1.5 h-4 w-4" />
+        Formats library ({data.length || "…"})
       </Button>
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

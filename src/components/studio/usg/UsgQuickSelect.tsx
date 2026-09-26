@@ -83,11 +83,13 @@ export function UsgQuickSelect({ patients, onSelect, currentPatientId }: Props) 
   }, [patients]);
 
   return (
-    <div ref={ref} className="relative rounded-lg border border-border bg-white px-4 py-2.5 shadow-sm">
+    <div ref={ref} className="relative rounded-xl border-2 border-indigo-200 bg-white px-4 py-3 shadow-sm">
       <div className="flex items-center gap-3">
-        <span className="text-[11px] font-bold tracking-wide text-indigo-700">QUICK SELECT</span>
-        <div className="flex flex-1 items-center gap-2 rounded-md border border-border bg-gray-50 px-3 py-1.5">
-          <svg className="h-4 w-4 text-faint" viewBox="0 0 20 20" fill="currentColor">
+        <span className="rounded-md bg-indigo-600 px-2.5 py-1 text-[12px] font-bold uppercase tracking-wide text-white shadow-sm">
+          Find patient
+        </span>
+        <div className="flex flex-1 items-center gap-2 rounded-lg border-2 border-slate-300 bg-slate-50 px-3 py-2">
+          <svg className="h-4 w-4 text-slate-500" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
           </svg>
           <input
@@ -96,26 +98,28 @@ export function UsgQuickSelect({ patients, onSelect, currentPatientId }: Props) 
             onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
             onFocus={() => setOpen(true)}
             placeholder="Search by name, study, referrer, or ID…"
-            className="flex-1 bg-transparent text-sm outline-none placeholder:text-faint"
+            className="flex-1 bg-transparent text-[14px] font-medium outline-none placeholder:text-slate-400"
           />
           {query && (
-            <button type="button" onClick={() => setQuery("")} className="text-faint hover:text-black">×</button>
+            <button type="button" onClick={() => setQuery("")} className="text-[16px] font-bold text-slate-500 hover:text-black">×</button>
           )}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5" role="tablist" aria-label="Patient date range">
           {RANGES.map((r) => (
             <button
               key={r.key}
               type="button"
+              role="tab"
+              aria-selected={range === r.key}
               onClick={() => setRange(r.key)}
-              className={`rounded px-2.5 py-1 text-[11px] font-semibold transition ${
+              className={`rounded-full border-2 px-3 py-1.5 text-[13px] font-bold transition shadow-sm ${
                 range === r.key
-                  ? "bg-indigo-600 text-white"
-                  : "bg-gray-100 text-faint hover:bg-gray-200"
+                  ? "border-indigo-600 bg-indigo-600 text-white"
+                  : "border-slate-300 bg-white text-slate-800 hover:border-indigo-300 hover:bg-indigo-50"
               }`}
             >
               {r.label}
-              <span className="ml-1 opacity-70">({rangeCounts[r.key]})</span>
+              <span className="ml-1 opacity-80">({rangeCounts[r.key]})</span>
             </button>
           ))}
         </div>

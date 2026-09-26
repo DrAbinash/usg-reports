@@ -2,13 +2,16 @@
 /**
  * UsgTemplateBar (v6.15) — Quick report templates bar.
  * Compact single-row horizontal scroller so templates never steal vertical space.
+ *
+ * Hydrates via useReportFormats — same collection as Formats Library.
  */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Bookmark, Trash2, Pin, Loader2, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useInvalidateReportFormats, useReportFormats } from "@/hooks/useReportFormats";
 
 type Template = {
   id: string;
@@ -25,30 +28,13 @@ export type UsgTemplateBarProps = {
 };
 
 export function UsgTemplateBar({ onApply, currentStateJson, currentStudyKey }: UsgTemplateBarProps) {
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { formats, isPending, isLoading } = useReportFormats();
+  const invalidate = useInvalidateReportFormats();
   const [saving, setSaving] = useState(false);
   const [showSave, setShowSave] = useState(false);
   const [name, setName] = useState("");
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/usg/templates");
-      if (res.ok) {
-        const d = (await res.json()) as { templates: Template[] };
-        setTemplates(d.templates);
-      }
-    } catch {
-      // silent
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void load();
-  }, []);
+  const templates: Template[] = formats;
 
   const save = async () => {
     if (!name.trim()) {
@@ -70,7 +56,7 @@ export function UsgTemplateBar({ onApply, currentStateJson, currentStudyKey }: U
         toast.success(`Template "${name.trim()}" saved`);
         setName("");
         setShowSave(false);
-        await load();
+        await invalidate();
       } else {
         const e = await res.json().catch(() => ({}));
         toast.error(e.error ?? `Save failed (${res.status})`);
@@ -87,7 +73,7 @@ export function UsgTemplateBar({ onApply, currentStateJson, currentStudyKey }: U
       const res = await fetch(`/api/usg/templates/${id}`, { method: "DELETE" });
       if (res.ok) {
         toast.success("Template deleted");
-        await load();
+        await invalidate();
       }
     } catch {
       toast.error("Delete failed");
@@ -97,13 +83,13 @@ export function UsgTemplateBar({ onApply, currentStateJson, currentStudyKey }: U
   const togglePin = async (id: string) => {
     try {
       await fetch(`/api/usg/templates/${id}`, { method: "PATCH" });
-      await load();
+      await invalidate();
     } catch {
       // silent
     }
   };
 
-  if (loading) {
+  if (isPending || (isLoading && templates.length === 0)) {
     return (
       <div className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
         <Loader2 className="h-3 w-3 animate-spin" /> Templates…

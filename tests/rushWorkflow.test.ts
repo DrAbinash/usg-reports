@@ -16,7 +16,7 @@ import {
 import { matchSnippet, getAllSnippets } from "@/lib/usg/textExpansion";
 
 describe("NP template seeds", () => {
-  it("ships WA / Upper / KUB / TVS / LA definitions", () => {
+  it("ships WA / Upper / KUB / TVS / LA / Echo definitions", () => {
     expect(BUILTIN_NP_TEMPLATES.map((t) => t.studyKey)).toEqual([
       "wa-female",
       "wa-male",
@@ -26,7 +26,18 @@ describe("NP template seeds", () => {
       "tvs",
       "la-female",
       "la-male",
+      "echo",
     ]);
+  });
+
+  it("Echo seed keeps verbatim echocardiography normal strings", () => {
+    const echo = buildNpTemplateState("echo");
+    expect(echo.studyKey).toBe("echo");
+    const mmode = echo.organs.find((o) => o.organ === "echo-mmode")?.text ?? "";
+    expect(mmode).toContain("LA ( Left Atrial Diameter )");
+    expect(mmode).toContain("LVEF ( LV Ejection Fraction )");
+    const valves = echo.organs.find((o) => o.organ === "echo-valves")?.text ?? "";
+    expect(valves).toContain("Mitral Valve ( MV )");
   });
 
   it("buildNpTemplateState yields measurement-free organ text", () => {

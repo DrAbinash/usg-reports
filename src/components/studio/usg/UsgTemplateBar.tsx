@@ -119,18 +119,21 @@ export function UsgTemplateBar({ onApply, currentStateJson, currentStudyKey }: U
 
   if (loading) {
     return (
-      <div className="flex items-center gap-1.5 px-3 py-1 text-[10px] text-muted-foreground">
-        <Loader2 className="h-3 w-3 animate-spin" /> Loading templates…
+      <div className="flex items-center gap-1.5 py-1 text-[12px] font-medium text-muted-foreground">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading saved templates…
       </div>
     );
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5 border-b border-border bg-panel/50 px-3 py-1.5">
-      <Zap className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200/80 bg-white/80 px-2.5 py-2">
+      <span className="inline-flex items-center gap-1 text-[12px] font-bold text-amber-800">
+        <Zap className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+        Saved templates
+      </span>
       {templates.length === 0 ? (
-        <span className="text-[10px] text-faint">
-          No quick templates yet — save one for emergency use
+        <span className="text-[12px] font-medium text-amber-900/70">
+          None yet — save today’s report once, reuse tomorrow
         </span>
       ) : (
         templates.map((t) => (
@@ -138,10 +141,10 @@ export function UsgTemplateBar({ onApply, currentStateJson, currentStudyKey }: U
             <button
               onClick={() => onApply(t)}
               className={cn(
-                "rounded-full border px-2.5 py-0.5 text-[10px] font-bold transition-colors",
+                "rounded-full border-2 px-3 py-1 text-[12px] font-bold transition-colors shadow-sm",
                 t.pinned
-                  ? "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
-                  : "border-border bg-card text-foreground hover:border-primary/40",
+                  ? "border-amber-400 bg-amber-100 text-amber-950 hover:bg-amber-200"
+                  : "border-slate-300 bg-white text-slate-900 hover:border-emerald-400 hover:bg-emerald-50",
               )}
               title={`Apply template: ${t.name}`}
             >
@@ -149,17 +152,17 @@ export function UsgTemplateBar({ onApply, currentStateJson, currentStudyKey }: U
             </button>
             <button
               onClick={() => void togglePin(t.id)}
-              className="opacity-0 transition-opacity group-hover:opacity-100"
+              className="rounded p-0.5 opacity-70 transition-opacity hover:opacity-100 group-hover:opacity-100"
               title={t.pinned ? "Unpin" : "Pin to top"}
             >
-              <Pin className={cn("h-3 w-3", t.pinned ? "text-amber-500" : "text-faint")} />
+              <Pin className={cn("h-3.5 w-3.5", t.pinned ? "text-amber-600" : "text-slate-400")} />
             </button>
             <button
               onClick={() => void remove(t.id)}
-              className="opacity-0 transition-opacity group-hover:opacity-100"
+              className="rounded p-0.5 opacity-70 transition-opacity hover:opacity-100 group-hover:opacity-100"
               title="Delete template"
             >
-              <Trash2 className="h-3 w-3 text-destructive" />
+              <Trash2 className="h-3.5 w-3.5 text-destructive" />
             </button>
           </div>
         ))
@@ -171,17 +174,17 @@ export function UsgTemplateBar({ onApply, currentStateJson, currentStudyKey }: U
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Template name (e.g. Normal Whole Abdomen Male)"
-            className="h-7 w-[220px] text-[11px]"
+            className="h-9 w-[240px] text-[13px] font-medium"
             onKeyDown={(e) => {
               if (e.key === "Enter") void save();
               if (e.key === "Escape") { setShowSave(false); setName(""); }
             }}
             autoFocus
           />
-          <Button size="sm" className="h-7 px-2 text-[10px]" onClick={() => void save()} disabled={saving}>
-            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+          <Button size="sm" className="h-9 px-3 text-[12px] font-bold" onClick={() => void save()} disabled={saving}>
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save"}
           </Button>
-          <Button size="sm" variant="ghost" className="h-7 px-1 text-[10px]" onClick={() => { setShowSave(false); setName(""); }}>
+          <Button size="sm" variant="ghost" className="h-9 px-2 text-[12px] font-semibold" onClick={() => { setShowSave(false); setName(""); }}>
             Cancel
           </Button>
         </div>
@@ -189,11 +192,11 @@ export function UsgTemplateBar({ onApply, currentStateJson, currentStudyKey }: U
         <Button
           size="sm"
           variant="ghost"
-          className="h-7 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+          className="h-9 px-2.5 text-[12px] font-bold text-amber-900 hover:bg-amber-100 hover:text-amber-950"
           onClick={() => setShowSave(true)}
           title="Save the current report state as a reusable template"
         >
-          <Bookmark className="mr-1 h-3 w-3" />
+          <Bookmark className="mr-1 h-3.5 w-3.5" />
           Save as template
         </Button>
       )}

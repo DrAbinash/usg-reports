@@ -815,103 +815,114 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
       )}
     </div>
 
-    {/* v6.15: Quick report templates bar — one-click pre-filled reports */}
-    {/* Peak-time: one-tap all-normal without measurement slots */}
+    {/* Quick report strip — large, plain-language one-tap fills for rush reporting */}
     {!isFinal && (
-      <div className="flex flex-wrap items-center gap-2 px-3 pt-2">
-        {studyAllowsRushNormals(study) ? (
-          <>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-7 border-amber-200 bg-amber-50 px-2.5 text-[11px] font-semibold text-amber-800 hover:bg-amber-100"
-              title="Peak-time: mark every organ normal with no size measurements"
-              onClick={() => {
-                const next = applyRushNormalStudy(state, study);
-                if (!next) {
-                  toast.error("This study needs measurements — use organ cards");
-                  return;
-                }
-                setState(next);
-                toast.success("All normal · no sizes — ready to print");
-              }}
-            >
-              <Zap className="mr-1 h-3.5 w-3.5" />
-              Normal · no sizes
-            </Button>
-            {study.organs.some((o) => o.key === "liver") ? (
+      <div className="mx-3 mt-2 rounded-xl border-2 border-emerald-300/80 bg-gradient-to-r from-emerald-50 via-amber-50/50 to-white px-3 py-2.5 shadow-sm">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <span className="rounded-md bg-emerald-600 px-2.5 py-1 text-[12px] font-bold uppercase tracking-wide text-white shadow-sm">
+            Quick report
+          </span>
+          <span className="text-[13px] font-semibold text-emerald-950">
+            One tap to fill the study — then Save &amp; Print
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {studyAllowsRushNormals(study) ? (
+            <>
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
-                className="h-7 border-orange-200 bg-orange-50 px-2.5 text-[11px] font-semibold text-orange-800 hover:bg-orange-100"
-                title="NP + Fatty Gr I · no size — most common almost-normal abdomen"
+                className="h-10 border-2 border-amber-400 bg-amber-100 px-3.5 text-[13px] font-bold text-amber-950 shadow-sm hover:bg-amber-200"
+                title="Peak-time: mark every organ normal with no size measurements (keyboard: N)"
                 onClick={() => {
-                  const next = applyRushPreset(state, study, "fatty-g1", (k) => pathologies.find((p) => p.key === k));
+                  const next = applyRushNormalStudy(state, study);
                   if (!next) {
                     toast.error("This study needs measurements — use organ cards");
                     return;
                   }
                   setState(next);
-                  toast.success("NP + Fatty Gr I · no size — ready to print");
+                  toast.success("All normal · no sizes — ready to print");
                 }}
               >
-                NP + Fatty
+                <Zap className="mr-1.5 h-4 w-4" />
+                All normal (no sizes)
               </Button>
-            ) : null}
-          </>
-        ) : (
+              {study.organs.some((o) => o.key === "liver") ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-10 border-2 border-orange-400 bg-orange-100 px-3.5 text-[13px] font-bold text-orange-950 shadow-sm hover:bg-orange-200"
+                  title="Almost-normal abdomen with fatty liver Gr I · no sizes (most common rush preset)"
+                  onClick={() => {
+                    const next = applyRushPreset(state, study, "fatty-g1", (k) => pathologies.find((p) => p.key === k));
+                    if (!next) {
+                      toast.error("This study needs measurements — use organ cards");
+                      return;
+                    }
+                    setState(next);
+                    toast.success("NP + Fatty Gr I · no size — ready to print");
+                  }}
+                >
+                  Normal + fatty liver
+                </Button>
+              ) : null}
+            </>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-10 border-2 border-emerald-400 bg-emerald-100 px-3.5 text-[13px] font-bold text-emerald-950 shadow-sm hover:bg-emerald-200"
+              title="Clear all pathologies back to measured normals"
+              onClick={() => {
+                setState((s) => markAllNormal(s, study));
+                toast.success("All organs set to normal");
+              }}
+            >
+              <Zap className="mr-1.5 h-4 w-4" />
+              Clear all findings
+            </Button>
+          )}
           <Button
             type="button"
             size="sm"
             variant="outline"
-            className="h-7 border-emerald-200 bg-emerald-50 px-2.5 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100"
-            title="Clear all pathologies back to measured normals"
-            onClick={() => {
-              setState((s) => markAllNormal(s, study));
-              toast.success("All organs set to normal");
-            }}
+            className="h-10 border-2 border-emerald-500 bg-emerald-600 px-3.5 text-[13px] font-bold text-white shadow-sm hover:bg-emerald-700"
+            title="Fill every unset organ with its normal finding (leaves abnormals untouched)"
+            onClick={applyAllNormalMacro}
           >
-            <Zap className="mr-1 h-3.5 w-3.5" />
-            Clear all
+            <Check className="mr-1.5 h-4 w-4" />
+            All Normal
           </Button>
-        )}
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="h-7 border-emerald-300 bg-emerald-50 px-2.5 text-[11px] font-semibold text-emerald-900 hover:bg-emerald-100"
-          title="Fill every unset organ with its normal finding (leaves abnormals untouched)"
-          onClick={applyAllNormalMacro}
-        >
-          <Check className="mr-1 h-3.5 w-3.5" />
-          All Normal
-        </Button>
-        <UsgFormatsLibrary organs={state.organs} onApply={(organs, imp) => setState((p) => ({ ...p, organs, impressionOverride: imp ?? p.impressionOverride }))} />
-        <UsgTemplateBar
-        onApply={(template) => {
-          try {
-            const savedState = JSON.parse(template.stateJson) as UsgComposerState;
-            const target = getStudy(template.studyKey);
-            if (target) {
-              setStudyKey(template.studyKey);
-              const nextDefault =
-                settings.studyTechniqueDefaults?.[template.studyKey]?.trim() || target.technique;
-              setTechnique(nextDefault);
-              if (template.studyKey.includes("child")) setPatientSex(USG_SEX_CHILD);
-              else if (template.studyKey.includes("female") || template.studyKey === "tvs" || template.studyKey === "ob") setPatientSex("F");
-              else if (template.studyKey.includes("male")) setPatientSex("M");
-            }
-            setState(savedState);
-            toast.success(`Template applied: ${template.name}`);
-          } catch {
-            toast.error("Could not apply template — corrupted state");
-          }
-        }}
-        currentStateJson={JSON.stringify(state)}
-        currentStudyKey={state.studyKey}
-      />
+          <UsgFormatsLibrary organs={state.organs} onApply={(organs, imp) => setState((p) => ({ ...p, organs, impressionOverride: imp ?? p.impressionOverride }))} />
+        </div>
+        <div className="mt-2">
+          <UsgTemplateBar
+            onApply={(template) => {
+              try {
+                const savedState = JSON.parse(template.stateJson) as UsgComposerState;
+                const target = getStudy(template.studyKey);
+                if (target) {
+                  setStudyKey(template.studyKey);
+                  const nextDefault =
+                    settings.studyTechniqueDefaults?.[template.studyKey]?.trim() || target.technique;
+                  setTechnique(nextDefault);
+                  if (template.studyKey.includes("child")) setPatientSex(USG_SEX_CHILD);
+                  else if (template.studyKey.includes("female") || template.studyKey === "tvs" || template.studyKey === "ob") setPatientSex("F");
+                  else if (template.studyKey.includes("male")) setPatientSex("M");
+                }
+                setState(savedState);
+                toast.success(`Template applied: ${template.name}`);
+              } catch {
+                toast.error("Could not apply template — corrupted state");
+              }
+            }}
+            currentStateJson={JSON.stringify(state)}
+            currentStudyKey={state.studyKey}
+          />
+        </div>
       </div>
     )}
     </>

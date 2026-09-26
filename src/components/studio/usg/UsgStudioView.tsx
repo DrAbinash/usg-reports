@@ -654,7 +654,7 @@ export function UsgStudioView() {
 
       {/* Reports ↔ Patients mode switch */}
       <div className="flex items-center gap-2">
-        <div className="flex rounded-full border border-border bg-panel p-1">
+        <div className="flex rounded-full border-2 border-rose-200 bg-rose-50/60 p-1 shadow-sm" role="tablist" aria-label="Studio mode">
           {(
             [
               { id: "reports", label: "Reports", icon: FileText },
@@ -663,16 +663,20 @@ export function UsgStudioView() {
           ).map((m) => (
             <button
               key={m.id}
+              role="tab"
+              aria-selected={mode === m.id}
               onClick={() => {
                 setMode(m.id);
                 setPatientDetail(null);
               }}
               className={cn(
-                "flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[12px] font-semibold transition-colors",
-                mode === m.id ? "bg-card text-rose-700 shadow-sm ring-1 ring-rose-200" : "text-muted-foreground hover:text-foreground",
+                "flex items-center gap-1.5 rounded-full px-5 py-2 text-[13px] font-bold transition-colors",
+                mode === m.id
+                  ? "bg-rose-600 text-white shadow-sm"
+                  : "text-rose-900/70 hover:bg-white hover:text-rose-800",
               )}
             >
-              <m.icon className="h-3.5 w-3.5" />
+              <m.icon className="h-4 w-4" />
               {m.label}
             </button>
           ))}

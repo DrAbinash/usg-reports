@@ -508,17 +508,18 @@ export function UsgWorklistView() {
       {data && !data.careOk && data.careConfigured ? <UsgPacsQueue /> : null}
 
       {/* v6.14: Date range filter — quick presets + custom from-to */}
-      <div className="flex flex-wrap items-center gap-2">
-        <CalendarDays className="h-4 w-4 text-muted-foreground" />
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2">
+        <CalendarDays className="h-4 w-4 text-slate-700" />
+        <span className="text-[12px] font-bold uppercase tracking-wide text-slate-700">Dates</span>
         {(["all", "today", "yesterday", "week", "custom"] as const).map((preset) => (
           <button
             key={preset}
             onClick={() => setDatePreset(preset)}
             className={cn(
-              "rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors",
+              "rounded-full border-2 px-3.5 py-1.5 text-[13px] font-bold transition-colors shadow-sm",
               datePreset === preset
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border bg-card text-muted-foreground hover:text-foreground"
+                ? "border-rose-500 bg-rose-600 text-white"
+                : "border-slate-300 bg-white text-slate-800 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-800"
             )}
           >
             {preset === "all" ? "All dates" : preset === "today" ? "Today" : preset === "yesterday" ? "Yesterday" : preset === "week" ? "Last 7 days" : "Custom"}
@@ -530,15 +531,15 @@ export function UsgWorklistView() {
               type="date"
               value={customFrom}
               onChange={(e) => setCustomFrom(e.target.value)}
-              className="h-8 w-[140px] border-border bg-card text-[12px]"
+              className="h-9 w-[150px] border-2 border-slate-300 bg-white text-[13px] font-semibold"
               placeholder="From"
             />
-            <span className="text-[11px] text-faint">→</span>
+            <span className="text-[13px] font-bold text-slate-600">→</span>
             <Input
               type="date"
               value={customTo}
               onChange={(e) => setCustomTo(e.target.value)}
-              className="h-8 w-[140px] border-border bg-card text-[12px]"
+              className="h-9 w-[150px] border-2 border-slate-300 bg-white text-[13px] font-semibold"
               placeholder="To"
             />
           </div>
@@ -558,12 +559,12 @@ export function UsgWorklistView() {
           <CheckCircle2 className="h-4 w-4 text-primary" />
           <SectionLabel>To report · {pending.length}</SectionLabel>
           {pending.length > 0 ? (
-            <span className="text-[10px] text-faint">
-              <kbd className="rounded border bg-card px-1 font-mono text-[9px]">J</kbd>/
-              <kbd className="rounded border bg-card px-1 font-mono text-[9px]">K</kbd> move ·{" "}
-              <kbd className="rounded border bg-card px-1 font-mono text-[9px]">N</kbd> NP ·{" "}
-              <kbd className="rounded border bg-card px-1 font-mono text-[9px]">F</kbd> NP+Fatty ·{" "}
-              <kbd className="rounded border bg-card px-1 font-mono text-[9px]">Enter</kbd> open
+            <span className="text-[12px] font-semibold text-slate-600">
+              <kbd className="rounded border border-slate-300 bg-white px-1.5 font-mono text-[11px] font-bold">J</kbd>/
+              <kbd className="rounded border border-slate-300 bg-white px-1.5 font-mono text-[11px] font-bold">K</kbd> move ·{" "}
+              <kbd className="rounded border border-slate-300 bg-white px-1.5 font-mono text-[11px] font-bold">N</kbd> all normal ·{" "}
+              <kbd className="rounded border border-slate-300 bg-white px-1.5 font-mono text-[11px] font-bold">F</kbd> + fatty ·{" "}
+              <kbd className="rounded border border-slate-300 bg-white px-1.5 font-mono text-[11px] font-bold">Enter</kbd> open
             </span>
           ) : null}
         </div>
@@ -588,36 +589,36 @@ export function UsgWorklistView() {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="h-7 border-amber-200 bg-amber-50 px-2 text-[11px] font-semibold text-amber-800 hover:bg-amber-100"
+                        className="h-9 border-2 border-amber-400 bg-amber-100 px-2.5 text-[12px] font-bold text-amber-950 shadow-sm hover:bg-amber-200"
                         onClick={(e) => {
                           e.stopPropagation();
                           void startReport(o, { rush: true });
                         }}
-                        title="Start report as NP · no sizes (keyboard: N)"
+                        title="Start report as all normal · no sizes (keyboard: N)"
                       >
-                        <Zap className="mr-1 h-3 w-3" />
-                        NP
+                        <Zap className="mr-1 h-3.5 w-3.5" />
+                        All normal
                       </Button>
                     ) : null}
                     {orderAllowsFattyPreset(o) && !o.reportId ? (
                       <Button
                         size="sm"
                         variant="outline"
-                        className="h-7 border-orange-200 bg-orange-50 px-2 text-[11px] font-semibold text-orange-800 hover:bg-orange-100"
+                        className="h-9 border-2 border-orange-400 bg-orange-100 px-2.5 text-[12px] font-bold text-orange-950 shadow-sm hover:bg-orange-200"
                         onClick={(e) => {
                           e.stopPropagation();
                           void startReport(o, { preset: "fatty-g1" });
                         }}
-                        title="Start as NP + Fatty Gr I · no size (keyboard: F)"
+                        title="Start as normal + fatty liver Gr I · no size (keyboard: F)"
                       >
-                        NP+F
+                        + Fatty
                       </Button>
                     ) : null}
                     {data?.usgFormFEnabled ? (
                       <Button
                         size="sm"
                         variant="outline"
-                        className="h-7 border-rose-200 bg-rose-50 px-2 text-[11px] font-semibold text-rose-700 hover:bg-rose-50"
+                        className="h-9 border-2 border-rose-300 bg-rose-50 px-2.5 text-[12px] font-bold text-rose-800 shadow-sm hover:bg-rose-100"
                         onClick={(e) => {
                           e.stopPropagation();
                           setFormFOrder(o);
@@ -625,7 +626,7 @@ export function UsgWorklistView() {
                         }}
                         title="PC-PNDT Form F — pre-filled from the bill desk"
                       >
-                        <FileCheck2 className="mr-1 h-3 w-3" />
+                        <FileCheck2 className="mr-1 h-3.5 w-3.5" />
                         Form F
                       </Button>
                     ) : null}

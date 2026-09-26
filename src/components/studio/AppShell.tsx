@@ -1,5 +1,5 @@
 "use client";
-/** App shell: slim header + left nav + main region. Single-screen USG studio. */
+/** App shell: brand + top nav ribbon + main region (no left sidebar). */
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useStudio } from "@/lib/store";
@@ -7,33 +7,34 @@ import { SettingsView } from "./SettingsView";
 import { UsgStudioView } from "./usg/UsgStudioView";
 import { UsgInsightsView } from "./usg/UsgInsightsView";
 import { UsgWorklistView } from "./usg/UsgWorklistView";
-import { UsgDailySummary } from "./usg/UsgDailySummary";
 import { UsgDarkModeToggle } from "./usg/UsgDarkModeToggle";
 import { UsgCommandPalette } from "./usg/UsgCommandPalette";
 import { UsgClinicSwitcher } from "./usg/UsgClinicSwitcher";
 import { UsgClinicLink } from "./usg/UsgClinicLink";
 import { OnboardingLayer } from "./usg/OnboardingLayer";
 import { UsgBirthdayGreeting, BirthdayHeaderButton, birthdayDismissed, rememberBirthdayDismissed, useBirthdayFlag } from "./usg/UsgBirthdayGreeting";
-import { Waves, Settings2, LogOut, Stethoscope, BarChart3, ClipboardList, Activity} from "lucide-react";
+import { Waves, Settings2, LogOut, Stethoscope, BarChart3, ClipboardList, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import type { View } from "@/lib/store";
 
-const NAV: { id: View; label: string; icon: typeof Waves; tint: string }[] = [
-  { id: "worklist", label: "Worklist", icon: ClipboardList, tint: "text-sky-700 bg-sky-50 ring-sky-200" },
-  { id: "usg", label: "USG Studio", icon: Waves, tint: "text-rose-700 bg-rose-50 ring-rose-200" },
-  { id: "insights", label: "Insights", icon: BarChart3, tint: "text-violet-700 bg-violet-50 ring-violet-200" },
-  { id: "settings", label: "Settings", icon: Settings2, tint: "text-amber-700 bg-amber-50 ring-amber-200" },
-  { id: "pacs-viewer", label: "PACS Viewer", icon: Activity, tint: "text-indigo-700 bg-indigo-50 ring-indigo-200" },
+const NAV: { id: View; label: string; icon: typeof Waves }[] = [
+  { id: "worklist", label: "Worklist", icon: ClipboardList },
+  { id: "usg", label: "USG Studio", icon: Waves },
+  { id: "insights", label: "Insights", icon: BarChart3 },
+  { id: "settings", label: "Settings", icon: Settings2 },
 ];
+
+/** Opens the LAN OHIF worklist — useful when no study is open in the composer.
+ *  Per-study viewing already lives in the embedded DICOM pane. */
+const PACS_OHIF_URL = "http://172.16.1.139:3010/viewer";
 
 export function AppShell() {
   const { view, setView } = useStudio();
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  // Prefetch patients list on shell mount so the patient panel opens warm.
   useEffect(() => {
     void queryClient.prefetchQuery({
       queryKey: ["usg", "patients"],
@@ -45,8 +46,6 @@ export function AppShell() {
     });
   }, [queryClient]);
 
-  // v6.1 Sonologist's Day — the card auto-opens once on the birthday, then
-  // a cake stays in the header for the rest of the day to reopen it.
   const bday = useBirthdayFlag();
   const [bdayCard, setBdayCard] = useState(false);
   useEffect(() => {
@@ -68,10 +67,10 @@ export function AppShell() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
-      {/* Header — gradient identity strip */}
-      <header className="relative flex h-14 shrink-0 items-center gap-4 border-b border-border bg-card px-4">
+      {/* Brand + primary nav in one top ribbon */}
+      <header className="relative flex h-12 shrink-0 items-center gap-3 border-b border-border bg-card px-3">
         <div className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-rose-500 via-fuchsia-500 to-violet-500" aria-hidden />
-        <div className="flex items-center gap-2.5">
+        <div className="flex shrink-0 items-center gap-2">
           <div
             className="flex h-8 w-8 items-center justify-center rounded-lg text-white shadow-sm"
             style={{ background: "linear-gradient(135deg,#e11d48 0%,#d946ef 55%,#8b5cf6 130%)" }}
@@ -80,20 +79,50 @@ export function AppShell() {
           </div>
           <div className="leading-tight">
             <div className="text-[13px] font-bold tracking-tight">CARE USG Studio</div>
-            <div className="text-[10px] text-faint">Sonography reporting</div>
+            <div className="hidden text-[10px] text-faint sm:block">Sonography reporting</div>
           </div>
         </div>
 
-        <div className="ml-auto flex items-center gap-3">
+        <nav className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]" aria-label="Primary">
+          {NAV.map((n) => {
+            const active = view === n.id;
+            return (
+              <button
+                key={n.id}
+                type="button"
+                onClick={() => setView(n.id)}
+                className={cn(
+                  "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-bold transition-colors",
+                  active
+                    ? "bg-rose-600 text-white shadow-sm"
+                    : "text-slate-700 hover:bg-rose-50 hover:text-rose-800",
+                )}
+              >
+                <n.icon className="h-3.5 w-3.5" />
+                <span>{n.label}</span>
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => window.open(PACS_OHIF_URL, "_blank", "noopener,noreferrer")}
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-bold text-indigo-800 hover:bg-indigo-50"
+            title="Open full OHIF / PACS in a new tab"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            <span>PACS</span>
+          </button>
+        </nav>
+
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           <UsgClinicSwitcher />
           <UsgClinicLink />
           {bday?.today ? <BirthdayHeaderButton onClick={() => setBdayCard(true)} /> : null}
           <button
             onClick={() => {
-              // Open the command palette by simulating Ctrl+K
               window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, metaKey: true }));
             }}
-            className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             title="Open command palette (Ctrl+K)"
           >
             <kbd className="font-mono text-[10px] font-bold">⌘K</kbd>
@@ -109,47 +138,12 @@ export function AppShell() {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        {/* Left nav */}
-        <nav className="flex w-16 shrink-0 flex-col items-center gap-1.5 border-r border-border bg-panel py-3 md:w-44 md:items-stretch md:px-2.5">
-          {NAV.map((n) => {
-            const active = view === n.id;
-            return (
-              <button
-                key={n.id}
-                onClick={() => {
-                  if (n.id === "pacs-viewer") {
-                    window.open("http://172.16.1.139:3010/viewer", "_blank", "noopener,noreferrer");
-                    return;
-                  }
-                  setView(n.id);
-                }}
-                className={cn(
-                  "relative flex h-10 items-center justify-center gap-2.5 rounded-lg text-[13px] font-medium transition-all md:justify-start md:px-3",
-                  active
-                    ? "bg-card text-foreground shadow-sm ring-1 ring-border"
-                    : "text-muted-foreground hover:bg-card/60 hover:text-foreground",
-                )}
-              >
-                <span className={cn("flex h-6 w-6 items-center justify-center rounded-md md:h-7 md:w-7", active ? `ring-1 ${n.tint}` : "")}>
-                  <n.icon className="h-4 w-4 shrink-0" />
-                </span>
-                <span className="hidden md:inline">{n.label}</span>
-                {active ? <span className="absolute left-0 top-1/2 hidden h-5 w-0.5 -translate-y-1/2 rounded-r bg-gradient-to-b from-rose-500 to-fuchsia-500 md:block" /> : null}
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* Main */}
-        <main className="studio-scroll min-h-0 flex-1 overflow-y-auto">
-          {view === "worklist" && <UsgWorklistView />}
-          {view === "usg" && <UsgStudioView />}
-          {view === "insights" && <UsgInsightsView />}
-          {view === "settings" && <SettingsView />}
-        </main>
-      </div>
-
+      <main className="studio-scroll min-h-0 flex-1 overflow-y-auto">
+        {view === "worklist" && <UsgWorklistView />}
+        {view === "usg" && <UsgStudioView />}
+        {view === "insights" && <UsgInsightsView />}
+        {view === "settings" && <SettingsView />}
+      </main>
 
       <OnboardingLayer />
 
@@ -157,7 +151,6 @@ export function AppShell() {
         <UsgBirthdayGreeting message={bday?.message ?? ""} open={bdayCard} onClose={closeBirthdayCard} name={bday.name} birthday={bday.birthday} />
       ) : null}
 
-      {/* v6.9 — Global command palette (Ctrl/Cmd+K) */}
       <UsgCommandPalette />
     </div>
   );

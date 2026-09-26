@@ -49,6 +49,7 @@ import {
   ComposerDialogs,
 } from "./composer/PreviewZone";
 import { StickyActionBar } from "./composer/StickyActionBar";
+import { downloadReportPdf } from "./sharePdf";
 import type { DiffSource } from "./UsgDiffPanel";
 
 /** v6: the bill-desk order a report came from (banner, PACS, Form F). */
@@ -733,6 +734,14 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         onSave={() => void persist("")}
         onFinalize={() => void finalizeFast(false)}
         onPrint={() => void print()}
+        onDownloadPdf={() =>
+          downloadReportPdf({
+            reportId: savedIdRef.current ?? report?.id ?? "",
+            patientName,
+            serial,
+            date: fmtPrintDate(scanDate),
+          })
+        }
         onNext={onBack}
       />
     </div>

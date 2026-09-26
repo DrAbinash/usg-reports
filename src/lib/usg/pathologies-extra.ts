@@ -361,6 +361,8 @@ export const USG_PATHOLOGIES_EXTRA: UsgPathologyDef[] = [
   }),
 
   // ── ECHOCARDIOGRAPHY — valve profiles (organ "echo-valves") ─────────────────
+  // Clinic corpus chips (COLOUR ECHO NOR / RHD / child PS / severe TR) sit
+  // alongside the existing valve quick-selects.
   P({
     key: "echo-mr-mod", organ: "echo-valves", label: "Mitral Regurgitation — Moderate", category: "Valves",
     text: "Mitral Valve ( MV ) : The AML show normal cusps thickness and excursion, no calcification, no doming. Colour Doppler shows moderate mitral regurgitation.\nAortic Valve ( AoV ) : Normal thickness & excursions.\nTricuspid Valve ( TV ) : Normal cusps.\nPulmonary Valve ( PV ) : Pulmonary annulus & its branches are normal.\nIAS ( Interatrial Septum ) : Intact.\nIVS ( Interventricular Septum ) : Intact.\nPericardium : No effusion.\nLA / LVA Clot : None.",
@@ -393,12 +395,37 @@ export const USG_PATHOLOGIES_EXTRA: UsgPathologyDef[] = [
     impression: ["Mild tricuspid regurgitation."],
   }),
   P({
+    key: "echo-tr-severe", organ: "echo-valves", label: "Tricuspid Regurgitation — Severe", category: "Valves",
+    text: "Mitral Valve ( MV ) : The AML show normal cusps thickness and excursion, no calcification, no doming.\nAortic Valve ( AoV ) : Normal thickness & excursions.\nTricuspid Valve ( TV ) : Colour Doppler shows severe tricuspid regurgitation ( peak pressure gradient {trpg} mm Hg ).\nPulmonary Valve ( PV ) : Pulmonary annulus & its branches are normal.\nIAS ( Interatrial Septum ) : Intact.\nIVS ( Interventricular Septum ) : Intact.\nPericardium : No effusion.\nLA / LVA Clot : None.",
+    impression: ["Severe tricuspid regurgitation ( PG {trpg} mm Hg )."],
+    vars: [V("trpg", "TR peak PG", "mm Hg")],
+  }),
+  P({
+    key: "echo-ps-mild", organ: "echo-valves", label: "Pulmonary Stenosis — Mild", category: "Valves",
+    text: "Mitral Valve ( MV ) : The AML show normal cusps thickness and excursion, no calcification, no doming.\nAortic Valve ( AoV ) : Normal thickness & excursions.\nTricuspid Valve ( TV ) : Normal cusps.\nPulmonary Valve ( PV ) : Mild pulmonary stenosis. Pressure gradient across the pulmonary valve is {pspg} mm Hg. MPA, RPA and LPA are normal and confluent.\nIAS ( Interatrial Septum ) : Intact.\nIVS ( Interventricular Septum ) : Intact.\nPericardium : No effusion.\nLA / LVA Clot : None.",
+    impression: ["Mild pulmonary stenosis ( PG {pspg} mm Hg )."],
+    suggestions: ["Kindly take an expert echocardiologist opinion."],
+    vars: [V("pspg", "PS gradient", "mm Hg")],
+  }),
+  P({
+    key: "echo-rhd-hf", organ: "echo-valves", label: "RHD with Heart Failure", category: "Valves",
+    text: "Mitral Valve ( MV ) : Mitral valve leaflet and subvalvular apparatus are thickened with irregular motion of AML. Restrictive valve opening with fish-mouth orifice. MV area {mva} cm². Flattened EF slope of AML. Colour Doppler shows moderate mitral stenosis with severe mitral regurgitation.\nAortic Valve ( AoV ) : Normal thickness & excursions.\nTricuspid Valve ( TV ) : Colour Doppler shows moderate tricuspid regurgitation.\nPulmonary Valve ( PV ) : Mild pulmonary regurgitation. Pulmonary hypertension.\nIAS ( Interatrial Septum ) : Intact.\nIVS ( Interventricular Septum ) : Hypokinesia of the interventricular septum.\nPericardium : No effusion.\nLA / LVA Clot : None. Dilated LA & RA cavity.",
+    impression: [
+      "Rheumatic heart disease with features of right heart failure.",
+      "Moderate MS with severe MR.",
+      "Moderate TR. Mild PR. Pulmonary hypertension.",
+    ],
+    suggestions: ["Kindly take an expert echocardiologist opinion."],
+    vars: [V("mva", "MV area", "cm²")],
+  }),
+  P({
     key: "echo-pericardial-effusion", organ: "echo-valves", label: "Pericardial Effusion", category: "Valves",
     text: "Mitral Valve ( MV ) : The AML show normal cusps thickness and excursion, no calcification, no doming.\nAortic Valve ( AoV ) : Normal thickness & excursions.\nTricuspid Valve ( TV ) : Normal cusps.\nPulmonary Valve ( PV ) : Pulmonary annulus & its branches are normal.\nIAS ( Interatrial Septum ) : Intact.\nIVS ( Interventricular Septum ) : Intact.\nPericardium : Mild pericardial effusion.\nLA / LVA Clot : None.",
     impression: ["Mild pericardial effusion."],
   }),
 
   // ── ECHOCARDIOGRAPHY — other findings (organ "echo-others") ─────────────────
+  // Clinic corpus: ASD variants, PDA+ASD, RWMA/hypokinesia (COLOUR ECHO NOR).
   P({
     key: "echo-lvh", organ: "echo-others", label: "LV Wall Hypertrophy", category: "Findings",
     text: "Mildly hypertrophied LV wall.\nSitus solitus, normal atrioventricular & ventriculo-arterial drainage with left sided aortic arch.\nNo PDA / ASD / VSD.\nNormal pulmonary trunk & its branches.\nNo chamber clot / valvular vegetations.",
@@ -422,16 +449,129 @@ export const USG_PATHOLOGIES_EXTRA: UsgPathologyDef[] = [
     vars: [V("lvef", "LVEF", "%")],
   }),
   P({
-    key: "echo-asd", organ: "echo-others", label: "Atrial Septal Defect", category: "Findings",
-    text: "A large atrial septal defect ({d1} cm).\nViscero atrial situs solitus.\nAV and VA concordance.\nNormally related great arteries.\nNormal pulmonary trunk & its branches.",
-    impression: ["Atrial septal defect ({d1} cm)."],
-    vars: [V("d1", "ASD size")],
+    key: "echo-rwma-hypokinesia", organ: "echo-others", label: "Antero-apical / Septal Hypokinesia", category: "Findings",
+    text: "Dilated LV cavity without ASH or SAM of AML.\nAntero-apical and septal wall hypokinesia with early LV diastolic dysfunction.\nSitus solitus, normal atrioventricular & ventriculo-arterial drainage with left sided aortic arch.\nNo PDA / ASD / VSD.\nNormal pulmonary trunk & its branches.\nNo chamber clot / valvular vegetations.\nNo pericardial effusion.",
+    impression: [
+      "Antero-apical and septal wall hypokinesia with early diastolic dysfunction.",
+      "Dilated LV cavity.",
+    ],
+  }),
+  P({
+    key: "echo-asd", organ: "echo-others", label: "ASD (Ostium Secundum)", category: "Findings",
+    text: "Ostium secundum type of ASD measuring {d1} cm in diameter with left to right shunt on Colour Doppler. Peak systolic gradient across ASD is {asdpg} mm Hg.\nViscero-arterial situs solitus. D-looped ventricles. Normally related great vessels.\nNormally preserved veno-arterial, atrio-ventricular & ventriculo-great vessel concordance.\nSystemic veins drain into RA & pulmonary veins open into LA.\nNo PDA. No VSD. No coarctation of aorta.\nGood LV & RV systolic functions. No pericardial effusion. No intracardiac clot or vegetation.",
+    impression: ["Ostium secundum ASD ({d1} cm) with left to right shunt."],
+    suggestions: ["Kindly take an expert echocardiologist opinion."],
+    vars: [V("d1", "ASD size"), V("asdpg", "ASD peak PG", "mm Hg")],
+  }),
+  P({
+    key: "echo-asd-dilated-ra-rv", organ: "echo-others", label: "ASD Secundum + Dilated RA/RV", category: "Findings",
+    text: "Ostium secundum type of ASD measuring {d1} cm in diameter with left to right shunt on Colour Doppler. Peak systolic gradient across ASD is {asdpg} mm Hg.\nMildly dilated right atrium and right ventricle.\nViscero-arterial situs solitus. D-looped ventricles. Normally related great vessels.\nNormally preserved veno-arterial, atrio-ventricular & ventriculo-great vessel concordance.\nSystemic veins drain into RA & pulmonary veins open into LA.\nNo PDA. No VSD. No coarctation of aorta. No evidence of pulmonary hypertension.\nGood LV & RV systolic functions ( LVEF {lvef} % ). No pericardial effusion. No intracardiac clot or vegetation.",
+    impression: [
+      "Ostium secundum ASD ({d1} cm) with left to right shunt.",
+      "Mildly dilated RA and RV.",
+    ],
+    suggestions: ["Kindly take an expert echocardiologist opinion."],
+    vars: [V("d1", "ASD size"), V("asdpg", "ASD peak PG", "mm Hg"), V("lvef", "LVEF", "%")],
+  }),
+  P({
+    key: "echo-asd-primum-dilated", organ: "echo-others", label: "ASD Primum + Dilated RA/RV", category: "Findings",
+    text: "Ostium primum ASD measuring {d1} cm in diameter with left to right shunt on Colour Doppler. Peak systolic gradient across ASD is {asdpg} mm Hg.\nMildly dilated right atrium and right ventricle.\nViscero-arterial situs solitus. D-looped ventricles. Normally related great vessels with confluent pulmonary anatomy ( normal MPA, RPA and LPA ).\nNormally preserved veno-arterial, atrio-ventricular & ventriculo-great vessel concordance.\nSystemic veins drain into RA & pulmonary veins open into LA.\nLeft sided aortic arch. No PDA. No coarctation of aorta. No evidence of pulmonary hypertension.\nGood LV & RV systolic functions ( LVEF {lvef} % ). No pericardial effusion. No intracardiac clot or vegetation.",
+    impression: [
+      "Ostium primum ASD ({d1} cm) with left to right shunt.",
+      "Mildly dilated RA and RV.",
+      "Normal LV systolic function.",
+    ],
+    suggestions: ["Kindly take an expert echocardiologist opinion."],
+    vars: [V("d1", "ASD size"), V("asdpg", "ASD peak PG", "mm Hg"), V("lvef", "LVEF", "%")],
+  }),
+  P({
+    key: "echo-asd-secundum-tr-pah", organ: "echo-others", label: "ASD Secundum + Severe TR / PAH", category: "Findings",
+    text: "A small ostium secundum type of ASD measuring {d1} mm with flow mainly from left atrium to right atrium. Peak pressure gradient through the defect is {asdpg} mm Hg.\nThe right atrium and right ventricle are dilated.\nSevere tricuspid regurgitation with peak pressure gradient of {trpg} mm Hg.\nPulmonary arterial hypertension. Normal pulmonary valve.\nViscero-atrial situs solitus. AV and VA concordance. Normally related great arteries. Normally originating coronary arteries.\nNo VSD. No PDA. No coarctation of aorta. No LVOT obstruction.\nNormal LV and RV systolic function. No vegetation or pericardial effusion.",
+    impression: [
+      "Small ostium secundum ASD ({d1} mm) with dilated right atrium and ventricle.",
+      "Severe tricuspid regurgitation with pulmonary arterial hypertension.",
+      "Normal LV/RV systolic function.",
+    ],
+    suggestions: ["Kindly take an expert paediatric echocardiologist opinion."],
+    vars: [V("d1", "ASD size", "mm"), V("asdpg", "ASD peak PG", "mm Hg"), V("trpg", "TR peak PG", "mm Hg")],
+  }),
+  P({
+    key: "echo-asd-primum-severe", organ: "echo-others", label: "Severe ASD Primum (Child)", category: "Findings",
+    text: "Ostium primum type of ASD measuring {d1} mm in diameter with small left to right shunt on Colour Doppler. Peak systolic gradient across ASD is {asdpg} mm Hg.\nDilated RA and RV.\nModerate to severe tricuspid regurgitation ( PG {trpg} mm Hg ). Mild pulmonary regurgitation ( PG {prpg} mm Hg ).\nPulmonary arterial hypertension.\nViscero-arterial situs solitus. D-looped ventricles. Normally related great vessels.\nNormally preserved veno-arterial, atrio-ventricular & ventriculo-great vessel concordance.\nSystemic veins drain into RA & pulmonary veins open into LA.\nLeft sided aortic arch. No PDA. No coarctation of aorta.\nGood LV & RV systolic functions ( LVEF {lvef} % ). No pericardial effusion. No intracardiac clot or vegetation.",
+    impression: [
+      "Ostium primum ASD ({d1} mm) with dilated RA and RV.",
+      "Moderate to severe tricuspid regurgitation.",
+      "Mild pulmonary regurgitation.",
+      "Pulmonary arterial hypertension.",
+    ],
+    suggestions: [
+      "Follow-up ECHO after six months.",
+      "Kindly take an expert paediatric echocardiologist opinion.",
+    ],
+    vars: [
+      V("d1", "ASD size", "mm"),
+      V("asdpg", "ASD peak PG", "mm Hg"),
+      V("trpg", "TR peak PG", "mm Hg"),
+      V("prpg", "PR peak PG", "mm Hg"),
+      V("lvef", "LVEF", "%"),
+    ],
+  }),
+  P({
+    key: "echo-pda-asd", organ: "echo-others", label: "PDA + ASD Primum", category: "Findings",
+    text: "Ostium primum ASD measuring {d1} cm in diameter with left to right shunt on Colour Doppler. Peak systolic gradient across ASD is {asdpg} mm Hg.\nPatent ductus arteriosus measuring {pda} cm in diameter. Peak pressure gradient across PDA is {pdapg} mm Hg.\nDilated right ventricle.\nViscero-arterial situs solitus. D-looped ventricles. Normally related great vessels with confluent pulmonary anatomy ( normal MPA, RPA and LPA ).\nNormally preserved veno-arterial, atrio-ventricular & ventriculo-great vessel concordance.\nSystemic veins drain into RA & pulmonary veins open into LA.\nLeft sided aortic arch. No coarctation of aorta. No evidence of pulmonary hypertension.\nGood LV & RV systolic functions ( LVEF {lvef} % ). No pericardial effusion. No intracardiac clot or vegetation.",
+    impression: [
+      "Ostium primum ASD ({d1} cm) with left to right shunt.",
+      "Patent ductus arteriosus ({pda} cm).",
+      "Dilated right ventricle.",
+    ],
+    suggestions: ["Kindly take an expert echocardiologist opinion."],
+    vars: [
+      V("d1", "ASD size"),
+      V("asdpg", "ASD peak PG", "mm Hg"),
+      V("pda", "PDA size"),
+      V("pdapg", "PDA peak PG", "mm Hg"),
+      V("lvef", "LVEF", "%"),
+    ],
   }),
   P({
     key: "echo-vsd", organ: "echo-others", label: "Ventricular Septal Defect", category: "Findings",
     text: "Sub aortic perimembranous VSD ({d1} cm).\nViscero atrial situs solitus.\nAV and VA concordance.\nNormally related great arteries.\nNormal pulmonary trunk & its branches.",
     impression: ["Ventricular septal defect ({d1} cm)."],
     vars: [V("d1", "VSD size")],
+  }),
+  P({
+    key: "echo-rhd-hf-others", organ: "echo-others", label: "RHD — Right Heart Failure Signs", category: "Findings",
+    text: "Dilated LA & RA cavity. Hypokinesia of the interventricular septum.\nCongested hepatic veins with mild to moderate ascites.\nSitus solitus, normal atrioventricular & ventriculo-arterial drainage with left sided aortic arch.\nNormal pulmonary trunk & its branches.\nNo chamber clot / valvular vegetations. No pericardial effusion.",
+    impression: [
+      "Rheumatic heart disease with features of right heart failure.",
+      "Congested hepatic veins with mild to moderate ascites.",
+    ],
+    suggestions: ["Kindly take an expert echocardiologist opinion."],
+  }),
+
+  // ── FETAL ECHOCARDIOGRAPHY (ob-fetal-echo organs) — clinic normal pack ─────
+  // Organ keys are unique to ob-fetal-echo (avoid `situs`, shared with pediatric echo).
+  P({
+    key: "fetal-echo-normal-concordance", organ: "concordance", label: "Fetal Echo — Normal Concordance", category: "Fetal Echo",
+    text: "Viscero-atrial situs solitus. The cardiac apex is towards left at approximately {axis} degree axis. Levo cardiac position of heart.\nD-looped ventricles. Normally related great vessels. Normally preserved veno-atrial, atrio-ventricular and ventriculo-great vessel concordance. Chamber dimensions are within normal limits.",
+    impression: [
+      "Levo cardiac position of heart. Viscero-atrial situs solitus.",
+      "Normally preserved cardiac concordance. Chamber dimensions within normal limits.",
+    ],
+    vars: [V("axis", "Cardiac axis", "deg")],
+  }),
+  P({
+    key: "fetal-echo-normal-structures", organ: "structures", label: "Fetal Echo — Normal Septa/Valves", category: "Fetal Echo",
+    text: "Foramen ovale is visualized with flap opening into the left atrium. The IVS appears to be intact. Ductus arteriosus is patent with normal waveform. Cardiac valves normal structurally and functionally.",
+    impression: ["Intact IVS. Patent ductus arteriosus with normal waveform. No significant valvular abnormality."],
+  }),
+  P({
+    key: "fetal-echo-normal-conclusion", organ: "conclusion", label: "Fetal Echo — Normal Conclusion", category: "Fetal Echo",
+    text: "No ASD, VSD or significant PDA. No chamber dilatation. Normal LV/RV function.\nA single live intrauterine fetus with no significant cardiac abnormality.\nAdvice: Post-natal echocardiography. Note: All cardiac anomalies cannot be detected on a prenatal scan; echocardiography can be repeated post-natally if necessary.",
+    impression: [
+      "Single live intrauterine fetus with no significant cardiac abnormality.",
+      "Advice: Post-natal echocardiography.",
+    ],
   }),
 
   // ── LIMB DOPPLER — lower limbs (organs arterial / venous / subcut) ─────────

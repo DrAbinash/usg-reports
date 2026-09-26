@@ -35,7 +35,7 @@ export function UsgViewerSidebar({ studyInstanceUid, enlarged = false }: Props) 
   const shellClass =
     mode === "vertical"
       ? `flex w-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-black shadow-sm ${
-          enlarged ? "flex-[0_0_68%]" : "flex-[0_0_55%]"
+          enlarged ? "flex-[0_0_72%]" : "flex-[0_0_62%]"
         }`
       : mode === "horizontal"
         ? "flex w-full shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-black shadow-sm"

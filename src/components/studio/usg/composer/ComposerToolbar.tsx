@@ -620,8 +620,8 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
             </div>
           ) : null}
 
-          {/* Patient inputs — compact single row */}
-          <div className="flex flex-wrap items-end gap-1.5 border-t border-border px-3 py-2">
+          {/* Patient inputs — compact single row (keep short so workspace stays usable) */}
+          <div className="flex flex-wrap items-end gap-1.5 border-t border-border px-3 py-1">
             <div className="grid flex-1 min-w-[140px] gap-0.5">
               <Label className="text-[9px] font-semibold uppercase tracking-wide text-faint">Patient</Label>
               <Input value={patientName} onChange={(e) => onNameChange(e.target.value)} placeholder="Type patient name…"
@@ -815,90 +815,83 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
       )}
     </div>
 
-    {/* Quick report strip — large, plain-language one-tap fills for rush reporting */}
+    {/* Quick report — single compact row (never wraps into a tall ribbon) */}
     {!isFinal && (
-      <div className="mx-3 mt-2 rounded-xl border-2 border-emerald-300/80 bg-gradient-to-r from-emerald-50 via-amber-50/50 to-white px-3 py-2.5 shadow-sm">
-        <div className="mb-2 flex flex-wrap items-center gap-2">
-          <span className="rounded-md bg-emerald-600 px-2.5 py-1 text-[12px] font-bold uppercase tracking-wide text-white shadow-sm">
-            Quick report
-          </span>
-          <span className="text-[13px] font-semibold text-emerald-950">
-            One tap to fill the study — then Save &amp; Print
-          </span>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {studyAllowsRushNormals(study) ? (
-            <>
+      <div className="flex min-w-0 items-center gap-1.5 border-b border-emerald-200 bg-emerald-50/70 px-2.5 py-1">
+        <span className="shrink-0 rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+          Quick
+        </span>
+        {studyAllowsRushNormals(study) ? (
+          <>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 shrink-0 border-amber-400 bg-amber-100 px-2 text-[11px] font-bold text-amber-950 hover:bg-amber-200"
+              title="Peak-time: mark every organ normal with no size measurements (keyboard: N)"
+              onClick={() => {
+                const next = applyRushNormalStudy(state, study);
+                if (!next) {
+                  toast.error("This study needs measurements — use organ cards");
+                  return;
+                }
+                setState(next);
+                toast.success("All normal · no sizes — ready to print");
+              }}
+            >
+              <Zap className="mr-1 h-3.5 w-3.5" />
+              All normal
+            </Button>
+            {study.organs.some((o) => o.key === "liver") ? (
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
-                className="h-10 border-2 border-amber-400 bg-amber-100 px-3.5 text-[13px] font-bold text-amber-950 shadow-sm hover:bg-amber-200"
-                title="Peak-time: mark every organ normal with no size measurements (keyboard: N)"
+                className="h-7 shrink-0 border-orange-400 bg-orange-100 px-2 text-[11px] font-bold text-orange-950 hover:bg-orange-200"
+                title="Almost-normal abdomen with fatty liver Gr I · no sizes"
                 onClick={() => {
-                  const next = applyRushNormalStudy(state, study);
+                  const next = applyRushPreset(state, study, "fatty-g1", (k) => pathologies.find((p) => p.key === k));
                   if (!next) {
                     toast.error("This study needs measurements — use organ cards");
                     return;
                   }
                   setState(next);
-                  toast.success("All normal · no sizes — ready to print");
+                  toast.success("NP + Fatty Gr I · no size — ready to print");
                 }}
               >
-                <Zap className="mr-1.5 h-4 w-4" />
-                All normal (no sizes)
+                + Fatty
               </Button>
-              {study.organs.some((o) => o.key === "liver") ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-10 border-2 border-orange-400 bg-orange-100 px-3.5 text-[13px] font-bold text-orange-950 shadow-sm hover:bg-orange-200"
-                  title="Almost-normal abdomen with fatty liver Gr I · no sizes (most common rush preset)"
-                  onClick={() => {
-                    const next = applyRushPreset(state, study, "fatty-g1", (k) => pathologies.find((p) => p.key === k));
-                    if (!next) {
-                      toast.error("This study needs measurements — use organ cards");
-                      return;
-                    }
-                    setState(next);
-                    toast.success("NP + Fatty Gr I · no size — ready to print");
-                  }}
-                >
-                  Normal + fatty liver
-                </Button>
-              ) : null}
-            </>
-          ) : (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-10 border-2 border-emerald-400 bg-emerald-100 px-3.5 text-[13px] font-bold text-emerald-950 shadow-sm hover:bg-emerald-200"
-              title="Clear all pathologies back to measured normals"
-              onClick={() => {
-                setState((s) => markAllNormal(s, study));
-                toast.success("All organs set to normal");
-              }}
-            >
-              <Zap className="mr-1.5 h-4 w-4" />
-              Clear all findings
-            </Button>
-          )}
+            ) : null}
+          </>
+        ) : (
           <Button
             type="button"
             size="sm"
             variant="outline"
-            className="h-10 border-2 border-emerald-500 bg-emerald-600 px-3.5 text-[13px] font-bold text-white shadow-sm hover:bg-emerald-700"
-            title="Fill every unset organ with its normal finding (leaves abnormals untouched)"
-            onClick={applyAllNormalMacro}
+            className="h-7 shrink-0 border-emerald-400 bg-emerald-100 px-2 text-[11px] font-bold text-emerald-950 hover:bg-emerald-200"
+            title="Clear all pathologies back to measured normals"
+            onClick={() => {
+              setState((s) => markAllNormal(s, study));
+              toast.success("All organs set to normal");
+            }}
           >
-            <Check className="mr-1.5 h-4 w-4" />
-            All Normal
+            <Zap className="mr-1 h-3.5 w-3.5" />
+            Clear all
           </Button>
-          <UsgFormatsLibrary organs={state.organs} onApply={(organs, imp) => setState((p) => ({ ...p, organs, impressionOverride: imp ?? p.impressionOverride }))} />
-        </div>
-        <div className="mt-2">
+        )}
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-7 shrink-0 border-emerald-600 bg-emerald-600 px-2.5 text-[11px] font-bold text-white hover:bg-emerald-700"
+          title="Fill every unset organ with its normal finding (leaves abnormals untouched)"
+          onClick={applyAllNormalMacro}
+        >
+          <Check className="mr-1 h-3.5 w-3.5" />
+          All Normal
+        </Button>
+        <UsgFormatsLibrary organs={state.organs} onApply={(organs, imp) => setState((p) => ({ ...p, organs, impressionOverride: imp ?? p.impressionOverride }))} />
+        <div className="min-w-0 flex-1 border-l border-emerald-200/80 pl-1.5">
           <UsgTemplateBar
             onApply={(template) => {
               try {

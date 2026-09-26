@@ -3,18 +3,22 @@ import { useState } from "react";
 const LAN_OHIF = "http://172.16.1.139:3010";
 const TS_OHIF = "https://ohif-viewer.tail7005c0.ts.net";
 
-type Props = { studyInstanceUid: string | null };
+type Props = {
+  studyInstanceUid: string | null;
+  /** When true, occupy most of the preview column (focus / enlarge). */
+  enlarged?: boolean;
+};
 
 /** Expand modes for the embedded OHIF pane.
- *  - vertical (default): tall diagnostic box (~65% column height, portrait/square)
- *  - horizontal: legacy short ribbon (explicit opt-in)
+ *  - vertical (default): full-width tall pane; iframe fills the box (no letterbox)
+ *  - horizontal: short ribbon (explicit opt-in)
  *  - collapsed: header only */
 type ExpandMode = "collapsed" | "vertical" | "horizontal";
 
 /** Stacked OHIF viewer above the letterpad preview.
- *  Defaults to a tall vertical box so the diagnostic viewport is usable;
- *  the report preview stays below (never beside) in PreviewZone's column. */
-export function UsgViewerSidebar({ studyInstanceUid }: Props) {
+ *  The shell is always full column width so enlarge grows the DICOM viewport,
+ *  not empty white gutters around a locked aspect box. */
+export function UsgViewerSidebar({ studyInstanceUid, enlarged = false }: Props) {
   const [mode, setMode] = useState<ExpandMode>("vertical");
   const [route, setRoute] = useState<"auto" | "lan" | "tailscale">("auto");
 
@@ -26,25 +30,27 @@ export function UsgViewerSidebar({ studyInstanceUid }: Props) {
   const src = `${base}/viewer?StudyInstanceUIDs=${encodeURIComponent(studyInstanceUid)}`;
   const open = mode !== "collapsed";
 
-  // Vertical: ~65% of the preview column, width locked to a portrait/square aspect
-  // so the pane cannot collapse into a landscape ribbon. Horizontal: legacy 280px strip.
+  // Full-width shells only — never aspect-lock / center (that left white gutters
+  // while the preview column grew on enlarge).
   const shellClass =
     mode === "vertical"
-      ? "mx-auto flex aspect-[4/5] w-auto max-w-full min-h-[300px] flex-[0_0_65%] flex-col self-center overflow-hidden rounded-lg border border-border bg-white shadow-sm"
+      ? `flex w-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-black shadow-sm ${
+          enlarged ? "flex-[0_0_72%]" : "flex-[0_0_62%]"
+        }`
       : mode === "horizontal"
-        ? "flex w-full shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-white shadow-sm"
+        ? "flex w-full shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-black shadow-sm"
         : "w-full shrink-0 overflow-hidden rounded-lg border border-border bg-white shadow-sm";
 
   return (
     <div className={shellClass}>
-      <div className="flex shrink-0 items-center gap-1 border-b bg-gray-50 px-2 py-1.5 text-[10px]">
-        <span className="font-bold text-indigo-700">DICOM</span>
-        <span className="rounded bg-indigo-100 px-1.5 py-0.5 font-semibold text-indigo-700">{routeLabel}</span>
+      <div className="flex shrink-0 items-center gap-1 border-b border-white/10 bg-slate-900 px-2 py-1 text-[10px] text-white">
+        <span className="font-bold text-sky-300">DICOM</span>
+        <span className="rounded bg-sky-500/20 px-1.5 py-0.5 font-semibold text-sky-200">{routeLabel}</span>
         <span
-          className="rounded bg-white px-1.5 py-0.5 font-semibold text-faint"
+          className="rounded bg-white/10 px-1.5 py-0.5 font-semibold text-white/80"
           title={
             mode === "vertical"
-              ? "Tall vertical viewer (default)"
+              ? "Tall viewer (default) — fills column width"
               : mode === "horizontal"
                 ? "Wide ribbon viewer"
                 : "Collapsed"
@@ -59,7 +65,7 @@ export function UsgViewerSidebar({ studyInstanceUid }: Props) {
               type="button"
               onClick={() => setRoute(r)}
               className={`rounded px-1.5 py-0.5 text-[9px] font-semibold ${
-                route === r ? "bg-indigo-600 text-white" : "bg-white text-faint hover:bg-gray-100"
+                route === r ? "bg-sky-500 text-white" : "bg-white/10 text-white/70 hover:bg-white/20"
               }`}
             >
               {r === "auto" ? "A" : r === "lan" ? "L" : "T"}
@@ -69,7 +75,7 @@ export function UsgViewerSidebar({ studyInstanceUid }: Props) {
             href={src}
             target="_blank"
             rel="noreferrer"
-            className="rounded bg-white px-1.5 py-0.5 text-[9px] font-semibold hover:bg-gray-100"
+            className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-semibold text-white/80 hover:bg-white/20"
             title="Open in new tab"
           >
             ↗
@@ -78,8 +84,8 @@ export function UsgViewerSidebar({ studyInstanceUid }: Props) {
             <button
               type="button"
               onClick={() => setMode((m) => (m === "horizontal" ? "vertical" : "horizontal"))}
-              className={`rounded px-1.5 py-0.5 text-[9px] font-semibold hover:bg-gray-100 ${
-                mode === "horizontal" ? "bg-indigo-600 text-white" : "bg-white text-faint"
+              className={`rounded px-1.5 py-0.5 text-[9px] font-semibold hover:bg-white/20 ${
+                mode === "horizontal" ? "bg-sky-500 text-white" : "bg-white/10 text-white/70"
               }`}
               title={mode === "horizontal" ? "Switch to tall vertical" : "Switch to wide ribbon"}
             >
@@ -89,7 +95,7 @@ export function UsgViewerSidebar({ studyInstanceUid }: Props) {
           <button
             type="button"
             onClick={() => setMode((m) => (m === "collapsed" ? "vertical" : "collapsed"))}
-            className="rounded bg-white px-1.5 py-0.5 text-[9px] font-semibold hover:bg-gray-100"
+            className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-semibold text-white/80 hover:bg-white/20"
             title={open ? "Collapse viewer" : "Expand tall viewer"}
           >
             {open ? "−" : "+"}
@@ -102,10 +108,10 @@ export function UsgViewerSidebar({ studyInstanceUid }: Props) {
           src={src}
           className={
             mode === "vertical"
-              ? "min-h-0 w-full flex-1 border-0 bg-black"
-              : "w-full border-0 bg-black"
+              ? "block h-full min-h-0 w-full flex-1 border-0 bg-black"
+              : "block w-full border-0 bg-black"
           }
-          style={mode === "horizontal" ? { height: "280px" } : undefined}
+          style={mode === "horizontal" ? { height: "220px" } : { height: "100%" }}
         />
       )}
     </div>

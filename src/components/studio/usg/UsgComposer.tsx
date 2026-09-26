@@ -173,7 +173,9 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const [headerCollapsed, setHeaderCollapsed] = useState(
     !!(report || order || prefill?.patientName),
   );
-  const [focusMode, setFocusMode] = useState<'workspace' | 'preview' | null>(null);
+  /** CARE-like pane bias: viewerPlus ≈ 65% viewport, report ≈ composer-heavy. */
+  const [ohifLayout, setOhifLayout] = useState<"report" | "split" | "viewerPlus">("split");
+  const [focusMode, setFocusMode] = useState<"workspace" | "preview" | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewSrResult, setReviewSrResult] = useState<{ vars: Record<string, Record<string, string>>; extras: Record<string, string>; matchedCount: number } | null>(null);
@@ -583,7 +585,26 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const lookupPathology = useCallback((key: string) => pathologies.find((p) => p.key === key), [pathologies]);
   const onEnlargePreview = useCallback(() => setFocusMode("preview"), []);
   const onResetFocus = useCallback(() => setFocusMode(null), []);
-  const onWorkspaceFocus = useCallback(() => setFocusMode("workspace"), []);
+  const onWorkspaceFocus = useCallback(() => {
+    setOhifLayout("report");
+    setFocusMode("workspace");
+  }, []);
+  const onOhifLayoutChange = useCallback((mode: "report" | "split" | "viewerPlus") => {
+    setOhifLayout(mode);
+    // Match CARE resolveViewerReportPcts: Viewer+ widens the image column;
+    // Report focus hands width back to the clinical editor.
+    if (mode === "viewerPlus") setFocusMode("preview");
+    else if (mode === "report") setFocusMode("workspace");
+    else setFocusMode(null);
+  }, []);
+
+  // CARE split≈32/65 viewer/report · viewerFocus≈65/32 — mapped to our 2-col grid.
+  const workspaceGridClass =
+    ohifLayout === "viewerPlus" || focusMode === "preview"
+      ? "lg:grid-cols-[minmax(0,2fr)_minmax(260px,1fr)] xl:grid-cols-[minmax(0,2.2fr)_minmax(280px,1fr)]"
+      : ohifLayout === "report" || focusMode === "workspace"
+        ? "lg:grid-cols-[minmax(200px,0.75fr)_minmax(0,1.5fr)] xl:grid-cols-[minmax(220px,0.7fr)_minmax(0,1.6fr)]"
+        : "lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]";
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -668,16 +689,18 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         togglePathology={togglePathology}
       />
 
-      <div className={`grid min-h-0 flex-1 gap-2 overflow-hidden px-2 pb-2 pt-1 ${focusMode === 'preview' ? "lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,1fr)] xl:grid-cols-[minmax(0,1.5fr)_minmax(360px,1fr)]" : "lg:grid-cols-[minmax(320px,1fr)_minmax(0,1.35fr)] xl:grid-cols-[minmax(360px,1fr)_minmax(0,1.4fr)]"}`}>
+      <div className={`grid min-h-0 flex-1 gap-2 overflow-hidden px-2 pb-2 pt-1 ${workspaceGridClass}`}>
         <PreviewZone
           focusMode={focusMode}
           previewHtml={debouncedPreviewHtml}
           orderUid={orderUid}
+          ohifLayout={ohifLayout}
           onEnlarge={onEnlargePreview}
           onResetFocus={onResetFocus}
+          onOhifLayoutChange={onOhifLayoutChange}
         />
 
-        <div className="studio-scroll min-h-0 space-y-3 overflow-y-auto pr-1 cursor-pointer" onClick={(e) => { e.stopPropagation(); onWorkspaceFocus(); }} onDoubleClick={(e) => { e.stopPropagation(); onResetFocus(); }} title="Click to focus workspace · Double-click to reset">
+        <div className="studio-scroll min-h-0 space-y-3 overflow-y-auto pr-1 cursor-pointer" onClick={(e) => { e.stopPropagation(); onWorkspaceFocus(); }} onDoubleClick={(e) => { e.stopPropagation(); onResetFocus(); setOhifLayout("split"); }} title="Click to focus report writing · Double-click to restore OHIF split">
           <div className="space-y-3">
             {study.organs.map((def, organIdx) => {
               const st = state.organs.find((o) => o.organ === def.key);

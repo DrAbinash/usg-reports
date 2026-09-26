@@ -1,10 +1,9 @@
 "use client";
 /**
- * Preview column — OHIF viewer (tall vertical by default) stacked above the
- * letterhead iframe, plus focusMode click-catcher (enlarge-on-click; removed
- * once focused). Composer/report preview always stays below the viewer.
+ * Preview column — OHIF (CARE-like Report / OHIF / Viewer+ / fullscreen) stacked
+ * above the letterhead iframe. No click-catcher overlay (that blocked OHIF).
  */
-import { memo } from "react";
+import { memo, useCallback, useState } from "react";
 import { UsgViewerSidebar } from "../UsgViewerSidebar";
 import type { ImageRow, PendingImage } from "../UsgImagesCard";
 import { toast } from "sonner";
@@ -12,6 +11,7 @@ import { clearDraft } from "@/lib/usg/drafts";
 import { formatUsgSerial } from "@/lib/usg/print";
 import { isCleanRushFinalize } from "@/lib/usg/quickActions";
 import type { UsgComposerState } from "@/lib/usg/types";
+import type { OhifLayoutMode } from "@/lib/usg/ohifLaunch";
 import { UsgDicomPicker } from "../UsgDicomPicker";
 import { UsgFormFDialog, type FormFOrderLite } from "../UsgFormFDialog";
 import { UsgPathologyDialog } from "../UsgPathologyDialog";
@@ -22,13 +22,17 @@ import { UsgCriticalCommDialog } from "../UsgCriticalCommDialog";
 import { UsgAiDraftPanel } from "../UsgAiDraftPanel";
 import { selectedPathologies, setOrganVar } from "@/lib/usg/composer";
 
-
 export type PreviewZoneProps = {
+  /** Composer grid bias — driven by OHIF layout (CARE pane focus lite). */
   focusMode: "workspace" | "preview" | null;
   previewHtml: string;
   orderUid: string | null;
+  /** Controlled CARE-like layout (Report / OHIF / Viewer+). */
+  ohifLayout?: OhifLayoutMode;
   onEnlarge: () => void;
   onResetFocus: () => void;
+  /** Sync CARE-like layout → composer grid width. */
+  onOhifLayoutChange?: (mode: OhifLayoutMode) => void;
 };
 
 function previewEqual(a: PreviewZoneProps, b: PreviewZoneProps): boolean {
@@ -36,8 +40,10 @@ function previewEqual(a: PreviewZoneProps, b: PreviewZoneProps): boolean {
     a.focusMode === b.focusMode &&
     a.previewHtml === b.previewHtml &&
     a.orderUid === b.orderUid &&
+    a.ohifLayout === b.ohifLayout &&
     a.onEnlarge === b.onEnlarge &&
-    a.onResetFocus === b.onResetFocus
+    a.onResetFocus === b.onResetFocus &&
+    a.onOhifLayoutChange === b.onOhifLayoutChange
   );
 }
 
@@ -45,36 +51,47 @@ export const PreviewZone = memo(function PreviewZone({
   focusMode,
   previewHtml,
   orderUid,
-  onEnlarge,
-  onResetFocus,
+  ohifLayout: ohifLayoutProp,
+  onOhifLayoutChange,
 }: PreviewZoneProps) {
-  const enlarged = focusMode === "preview";
+  const [localLayout, setLocalLayout] = useState<OhifLayoutMode>("split");
+  const layout = ohifLayoutProp ?? localLayout;
+
+  const handleLayout = useCallback(
+    (mode: OhifLayoutMode) => {
+      setLocalLayout(mode);
+      onOhifLayoutChange?.(mode);
+    },
+    [onOhifLayoutChange],
+  );
+
+  // Column-height share (CARE columnExpanded): Viewer+ ≈ 90% OHIF; split ≈ 62%.
+  const letterpadClass =
+    !orderUid || layout === "report"
+      ? "min-h-0 flex-1 overflow-auto rounded-lg border border-border bg-slate-100 shadow-sm"
+      : layout === "viewerPlus"
+        ? "min-h-0 flex-[0_0_10%] max-h-[120px] overflow-auto rounded-lg border border-border bg-slate-100 shadow-sm"
+        : "min-h-0 flex-[0_0_38%] overflow-auto rounded-lg border border-border bg-slate-100 shadow-sm";
+
   return (
     <div
-      className="relative flex h-full min-h-0 flex-col gap-2 overflow-hidden pr-1"
-      onDoubleClick={(e) => {
-        e.stopPropagation();
-        onResetFocus();
-      }}
+      className="relative flex h-full min-h-0 flex-col gap-1.5 overflow-hidden pr-1"
+      data-ohif-layout={layout}
+      data-focus-mode={focusMode ?? "default"}
     >
-      {focusMode !== "preview" && (
-        <div
-          className="absolute inset-0 z-10 cursor-pointer"
-          onClick={(e) => {
-            e.stopPropagation();
-            onEnlarge();
-          }}
-          title="Click to enlarge viewer & letterpad"
+      {orderUid ? (
+        <UsgViewerSidebar
+          studyInstanceUid={orderUid}
+          layout={layout}
+          onLayoutChange={handleLayout}
         />
-      )}
-      {orderUid && <UsgViewerSidebar studyInstanceUid={orderUid} enlarged={enlarged} />}
-      {/* Letterpad: remaining column height — scroll inside so A4 stays readable */}
-      <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-border bg-slate-100 shadow-sm">
+      ) : null}
+      <div className={letterpadClass}>
         <iframe
           title="USG report preview"
           srcDoc={previewHtml}
           className="block w-full border-0 bg-white"
-          style={{ minHeight: "100%", height: "1120px" }}
+          style={{ minHeight: "100%", height: layout === "viewerPlus" ? "100%" : "1120px" }}
           sandbox="allow-same-origin"
         />
       </div>

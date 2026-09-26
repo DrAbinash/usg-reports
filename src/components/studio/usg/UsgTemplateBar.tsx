@@ -1,18 +1,7 @@
 "use client";
 /**
  * UsgTemplateBar (v6.15) — Quick report templates bar.
- *
- * Shows saved report templates as chips at the top of the composer.
- * One click on a template chip:
- *   1. Switches the study to the template's studyKey
- *   2. Applies the saved composer state (organs, pathologies, vars)
- *   3. The doctor just types patient name → Save → Print
- *
- * The "Save as template" button captures the current composer state
- * (study + all organ texts + variables) into a named template.
- *
- * For emergency/crowd: the doctor saves "Normal Whole Abdomen Male" and
- * "Normal Whole Abdomen Female" once, then one-clicks them during rush.
+ * Compact single-row horizontal scroller so templates never steal vertical space.
  */
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -30,11 +19,8 @@ type Template = {
 };
 
 export type UsgTemplateBarProps = {
-  /** Called when the doctor clicks a template chip. */
   onApply: (template: Template) => void;
-  /** The current composer state JSON (to save as a template). */
   currentStateJson: string;
-  /** The current study key. */
   currentStudyKey: string;
 };
 
@@ -119,72 +105,83 @@ export function UsgTemplateBar({ onApply, currentStateJson, currentStudyKey }: U
 
   if (loading) {
     return (
-      <div className="flex items-center gap-1.5 py-1 text-[12px] font-medium text-muted-foreground">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading saved templates…
+      <div className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+        <Loader2 className="h-3 w-3 animate-spin" /> Templates…
       </div>
     );
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200/80 bg-white/80 px-2.5 py-2">
-      <span className="inline-flex items-center gap-1 text-[12px] font-bold text-amber-800">
-        <Zap className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-        Saved templates
+    <div className="flex min-w-0 flex-1 items-center gap-1.5">
+      <span className="inline-flex shrink-0 items-center gap-0.5 text-[11px] font-bold text-amber-800">
+        <Zap className="h-3 w-3 text-amber-500" />
+        Templates
       </span>
-      {templates.length === 0 ? (
-        <span className="text-[12px] font-medium text-amber-900/70">
-          None yet — save today’s report once, reuse tomorrow
-        </span>
-      ) : (
-        templates.map((t) => (
-          <div key={t.id} className="group flex items-center gap-0.5">
-            <button
-              onClick={() => onApply(t)}
-              className={cn(
-                "rounded-full border-2 px-3 py-1 text-[12px] font-bold transition-colors shadow-sm",
-                t.pinned
-                  ? "border-amber-400 bg-amber-100 text-amber-950 hover:bg-amber-200"
-                  : "border-slate-300 bg-white text-slate-900 hover:border-emerald-400 hover:bg-emerald-50",
-              )}
-              title={`Apply template: ${t.name}`}
-            >
-              {t.name}
-            </button>
-            <button
-              onClick={() => void togglePin(t.id)}
-              className="rounded p-0.5 opacity-70 transition-opacity hover:opacity-100 group-hover:opacity-100"
-              title={t.pinned ? "Unpin" : "Pin to top"}
-            >
-              <Pin className={cn("h-3.5 w-3.5", t.pinned ? "text-amber-600" : "text-slate-400")} />
-            </button>
-            <button
-              onClick={() => void remove(t.id)}
-              className="rounded p-0.5 opacity-70 transition-opacity hover:opacity-100 group-hover:opacity-100"
-              title="Delete template"
-            >
-              <Trash2 className="h-3.5 w-3.5 text-destructive" />
-            </button>
-          </div>
-        ))
-      )}
+      <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap pb-0.5 [scrollbar-width:thin]">
+        {templates.length === 0 ? (
+          <span className="text-[11px] font-medium text-amber-900/65">None saved yet</span>
+        ) : (
+          templates.map((t) => (
+            <div key={t.id} className="group flex shrink-0 items-center gap-0.5">
+              <button
+                onClick={() => onApply(t)}
+                className={cn(
+                  "rounded-full border px-2.5 py-0.5 text-[11px] font-bold transition-colors",
+                  t.pinned
+                    ? "border-amber-400 bg-amber-100 text-amber-950 hover:bg-amber-200"
+                    : "border-slate-300 bg-white text-slate-900 hover:border-emerald-400 hover:bg-emerald-50",
+                )}
+                title={`Apply template: ${t.name}`}
+              >
+                {t.name}
+              </button>
+              <button
+                onClick={() => void togglePin(t.id)}
+                className="rounded p-0.5 opacity-0 transition-opacity group-hover:opacity-100"
+                title={t.pinned ? "Unpin" : "Pin to top"}
+              >
+                <Pin className={cn("h-3 w-3", t.pinned ? "text-amber-600" : "text-slate-400")} />
+              </button>
+              <button
+                onClick={() => void remove(t.id)}
+                className="rounded p-0.5 opacity-0 transition-opacity group-hover:opacity-100"
+                title="Delete template"
+              >
+                <Trash2 className="h-3 w-3 text-destructive" />
+              </button>
+            </div>
+          ))
+        )}
+      </div>
 
       {showSave ? (
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Template name (e.g. Normal Whole Abdomen Male)"
-            className="h-9 w-[240px] text-[13px] font-medium"
+            placeholder="Template name"
+            className="h-7 w-[180px] text-[11px] font-medium"
             onKeyDown={(e) => {
               if (e.key === "Enter") void save();
-              if (e.key === "Escape") { setShowSave(false); setName(""); }
+              if (e.key === "Escape") {
+                setShowSave(false);
+                setName("");
+              }
             }}
             autoFocus
           />
-          <Button size="sm" className="h-9 px-3 text-[12px] font-bold" onClick={() => void save()} disabled={saving}>
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save"}
+          <Button size="sm" className="h-7 px-2 text-[11px] font-bold" onClick={() => void save()} disabled={saving}>
+            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
           </Button>
-          <Button size="sm" variant="ghost" className="h-9 px-2 text-[12px] font-semibold" onClick={() => { setShowSave(false); setName(""); }}>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-1.5 text-[11px] font-semibold"
+            onClick={() => {
+              setShowSave(false);
+              setName("");
+            }}
+          >
             Cancel
           </Button>
         </div>
@@ -192,12 +189,12 @@ export function UsgTemplateBar({ onApply, currentStateJson, currentStudyKey }: U
         <Button
           size="sm"
           variant="ghost"
-          className="h-9 px-2.5 text-[12px] font-bold text-amber-900 hover:bg-amber-100 hover:text-amber-950"
+          className="h-7 shrink-0 px-2 text-[11px] font-bold text-amber-900 hover:bg-amber-100"
           onClick={() => setShowSave(true)}
           title="Save the current report state as a reusable template"
         >
-          <Bookmark className="mr-1 h-3.5 w-3.5" />
-          Save as template
+          <Bookmark className="mr-1 h-3 w-3" />
+          Save
         </Button>
       )}
     </div>

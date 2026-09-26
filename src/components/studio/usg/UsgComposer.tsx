@@ -166,8 +166,11 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   );
   const [finalizedHere, setFinalizedHere] = useState(report?.status === "FINALIZED");
   const [qualityOpen, setQualityOpen] = useState(false);
-  // Blank new reports open header-EXPANDED; continuing a draft/final stays collapsed.
-  const [headerCollapsed, setHeaderCollapsed] = useState(!!report);
+  // Collapse demography whenever patient context already exists so OHIF +
+  // composer keep ≥ half the viewport. Only a blank new report opens expanded.
+  const [headerCollapsed, setHeaderCollapsed] = useState(
+    !!(report || order || prefill?.patientName),
+  );
   const [focusMode, setFocusMode] = useState<'workspace' | 'preview' | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -606,7 +609,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         togglePathology={togglePathology}
       />
 
-      <div className={`grid min-h-0 flex-1 gap-4 overflow-hidden p-4 ${focusMode === 'preview' ? "lg:grid-cols-[minmax(0,2fr)_minmax(360px,1fr)] xl:grid-cols-[minmax(0,2fr)_minmax(400px,1fr)]" : "lg:grid-cols-[minmax(360px,1fr)_minmax(0,2fr)] xl:grid-cols-[minmax(400px,1fr)_minmax(0,2fr)]"}`}>
+      <div className={`grid min-h-0 flex-1 gap-2 overflow-hidden px-2 pb-2 pt-1 ${focusMode === 'preview' ? "lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,1fr)] xl:grid-cols-[minmax(0,1.5fr)_minmax(360px,1fr)]" : "lg:grid-cols-[minmax(320px,1fr)_minmax(0,1.35fr)] xl:grid-cols-[minmax(360px,1fr)_minmax(0,1.4fr)]"}`}>
         <PreviewZone
           focusMode={focusMode}
           previewHtml={debouncedPreviewHtml}

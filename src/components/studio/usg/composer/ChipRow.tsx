@@ -64,14 +64,14 @@ export const ChipRow = memo(function ChipRow({
   onBeforeChip,
 }: ChipRowProps) {
   return (
-    <div className="mb-2.5 flex flex-wrap items-center gap-2">
+    <div className="mb-2 flex flex-wrap items-center gap-1.5">
       <button
         onClick={() => {
           onBeforeChip();
           onToggle(null);
         }}
         className={cn(
-          "rounded-full border-2 px-4 py-1.5 text-[13px] font-bold transition-colors shadow-sm",
+          "rounded-full border px-3 py-1 text-[12px] font-bold transition-colors shadow-sm",
           !anySelected && !custom && !usingQuickNormal
             ? "border-emerald-600 bg-emerald-600 text-white ring-2 ring-emerald-200"
             : "border-emerald-400 bg-emerald-50 text-emerald-900 hover:border-emerald-500 hover:bg-emerald-100",
@@ -87,9 +87,9 @@ export const ChipRow = memo(function ChipRow({
             onQuickNormal?.();
           }}
           className={cn(
-            "rounded-full border-2 px-3.5 py-1.5 text-[12px] font-bold transition-colors shadow-sm",
+            "rounded-full border px-2.5 py-1 text-[11px] font-bold transition-colors",
             usingQuickNormal
-              ? "border-amber-500 bg-amber-100 text-amber-950 ring-2 ring-amber-200"
+              ? "border-amber-500 bg-amber-100 text-amber-950"
               : "border-amber-300 bg-amber-50 text-amber-900 hover:border-amber-400 hover:bg-amber-100",
           )}
           title="Peak-time normal — qualitative wording, no size measurements (e.g. liver without MCL span)"
@@ -108,9 +108,9 @@ export const ChipRow = memo(function ChipRow({
               onToggle(p.key);
             }}
             className={cn(
-              "relative rounded-full border-2 px-3 py-1.5 text-[12px] font-bold transition-colors shadow-sm",
+              "relative rounded-full border px-2.5 py-1 text-[11px] font-bold transition-colors",
               on
-                ? "border-rose-500 bg-rose-100 text-rose-900 ring-2 ring-rose-200"
+                ? "border-rose-500 bg-rose-100 text-rose-900"
                 : "border-slate-300 bg-white text-slate-800 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-800",
               !p.builtin ? "italic" : "",
             )}
@@ -125,7 +125,7 @@ export const ChipRow = memo(function ChipRow({
             }
           >
             {hotkey ? (
-              <span className="mr-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded bg-black/10 px-0.5 font-mono text-[10px] font-bold tabular-nums opacity-80">
+              <span className="mr-1 inline-flex h-3.5 min-w-[0.9rem] items-center justify-center rounded bg-black/10 px-0.5 font-mono text-[9px] font-bold tabular-nums opacity-80">
                 {hotkey}
               </span>
             ) : null}
@@ -136,14 +136,14 @@ export const ChipRow = memo(function ChipRow({
       {pathologiesCount > 6 && !showAll ? (
         <button
           onClick={onShowAll}
-          className="rounded-full border-2 border-dashed border-slate-300 px-3 py-1.5 text-[12px] font-bold text-slate-700 hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900"
+          className="rounded-full border border-dashed border-slate-300 px-2.5 py-1 text-[11px] font-bold text-slate-700 hover:bg-slate-50"
         >
           +{pathologiesCount - 6} more
         </button>
       ) : null}
       <button
         onClick={() => onAddCustom(def.key)}
-        className="flex items-center gap-0.5 rounded-full border-2 border-dashed border-rose-300 px-2.5 py-1.5 text-[12px] font-bold text-rose-700 hover:bg-rose-50"
+        className="flex items-center gap-0.5 rounded-full border border-dashed border-rose-300 px-2 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-50"
         title={`Add a custom ${def.label} finding${isKidneySlot ? " (applies to both kidneys)" : ""}`}
       >
         <Plus className="h-3.5 w-3.5" />

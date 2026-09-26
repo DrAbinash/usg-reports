@@ -1,7 +1,7 @@
 "use client";
 /**
- * Composer chrome — compact header, patient strip, tips, banners, and the
- * peak-time / All Normal / templates toolbar. Behaviour preserved verbatim.
+ * Composer chrome — compact header, patient strip, banners, and the
+ * peak-time / fill-blank / templates toolbar. Tips live on StickyActionBar.
  */
 import { memo, useEffect, useRef, type Dispatch, type SetStateAction, type MutableRefObject } from "react";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, CalendarDays, Check, ChevronDown, Loader2, Maximize2, Minimize2, Phone, Settings2, Zap } from "lucide-react";
+import { CalendarDays, Check, ChevronDown, Loader2, Maximize2, Minimize2, Phone, Settings2, Zap } from "lucide-react";
 import { MessageCircle, FileCheck2 as FileCheck2Icon, ScanLine, Link2 } from "lucide-react";
 import type { UsgComposerState, UsgPathologyDef, UsgResolved, UsgStudyDef } from "@/lib/usg/types";
 import { USG_SEX_CHILD } from "@/lib/usg/types";
@@ -31,7 +31,6 @@ import { appendTranscript } from "@/lib/usg/dictation";
 import { clearDraft, type DraftSnapshot } from "@/lib/usg/drafts";
 import { buildPregnancyTimeline } from "@/lib/usg/pregnancyTimeline";
 import { shareReportWhatsapp } from "../shareWhatsapp";
-import { UsgTipsRibbon } from "../UsgTipsRibbon";
 import { UsgCriticalBanner } from "../UsgCriticalBanner";
 import { UsgDiffPanel, type DiffSource } from "../UsgDiffPanel";
 import { UsgPregnancyTimeline } from "../UsgPregnancyTimeline";
@@ -275,7 +274,7 @@ export function ComposerHotkeys(props: {
         return;
       }
       setState(next);
-      toast.success("All normal · no sizes — ready to print");
+      toast.success("NP · no sizes — ready to print");
     } else {
       setState((s) => markAllNormal(s, study));
       toast.success("All organs set to normal");
@@ -387,7 +386,7 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
       togglePathology(def.key, null);
       applied += 1;
     }
-    if (applied > 0) toast.success(`All Normal — ${applied} organ(s)`);
+    if (applied > 0) toast.success(`Fill blank organs — ${applied} organ(s)`);
     else toast.message("Abnormals preserved — nothing left to set normal");
   };
 
@@ -465,84 +464,44 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
   return (
     <>
     <div className="shrink-0 border-b border-border bg-card/95 backdrop-blur">
-      {/* ── Row 1: compact patient line + fullscreen + actions ─────────── */}
-      <div
-        className={cn("flex items-center gap-2 px-3 py-1.5 cursor-pointer select-none", headerCollapsed ? "hover:bg-muted/40" : "")}
-        onClick={() => setHeaderCollapsed((v) => !v)}
-        title={headerCollapsed ? "Click to expand patient details" : "Click to collapse — start reporting"}
-      >
-        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onBack(); }} className="h-7 w-7 p-0 text-muted-foreground shrink-0">
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-
-        {headerCollapsed ? (
-          <div className="flex min-w-0 flex-1 items-center gap-2 text-[12px]">
-            <span className="truncate font-bold text-foreground">{patientName || "New report"}</span>
-            {patientAge ? <span className="text-muted-foreground shrink-0">{patientAge}y</span> : null}
-            <span className="text-muted-foreground shrink-0">{patientSex === USG_SEX_CHILD ? "Child" : patientSex}</span>
-            {referredBy ? <span className="truncate text-faint hidden sm:inline">· {referredBy}</span> : null}
-            <span className="text-faint shrink-0 hidden md:inline">{resolved.study.label}</span>
-            {abnormalCount ? (
-              <span className="shrink-0 rounded-full bg-rose-50 px-1.5 py-0.5 text-[9px] font-bold text-rose-700">{abnormalCount} organ{abnormalCount > 1 ? "s" : ""}</span>
-            ) : (
-              <span className="shrink-0 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">All normal</span>
-            )}
-            {serial ? <span className="shrink-0 rounded-full bg-sky-50 px-1.5 py-0.5 text-[9px] font-bold text-sky-700">{serial}</span> : null}
-            {isFinal ? <span className="shrink-0 text-[10px] font-bold text-amber-600">FINAL</span> : null}
+      {/* Patient/study line lives in the pink CARE header — only demography form stays here when expanded */}
+      {!headerCollapsed ? (
+        <div className="flex items-center gap-2 border-b border-border/60 px-3 py-1">
+          <button
+            type="button"
+            onClick={() => setHeaderCollapsed(true)}
+            className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-[12px] font-bold text-foreground hover:text-rose-700"
+            title="Collapse patient details"
+          >
+            <ChevronDown className="h-3.5 w-3.5 shrink-0 rotate-180 text-muted-foreground" />
+            <span className="truncate">{patientName || "New report"} — edit details</span>
+          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button variant="ghost" size="sm" onClick={() => void toggleFullscreen()}
+              className="h-7 w-7 shrink-0 p-0 text-muted-foreground hover:text-foreground"
+              title={fullscreen ? "Exit fullscreen (Esc)" : "Enter fullscreen"}>
+              {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            </Button>
+            {(() => {
+              if (settings.enableCriticalComm === false) return null;
+              const sel = state.organs.flatMap((o) =>
+                (o.pathologies ?? (o.pathology ? [o.pathology] : [])).map((k) => ({
+                  key: k, label: k, organ: o.organ,
+                })),
+              );
+              const criticalAlerts = scanForCriticalFindings(sel);
+              if (!criticalAlerts.length && !isFinal) return null;
+              return (
+                <Button size="sm" variant="outline" onClick={() => setCommOpen(true)}
+                  title="Critical finding communication log"
+                  className="h-7 border-rose-300 bg-rose-100 px-2 text-rose-700 hover:bg-rose-200">
+                  <Phone className="h-3.5 w-3.5" />
+                </Button>
+              );
+            })()}
           </div>
-        ) : (
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <span className="truncate text-[13px] font-bold text-foreground">{patientName || "New report"}</span>
-            <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground rotate-180" />
-          </div>
-        )}
-
-        {/* Fullscreen + critical-comm only — Save/Finalize/Print live in the sticky bottom bar */}
-        <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
-          <Button variant="ghost" size="sm" onClick={() => void toggleFullscreen()}
-            className="h-7 w-7 shrink-0 p-0 text-muted-foreground hover:text-foreground"
-            title={fullscreen ? "Exit fullscreen (Esc)" : "Enter fullscreen — hides browser tabs"}>
-            {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-          </Button>
-          {(() => {
-            if (settings.enableCriticalComm === false) return null;
-            const sel = state.organs.flatMap((o) =>
-              (o.pathologies ?? (o.pathology ? [o.pathology] : [])).map((k) => ({
-                key: k, label: k, organ: o.organ,
-              })),
-            );
-            const criticalAlerts = scanForCriticalFindings(sel);
-            const hasCritical = criticalAlerts.length > 0;
-            if (!hasCritical && !isFinal) return null;
-            return (
-              <Button size="sm" variant="outline" onClick={() => setCommOpen(true)}
-                title="Critical finding communication log (PCPNDT/NMC legal record)"
-                className="h-7 border-rose-300 bg-rose-100 px-2 text-rose-700 hover:bg-rose-200">
-                <Phone className="h-3.5 w-3.5" />
-              </Button>
-            );
-          })()}
         </div>
-      </div>
-
-      {/* ── Row 2: study title + status badges (thin line) ─────────────── */}
-      <div className="flex items-center gap-1.5 px-3 pb-1 text-[10px] text-muted-foreground">
-        <span className="font-semibold text-foreground">{resolved.title}</span>
-        <span className={cn("rounded-full px-1.5 py-0.5 font-semibold", abnormalCount ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700")}>
-          {abnormalCount ? `${abnormalCount} organ${abnormalCount > 1 ? "s" : ""} affected` : "All normal"}
-        </span>
-        {serial ? <span className="rounded-full bg-sky-50 px-1.5 py-0.5 font-bold text-sky-700">{serial}</span> : null}
-        {isFinal ? (
-          <span className="rounded-full bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-700">finalized</span>
-        ) : (
-          <span className="rounded-full bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-700">draft</span>
-        )}
-        {lastAutosave && !isFinal ? (
-          <span className="text-[9px] text-emerald-600">· autosaved {new Date(lastAutosave).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>
-        ) : null}
-      </div>
-
-      <UsgTipsRibbon />
+      ) : null}
 
       {/* ── Expanded: full patient input form ──────────────────────────── */}
       {!headerCollapsed && (
@@ -802,7 +761,7 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
               size="sm"
               variant="outline"
               className="h-7 shrink-0 border-amber-400 bg-amber-100 px-2 text-[11px] font-bold text-amber-950 hover:bg-amber-200"
-              title="Peak-time: mark every organ normal with no size measurements (keyboard: N)"
+              title="Peak-time: whole study normal with no size measurements (keyboard: N)"
               onClick={() => {
                 const next = applyRushNormalStudy(state, study);
                 if (!next) {
@@ -810,11 +769,11 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
                   return;
                 }
                 setState(next);
-                toast.success("All normal · no sizes — ready to print");
+                toast.success("NP · no sizes — ready to print");
               }}
             >
               <Zap className="mr-1 h-3.5 w-3.5" />
-              All normal
+              NP · no sizes
             </Button>
             {study.organs.some((o) => o.key === "liver") ? (
               <Button
@@ -862,7 +821,7 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
           onClick={applyAllNormalMacro}
         >
           <Check className="mr-1 h-3.5 w-3.5" />
-          All Normal
+          Fill blank organs
         </Button>
         <UsgFormatsLibrary organs={state.organs} onApply={(organs, imp) => setState((p) => ({ ...p, organs, impressionOverride: imp ?? p.impressionOverride }))} />
         <div className="min-w-0 flex-1 border-l border-emerald-200/80 pl-1.5">

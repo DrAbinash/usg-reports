@@ -1,10 +1,9 @@
 "use client";
 /**
- * Preview column — OHIF viewer (tall vertical by default) stacked above the
- * letterhead iframe, plus focusMode click-catcher (enlarge-on-click; removed
- * once focused). Composer/report preview always stays below the viewer.
+ * Preview column — OHIF stacked above letterpad with mutual click-focus:
+ * click letterpad → OHIF shrinks; click/focus OHIF → letterpad shrinks.
  */
-import { memo } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import { UsgViewerSidebar } from "../UsgViewerSidebar";
 import type { ImageRow, PendingImage } from "../UsgImagesCard";
 import { toast } from "sonner";
@@ -12,6 +11,8 @@ import { clearDraft } from "@/lib/usg/drafts";
 import { formatUsgSerial } from "@/lib/usg/print";
 import { isCleanRushFinalize } from "@/lib/usg/quickActions";
 import type { UsgComposerState } from "@/lib/usg/types";
+import type { OhifLayoutMode } from "@/lib/usg/ohifLaunch";
+import { cn } from "@/lib/utils";
 import { UsgDicomPicker } from "../UsgDicomPicker";
 import { UsgFormFDialog, type FormFOrderLite } from "../UsgFormFDialog";
 import { UsgPathologyDialog } from "../UsgPathologyDialog";
@@ -22,13 +23,17 @@ import { UsgCriticalCommDialog } from "../UsgCriticalCommDialog";
 import { UsgAiDraftPanel } from "../UsgAiDraftPanel";
 import { selectedPathologies, setOrganVar } from "@/lib/usg/composer";
 
-
 export type PreviewZoneProps = {
+  /** Composer grid bias — driven by OHIF layout (CARE pane focus lite). */
   focusMode: "workspace" | "preview" | null;
   previewHtml: string;
   orderUid: string | null;
+  /** Controlled CARE-like layout (Report / Split / Viewer+ / letterpad). */
+  ohifLayout?: OhifLayoutMode;
   onEnlarge: () => void;
   onResetFocus: () => void;
+  /** Sync CARE-like layout → composer grid width. */
+  onOhifLayoutChange?: (mode: OhifLayoutMode) => void;
 };
 
 function previewEqual(a: PreviewZoneProps, b: PreviewZoneProps): boolean {
@@ -36,8 +41,10 @@ function previewEqual(a: PreviewZoneProps, b: PreviewZoneProps): boolean {
     a.focusMode === b.focusMode &&
     a.previewHtml === b.previewHtml &&
     a.orderUid === b.orderUid &&
+    a.ohifLayout === b.ohifLayout &&
     a.onEnlarge === b.onEnlarge &&
-    a.onResetFocus === b.onResetFocus
+    a.onResetFocus === b.onResetFocus &&
+    a.onOhifLayoutChange === b.onOhifLayoutChange
   );
 }
 
@@ -45,36 +52,98 @@ export const PreviewZone = memo(function PreviewZone({
   focusMode,
   previewHtml,
   orderUid,
-  onEnlarge,
-  onResetFocus,
+  ohifLayout: ohifLayoutProp,
+  onOhifLayoutChange,
 }: PreviewZoneProps) {
-  const enlarged = focusMode === "preview";
+  const [localLayout, setLocalLayout] = useState<OhifLayoutMode>("split");
+  const layout = ohifLayoutProp ?? localLayout;
+
+  const handleLayout = useCallback(
+    (mode: OhifLayoutMode) => {
+      setLocalLayout(mode);
+      onOhifLayoutChange?.(mode);
+    },
+    [onOhifLayoutChange],
+  );
+
+  const focusOhif = useCallback(() => {
+    if (layout === "viewerPlus") return;
+    handleLayout("viewerPlus");
+  }, [handleLayout, layout]);
+
+  const focusLetterpad = useCallback(() => {
+    if (!orderUid) return;
+    if (layout === "letterpad") return;
+    handleLayout("letterpad");
+  }, [handleLayout, layout, orderUid]);
+
+  // Letterpad iframe clicks also don't bubble — same CARE blur trick.
+  useEffect(() => {
+    if (!orderUid) return;
+    const onBlur = () => {
+      requestAnimationFrame(() => {
+        const ae = document.activeElement;
+        if (ae instanceof HTMLIFrameElement && ae.dataset.testid === "letterpad-preview") {
+          focusLetterpad();
+        }
+      });
+    };
+    window.addEventListener("blur", onBlur);
+    return () => window.removeEventListener("blur", onBlur);
+  }, [orderUid, focusLetterpad]);
+
+  const letterpadClass = cn(
+    "min-h-0 overflow-auto rounded-lg border bg-slate-100 shadow-sm transition-[flex-basis,flex-grow,max-height] duration-200",
+    !orderUid || layout === "report"
+      ? "flex-1 border-border"
+      : layout === "viewerPlus"
+        ? "max-h-[120px] flex-[0_0_10%] border-border"
+        : layout === "letterpad"
+          ? "flex-1 border-sky-300 ring-1 ring-sky-200"
+          : "flex-[0_0_40%] border-border",
+  );
+
   return (
     <div
-      className="relative flex h-full min-h-0 flex-col gap-2 overflow-hidden pr-1"
+      className="relative flex h-full min-h-0 flex-col gap-1.5 overflow-hidden pr-1"
+      data-ohif-layout={layout}
+      data-focus-mode={focusMode ?? "default"}
+      title="Click OHIF to enlarge images · Click letterpad to enlarge print preview · Double-click to balance"
       onDoubleClick={(e) => {
         e.stopPropagation();
-        onResetFocus();
+        if (orderUid) handleLayout("split");
       }}
     >
-      {focusMode !== "preview" && (
-        <div
-          className="absolute inset-0 z-10 cursor-pointer"
-          onClick={(e) => {
-            e.stopPropagation();
-            onEnlarge();
-          }}
-          title="Click to enlarge viewer & letterpad"
+      {orderUid ? (
+        <UsgViewerSidebar
+          studyInstanceUid={orderUid}
+          layout={layout}
+          onLayoutChange={handleLayout}
+          onActivate={focusOhif}
         />
-      )}
-      {orderUid && <UsgViewerSidebar studyInstanceUid={orderUid} enlarged={enlarged} />}
-      {/* Letterpad: remaining column height — scroll inside so A4 stays readable */}
-      <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-border bg-slate-100 shadow-sm">
+      ) : null}
+      <div
+        className={letterpadClass}
+        data-testid="letterpad-pane"
+        onPointerDownCapture={focusLetterpad}
+      >
+        <div className="sticky top-0 z-[1] flex items-center justify-between border-b border-border/70 bg-slate-100/95 px-2 py-0.5 text-[10px] font-semibold text-slate-600 backdrop-blur">
+          <span>Letterpad preview</span>
+          {orderUid && layout === "letterpad" ? (
+            <span className="text-sky-700">OHIF shrunk — click DICOM to enlarge</span>
+          ) : orderUid && layout === "viewerPlus" ? (
+            <span className="text-slate-500">Click here to enlarge letterpad</span>
+          ) : null}
+        </div>
         <iframe
           title="USG report preview"
+          data-testid="letterpad-preview"
           srcDoc={previewHtml}
           className="block w-full border-0 bg-white"
-          style={{ minHeight: "100%", height: "1120px" }}
+          style={{
+            minHeight: "100%",
+            height: layout === "viewerPlus" ? "100%" : "1120px",
+          }}
           sandbox="allow-same-origin"
         />
       </div>
@@ -347,22 +416,53 @@ export function printInIframe(printRef: React.RefObject<HTMLIFrameElement | null
     toast.error("Print frame missing — reload the page");
     return;
   }
+  // CRITICAL: the off-screen print iframe used to be 1×1px. The shared
+  // beforeprint auto-zoom then measured a huge wrapped scrollHeight and
+  // shrunk the A4 report to a postage stamp. Size to real A4 before print.
+  const prev = {
+    width: frame.style.width,
+    height: frame.style.height,
+    left: frame.style.left,
+    top: frame.style.top,
+    opacity: frame.style.opacity,
+  };
+  frame.style.width = "210mm";
+  frame.style.height = "297mm";
+  frame.style.left = "-10000px";
+  frame.style.top = "0";
+  frame.style.opacity = "0";
+
   let printed = false;
+  const restore = () => {
+    frame.style.width = prev.width || "1px";
+    frame.style.height = prev.height || "1px";
+    frame.style.left = prev.left || "-10000px";
+    frame.style.top = prev.top || "0";
+    frame.style.opacity = prev.opacity || "0";
+  };
   const doPrint = () => {
     if (printed) return;
     printed = true;
     const win = frame.contentWindow;
     if (!win) {
+      restore();
       toast.error("Print window unavailable");
       return;
     }
+    const onAfter = () => {
+      win.removeEventListener("afterprint", onAfter);
+      restore();
+    };
+    win.addEventListener("afterprint", onAfter);
     win.focus();
     win.print();
+    // Fallback restore if afterprint never fires (some browsers).
+    window.setTimeout(restore, 4000);
   };
   const onLoad = () => {
     frame.removeEventListener("load", onLoad);
     // Allow layout/paint one tick after load before opening the dialog.
-    requestAnimationFrame(() => doPrint());
+    requestAnimationFrame(() => requestAnimationFrame(() => doPrint()));
   };
   frame.addEventListener("load", onLoad);
   frame.srcdoc = html;
@@ -370,9 +470,10 @@ export function printInIframe(printRef: React.RefObject<HTMLIFrameElement | null
   window.setTimeout(() => {
     if (!printed) {
       frame.removeEventListener("load", onLoad);
+      restore();
       toast.error("Print preview did not load in time — try Print again");
     }
-  }, 1500);
+  }, 2500);
 }
 
 export async function printFrozenReport(

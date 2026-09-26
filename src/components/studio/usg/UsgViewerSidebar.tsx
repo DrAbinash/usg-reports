@@ -1,119 +1,213 @@
-import { useState } from "react";
-
-const LAN_OHIF = "http://172.16.1.139:3010";
-const TS_OHIF = "https://ohif-viewer.tail7005c0.ts.net";
+"use client";
+/**
+ * Embedded OHIF — CARE enlarge model adapted to USG Studio:
+ *   1. Column vertical (split / Viewer+ / letterpad) — mutual resize with letterpad
+ *   2. Fullscreen overlay
+ *   3. Open in new tab
+ *
+ * Click / iframe-focus → parent promotes Viewer+; letterpad click shrinks us.
+ */
+import { useEffect, useRef, useState } from "react";
+import { Columns2, Maximize2, Minimize2, Monitor, X } from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  type OhifLayoutMode,
+  type OhifRoute,
+  ohifRouteLabel,
+  ohifViewerUrl,
+} from "@/lib/usg/ohifLaunch";
 
 type Props = {
   studyInstanceUid: string | null;
-  /** When true, occupy most of the preview column (focus / enlarge). */
-  enlarged?: boolean;
+  layout?: OhifLayoutMode;
+  onLayoutChange?: (mode: OhifLayoutMode) => void;
+  /** Fired when user engages the OHIF pane (chrome click or iframe focus). */
+  onActivate?: () => void;
 };
 
-/** Expand modes for the embedded OHIF pane.
- *  - vertical (default): full-width tall pane; iframe fills the box (no letterbox)
- *  - horizontal: short ribbon (explicit opt-in)
- *  - collapsed: header only */
-type ExpandMode = "collapsed" | "vertical" | "horizontal";
+const LAYOUT_STORAGE = "care-usg-ohif-layout";
 
-/** Stacked OHIF viewer above the letterpad preview.
- *  The shell is always full column width so enlarge grows the DICOM viewport,
- *  not empty white gutters around a locked aspect box. */
-export function UsgViewerSidebar({ studyInstanceUid, enlarged = false }: Props) {
-  const [mode, setMode] = useState<ExpandMode>("vertical");
-  const [route, setRoute] = useState<"auto" | "lan" | "tailscale">("auto");
+export function UsgViewerSidebar({
+  studyInstanceUid,
+  layout: layoutProp,
+  onLayoutChange,
+  onActivate,
+}: Props) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [route, setRoute] = useState<OhifRoute>("auto");
+  const [localLayout, setLocalLayout] = useState<OhifLayoutMode>(() => {
+    try {
+      const v = sessionStorage.getItem(LAYOUT_STORAGE);
+      if (v === "report" || v === "split" || v === "viewerPlus" || v === "letterpad") return v;
+    } catch {
+      /* ignore */
+    }
+    return "split";
+  });
+  const [fullscreen, setFullscreen] = useState(false);
+
+  const layout = layoutProp ?? localLayout;
+  const setLayout = (mode: OhifLayoutMode) => {
+    setLocalLayout(mode);
+    try {
+      sessionStorage.setItem(LAYOUT_STORAGE, mode);
+    } catch {
+      /* ignore */
+    }
+    onLayoutChange?.(mode);
+  };
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFullscreen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fullscreen]);
+
+  // CARE pattern: clicks inside the OHIF iframe do not bubble — detect via blur.
+  useEffect(() => {
+    const onBlur = () => {
+      requestAnimationFrame(() => {
+        const ae = document.activeElement;
+        if (ae instanceof HTMLIFrameElement && ae.dataset.testid === "ohif-embed") {
+          onActivate?.();
+        }
+      });
+    };
+    window.addEventListener("blur", onBlur);
+    return () => window.removeEventListener("blur", onBlur);
+  }, [onActivate]);
 
   if (!studyInstanceUid) return null;
 
-  const pageHttps = typeof window !== "undefined" && window.location.protocol === "https:";
-  const base = route === "lan" ? LAN_OHIF : route === "tailscale" ? TS_OHIF : pageHttps ? TS_OHIF : LAN_OHIF;
-  const routeLabel = base === TS_OHIF ? "TS" : "LAN";
-  const src = `${base}/viewer?StudyInstanceUIDs=${encodeURIComponent(studyInstanceUid)}`;
-  const open = mode !== "collapsed";
+  const src = ohifViewerUrl(studyInstanceUid, route);
+  const routeLabel = ohifRouteLabel(route);
+  const reportFocus = layout === "report" && !fullscreen;
 
-  // Full-width shells only — never aspect-lock / center (that left white gutters
-  // while the preview column grew on enlarge).
-  const shellClass =
-    mode === "vertical"
-      ? `flex w-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-black shadow-sm ${
-          enlarged ? "flex-[0_0_72%]" : "flex-[0_0_62%]"
-        }`
-      : mode === "horizontal"
-        ? "flex w-full shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-black shadow-sm"
-        : "w-full shrink-0 overflow-hidden rounded-lg border border-border bg-white shadow-sm";
+  // Height share vs letterpad (click either side to bias the other down).
+  const shellClass = fullscreen
+    ? "fixed inset-0 z-[60] flex flex-col bg-black shadow-2xl"
+    : cn(
+        "flex w-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-black shadow-sm transition-[flex-basis,flex-grow] duration-200",
+        reportFocus && "hidden",
+        !reportFocus && layout === "viewerPlus" && "min-h-0 flex-[1_1_90%]",
+        !reportFocus && layout === "split" && "min-h-[240px] flex-[1_1_58%]",
+        !reportFocus && layout === "letterpad" && "min-h-[120px] max-h-[28%] flex-[0_0_22%]",
+      );
 
   return (
-    <div className={shellClass}>
-      <div className="flex shrink-0 items-center gap-1 border-b border-white/10 bg-slate-900 px-2 py-1 text-[10px] text-white">
-        <span className="font-bold text-sky-300">DICOM</span>
-        <span className="rounded bg-sky-500/20 px-1.5 py-0.5 font-semibold text-sky-200">{routeLabel}</span>
-        <span
-          className="rounded bg-white/10 px-1.5 py-0.5 font-semibold text-white/80"
-          title={
-            mode === "vertical"
-              ? "Tall viewer (default) — fills column width"
-              : mode === "horizontal"
-                ? "Wide ribbon viewer"
-                : "Collapsed"
-          }
+    <>
+      {reportFocus ? (
+        <button
+          type="button"
+          onClick={() => setLayout("split")}
+          className="flex w-full shrink-0 items-center justify-center gap-2 rounded-lg border border-dashed border-sky-300 bg-sky-50/80 px-3 py-2 text-[11px] font-semibold text-sky-900 hover:bg-sky-100"
+          title="Show embedded OHIF viewer"
         >
-          {mode === "vertical" ? "Tall" : mode === "horizontal" ? "Wide" : "Hide"}
-        </span>
-        <div className="ml-auto flex items-center gap-0.5">
-          {(["auto", "lan", "tailscale"] as const).map((r) => (
-            <button
-              key={r}
-              type="button"
-              onClick={() => setRoute(r)}
-              className={`rounded px-1.5 py-0.5 text-[9px] font-semibold ${
-                route === r ? "bg-sky-500 text-white" : "bg-white/10 text-white/70 hover:bg-white/20"
-              }`}
-            >
-              {r === "auto" ? "A" : r === "lan" ? "L" : "T"}
-            </button>
-          ))}
-          <a
-            href={src}
-            target="_blank"
-            rel="noreferrer"
-            className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-semibold text-white/80 hover:bg-white/20"
-            title="Open in new tab"
+          <Columns2 className="h-3.5 w-3.5" />
+          OHIF / WADO images are hidden — click to open
+        </button>
+      ) : null}
+
+      <div
+        className={shellClass}
+        data-testid="embedded-ohif-shell"
+        onPointerDownCapture={() => onActivate?.()}
+      >
+        <div className="flex shrink-0 items-center gap-1 border-b border-white/10 bg-slate-900 px-2 py-1 text-[10px] text-white">
+          <span className="font-bold text-sky-300">DICOM</span>
+          <span className="rounded bg-sky-500/20 px-1.5 py-0.5 font-semibold text-sky-200">{routeLabel}</span>
+
+          <div
+            className="ml-1 flex items-center overflow-hidden rounded border border-white/15"
+            data-testid="ohif-layout-selector"
           >
-            ↗
-          </a>
-          {open && (
+            {(
+              [
+                { mode: "report" as const, label: "Report", Icon: Minimize2, title: "Hide viewer — writing focus" },
+                { mode: "split" as const, label: "Split", Icon: Columns2, title: "Balanced OHIF + letterpad" },
+                { mode: "viewerPlus" as const, label: "OHIF+", Icon: Monitor, title: "Enlarge OHIF (shrink letterpad)" },
+              ] as const
+            ).map(({ mode, label, Icon, title }) => (
+              <button
+                key={mode}
+                type="button"
+                title={title}
+                aria-pressed={layout === mode && !fullscreen}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFullscreen(false);
+                  setLayout(mode);
+                }}
+                className={cn(
+                  "inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-bold transition-colors",
+                  layout === mode && !fullscreen
+                    ? "bg-sky-500 text-white"
+                    : "bg-white/5 text-white/70 hover:bg-white/15",
+                )}
+              >
+                <Icon className="h-3 w-3" />
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="ml-auto flex items-center gap-0.5">
+            {(["auto", "lan", "tailscale"] as const).map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRoute(r);
+                }}
+                className={cn(
+                  "rounded px-1.5 py-0.5 text-[9px] font-semibold",
+                  route === r ? "bg-sky-500 text-white" : "bg-white/10 text-white/70 hover:bg-white/20",
+                )}
+              >
+                {r === "auto" ? "A" : r === "lan" ? "L" : "T"}
+              </button>
+            ))}
+            <a
+              href={src}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-semibold text-white/80 hover:bg-white/20"
+              title="Open in new tab"
+            >
+              ↗
+            </a>
             <button
               type="button"
-              onClick={() => setMode((m) => (m === "horizontal" ? "vertical" : "horizontal"))}
-              className={`rounded px-1.5 py-0.5 text-[9px] font-semibold hover:bg-white/20 ${
-                mode === "horizontal" ? "bg-sky-500 text-white" : "bg-white/10 text-white/70"
-              }`}
-              title={mode === "horizontal" ? "Switch to tall vertical" : "Switch to wide ribbon"}
+              onClick={(e) => {
+                e.stopPropagation();
+                setFullscreen((v) => !v);
+              }}
+              className={cn(
+                "rounded px-1.5 py-0.5 text-[9px] font-semibold hover:bg-white/20",
+                fullscreen ? "bg-amber-500 text-white" : "bg-white/10 text-white/80",
+              )}
+              title={fullscreen ? "Exit fullscreen overlay (Esc)" : "Fullscreen overlay"}
             >
-              {mode === "horizontal" ? "▮" : "▬"}
+              {fullscreen ? <X className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
             </button>
-          )}
-          <button
-            type="button"
-            onClick={() => setMode((m) => (m === "collapsed" ? "vertical" : "collapsed"))}
-            className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-semibold text-white/80 hover:bg-white/20"
-            title={open ? "Collapse viewer" : "Expand tall viewer"}
-          >
-            {open ? "−" : "+"}
-          </button>
+          </div>
         </div>
-      </div>
-      {open && (
+
         <iframe
+          ref={iframeRef}
           title="OHIF DICOM viewer"
+          data-testid="ohif-embed"
           src={src}
-          className={
-            mode === "vertical"
-              ? "block h-full min-h-0 w-full flex-1 border-0 bg-black"
-              : "block w-full border-0 bg-black"
-          }
-          style={mode === "horizontal" ? { height: "220px" } : { height: "100%" }}
+          className="block h-full min-h-0 w-full flex-1 border-0 bg-black"
+          style={{ height: "100%" }}
+          allow="fullscreen"
         />
-      )}
-    </div>
+      </div>
+    </>
   );
 }

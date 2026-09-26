@@ -50,6 +50,7 @@ import {
 } from "./composer/PreviewZone";
 import { StickyActionBar } from "./composer/StickyActionBar";
 import { downloadReportPdf } from "./sharePdf";
+import { useStudio } from "@/lib/store";
 import type { DiffSource } from "./UsgDiffPanel";
 
 /** v6: the bill-desk order a report came from (banner, PACS, Form F). */
@@ -172,7 +173,9 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const [headerCollapsed, setHeaderCollapsed] = useState(
     !!(report || order || prefill?.patientName),
   );
-  const [focusMode, setFocusMode] = useState<'workspace' | 'preview' | null>(null);
+  /** CARE-like pane bias: viewerPlus / letterpad swap height; report = writing. */
+  const [ohifLayout, setOhifLayout] = useState<"report" | "split" | "viewerPlus" | "letterpad">("split");
+  const [focusMode, setFocusMode] = useState<"workspace" | "preview" | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewSrResult, setReviewSrResult] = useState<{ vars: Record<string, Record<string, string>>; extras: Record<string, string>; matchedCount: number } | null>(null);
@@ -432,6 +435,63 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
 
   const abnormalCount = state.organs.filter((o) => selectedPathologies(o).length).length;
 
+  // Push patient/study strip into the pink CARE header; clear on unmount.
+  // Callbacks are ref-stable so parent inline onBack never infinite-loops the store.
+  const setComposerStrip = useStudio((s) => s.setComposerStrip);
+  const setComposerBack = useStudio((s) => s.setComposerBack);
+  const setExpandPatientForm = useStudio((s) => s.setExpandPatientForm);
+  const onBackRef = useRef(onBack);
+  onBackRef.current = onBack;
+  useEffect(() => {
+    setComposerBack(() => onBackRef.current());
+    setExpandPatientForm(() => setHeaderCollapsed(false));
+    return () => {
+      setComposerStrip(null);
+      setComposerBack(null);
+      setExpandPatientForm(null);
+    };
+  }, [setComposerBack, setExpandPatientForm, setComposerStrip]);
+  useEffect(() => {
+    const next = {
+      patientName,
+      patientAge,
+      patientSex: patientSex === USG_SEX_CHILD ? "C" : patientSex,
+      referredBy,
+      studyLabel: study.label,
+      title: resolved.title,
+      status: (isFinal ? "final" : "draft") as "draft" | "final",
+      allNormal: abnormalCount === 0,
+      serial,
+    };
+    const prev = useStudio.getState().composerStrip;
+    if (
+      prev &&
+      prev.patientName === next.patientName &&
+      prev.patientAge === next.patientAge &&
+      prev.patientSex === next.patientSex &&
+      prev.referredBy === next.referredBy &&
+      prev.studyLabel === next.studyLabel &&
+      prev.title === next.title &&
+      prev.status === next.status &&
+      prev.allNormal === next.allNormal &&
+      prev.serial === next.serial
+    ) {
+      return;
+    }
+    setComposerStrip(next);
+  }, [
+    patientName,
+    patientAge,
+    patientSex,
+    referredBy,
+    study.label,
+    resolved.title,
+    isFinal,
+    abnormalCount,
+    serial,
+    setComposerStrip,
+  ]);
+
   /** Chip toggle — null clears the organ to normal; a key toggles it, so an
    *  organ can carry several pathologies at once (combined findings). */
   const togglePathology = (organKey: string, key: string | null) => {
@@ -525,7 +585,26 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const lookupPathology = useCallback((key: string) => pathologies.find((p) => p.key === key), [pathologies]);
   const onEnlargePreview = useCallback(() => setFocusMode("preview"), []);
   const onResetFocus = useCallback(() => setFocusMode(null), []);
-  const onWorkspaceFocus = useCallback(() => setFocusMode("workspace"), []);
+  const onWorkspaceFocus = useCallback(() => {
+    setOhifLayout("report");
+    setFocusMode("workspace");
+  }, []);
+  const onOhifLayoutChange = useCallback((mode: "report" | "split" | "viewerPlus" | "letterpad") => {
+    setOhifLayout(mode);
+    // Viewer+ widens image column; letterpad keeps preview col but shrinks OHIF height;
+    // Report hands width to the clinical editor.
+    if (mode === "viewerPlus") setFocusMode("preview");
+    else if (mode === "report") setFocusMode("workspace");
+    else setFocusMode(null);
+  }, []);
+
+  // CARE split≈32/65 · viewerFocus≈65/32 — letterpad focus keeps ~half width (height swap only).
+  const workspaceGridClass =
+    ohifLayout === "viewerPlus" || focusMode === "preview"
+      ? "lg:grid-cols-[minmax(0,2fr)_minmax(260px,1fr)] xl:grid-cols-[minmax(0,2.2fr)_minmax(280px,1fr)]"
+      : ohifLayout === "report" || focusMode === "workspace"
+        ? "lg:grid-cols-[minmax(200px,0.75fr)_minmax(0,1.5fr)] xl:grid-cols-[minmax(220px,0.7fr)_minmax(0,1.6fr)]"
+        : "lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]";
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -610,16 +689,18 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         togglePathology={togglePathology}
       />
 
-      <div className={`grid min-h-0 flex-1 gap-2 overflow-hidden px-2 pb-2 pt-1 ${focusMode === 'preview' ? "lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,1fr)] xl:grid-cols-[minmax(0,1.5fr)_minmax(360px,1fr)]" : "lg:grid-cols-[minmax(320px,1fr)_minmax(0,1.35fr)] xl:grid-cols-[minmax(360px,1fr)_minmax(0,1.4fr)]"}`}>
+      <div className={`grid min-h-0 flex-1 gap-2 overflow-hidden px-2 pb-2 pt-1 ${workspaceGridClass}`}>
         <PreviewZone
           focusMode={focusMode}
           previewHtml={debouncedPreviewHtml}
           orderUid={orderUid}
+          ohifLayout={ohifLayout}
           onEnlarge={onEnlargePreview}
           onResetFocus={onResetFocus}
+          onOhifLayoutChange={onOhifLayoutChange}
         />
 
-        <div className="studio-scroll min-h-0 space-y-3 overflow-y-auto pr-1 cursor-pointer" onClick={(e) => { e.stopPropagation(); onWorkspaceFocus(); }} onDoubleClick={(e) => { e.stopPropagation(); onResetFocus(); }} title="Click to focus workspace · Double-click to reset">
+        <div className="studio-scroll min-h-0 space-y-3 overflow-y-auto pr-1 cursor-pointer" onClick={(e) => { e.stopPropagation(); onWorkspaceFocus(); }} onDoubleClick={(e) => { e.stopPropagation(); onResetFocus(); setOhifLayout("split"); }} title="Click to focus writing (hides OHIF) · Double-click to restore split">
           <div className="space-y-3">
             {study.organs.map((def, organIdx) => {
               const st = state.organs.find((o) => o.organ === def.key);

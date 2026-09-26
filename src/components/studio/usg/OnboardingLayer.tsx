@@ -2,22 +2,21 @@
 /**
  * First-run delight layer — one centred card on first login combining the
  * setup checklist + welcome actions + tour launch; plus the self-fetching
- * first-report confetti and a once-per-session print tip in the USG view.
+ * first-report confetti. Print tip lives on StickyActionBar with Save/Print.
  * Fixed overlay = zero layout risk; everything dismissible forever.
  */
 import { useEffect, useState } from "react";
-import { CheckCircle2, Circle, X, Waves, ClipboardList, HelpCircle, Printer, Sparkles } from "lucide-react";
+import { CheckCircle2, Circle, X, Waves, ClipboardList, HelpCircle, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStudio } from "@/lib/store";
 import { GuidedTour } from "./GuidedTour";
 import { FirstReportConfetti } from "./FirstReportConfetti";
 
 export function OnboardingLayer() {
-  const { view, setView } = useStudio();
+  const { setView } = useStudio();
   const [settings, setSettings] = useState<any>(null);
   const [modal, setModal] = useState(false);
   const [tour, setTour] = useState(false);
-  const [tipHidden, setTipHidden] = useState(false);
 
   useEffect(() => {
     let seen = false;
@@ -70,13 +69,6 @@ export function OnboardingLayer() {
       )}
       {tour && <GuidedTour onClose={() => setTour(false)} />}
       <FirstReportConfetti />
-      {view === "usg" && !tipHidden && (
-        <div className="no-print fixed bottom-4 left-1/2 z-[55] flex -translate-x-1/2 items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-4 py-2 text-[11px] shadow-lg">
-          <Printer className="h-3.5 w-3.5 text-amber-600" />
-          <span className="text-amber-900">Print tip: tick <b>Background graphics</b> in the print dialog so the letterhead prints.</span>
-          <button onClick={() => setTipHidden(true)} className="text-amber-600 hover:text-amber-800"><X className="h-3.5 w-3.5" /></button>
-        </div>
-      )}
     </>
   );
 }

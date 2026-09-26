@@ -323,8 +323,8 @@ const PREMIUM_CSS = `
 
   .thanks { text-align: center; font-style: italic; font-weight: 600; color: #4A6581; font-size: 9.5pt; margin-top: 6px; }
 
-  .study { margin-top: 12px; text-align: center; page-break-after: avoid; }
-  .study .name { font-size: 14.5pt; font-weight: 800; color: #143E6E; letter-spacing: 2px; text-transform: uppercase; }
+  .study { margin-top: 12px; width: 100%; text-align: center; page-break-after: avoid; }
+  .study .name { display: block; width: 100%; font-size: 14.5pt; font-weight: 800; color: #143E6E; letter-spacing: 2px; text-transform: uppercase; text-align: center; }
   .study .rule { height: 3.5px; background: linear-gradient(90deg, transparent 4%, #2E6DA4 25%, #3E86C4 50%, #2E6DA4 75%, transparent 96%); border-radius: 3px; margin: 5px 18px 0; }
 
   .machine { text-align: center; font-size: 9.5pt; font-weight: 700; color: #2E6DA4; font-style: italic; margin-top: 7px; }
@@ -413,8 +413,8 @@ const CLASSIC_CSS = `
 
   .thanks { text-align: center; font-style: italic; font-size: 9.5pt; margin-top: 7px; }
 
-  .study { margin-top: 13px; text-align: center; page-break-after: avoid; }
-  .study .name { font-size: 13.5pt; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 4px 0; }
+  .study { margin-top: 13px; width: 100%; text-align: center; page-break-after: avoid; }
+  .study .name { display: block; width: 100%; font-size: 13.5pt; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; text-align: center; border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 4px 0; }
   .study .rule { display: none; }
 
   .machine { text-align: center; font-size: 9pt; font-weight: 600; font-style: italic; margin-top: 6px; }
@@ -593,7 +593,7 @@ const TAIL_CSS = `
  * auto-zoom oversized sheets to one printable page height.
  * Byte-identical across classic / premium / sidebar generators.
  */
-const PRINT_CSS = `<style id="usg-justify-kill">p, li, td, th, div, span, .organ-body, .ob-body, .pbody { text-align: left !important; hyphens: none !important; word-spacing: normal !important; letter-spacing: normal !important; }</style><style id="usg-sig-fit">.signature-block,.sig-wrap,.sig-pin{position:static !important;bottom:auto !important;right:auto !important;transform:none !important;}</style><script>window.addEventListener("beforeprint",function(){var mm=277/25.4*96;var h=document.body.scrollHeight;if(h>mm){document.body.style.zoom=(mm/h).toFixed(3);}});</script>`;
+const PRINT_CSS = `<style id="usg-justify-kill">p, li, td, th, div, span, .organ-body, .ob-body, .pbody { text-align: left !important; hyphens: none !important; word-spacing: normal !important; letter-spacing: normal !important; }</style><style id="usg-study-center">.study,.study .name,.thanks,.machine{text-align:center !important;}</style><style id="usg-sig-fit">.signature-block,.sig-wrap,.sig-pin{position:static !important;bottom:auto !important;right:auto !important;transform:none !important;}</style><script>window.addEventListener("beforeprint",function(){var mm=277/25.4*96;var h=document.body.scrollHeight;if(h>mm){document.body.style.zoom=(mm/h).toFixed(3);}});</script>`;
 
 /** Clamp a numeric setting to a safe range (bad/absent values fall back). */
 function clampNum(v: unknown, min: number, max: number, dflt: number): number {
@@ -678,8 +678,8 @@ export function buildUsgReportHtml(
   const compact = settings.usgPrintCompact === true;
   const a5 = settings.usgPrintPaper === "a5";
   const provisional = patient.provisional === true;
-  // v6.2 dials: the Technique band and referral tagline are switchable, and
-  // the section numbering follows whatever actually prints.
+  // v6.2 dials: the Technique band and referral tagline are switchable.
+  // Section bands are unnumbered — short reports (Findings + Impression) read cleaner.
   const showTechnique = settings.usgPrintShowTechnique !== false && !!resolved.technique?.trim();
   const showThanks = settings.usgPrintShowThanks !== false;
   const css =
@@ -727,7 +727,7 @@ export function buildUsgReportHtml(
         .join("")}</div>`
     : "";
   const imagesBand = images.length
-    ? `<h2 class="band"><span class="n">${showTechnique ? 3 : 2}</span>USG Images</h2>`
+    ? `<h2 class="band">USG Images</h2>`
     : "";
 
   const impressionHtml = resolved.impression.length
@@ -819,16 +819,16 @@ ${watermark}
   </div>
   ${machineLine}
 
-  ${showTechnique ? `<h2 class="band"><span class="n">1</span>Technique</h2>
+  ${showTechnique ? `<h2 class="band">Technique</h2>
   <p class="technique">${esc(resolved.technique).replace(/\n/g, "<br/>")}</p>` : ""}
 
-  <h2 class="band"><span class="n">${showTechnique ? 2 : 1}</span>Findings</h2>
+  <h2 class="band">Findings</h2>
   ${sectionsHtml}
 
   ${imagesBand}
   ${imagesHtml}
 
-  <h2 class="band"><span class="n">${(showTechnique ? 3 : 2) + (images.length ? 1 : 0)}</span>Impression</h2>
+  <h2 class="band">Impression</h2>
   ${impressionHtml}
   ${suggestionsHtml}
 
@@ -838,7 +838,6 @@ ${watermark}
     <div class="name">${esc(doctor)}</div>
     ${settings.usgDoctorQual ? `<div class="sub">${esc(settings.usgDoctorQual)}</div>` : ""}
     ${settings.usgDoctorRegNo ? `<div class="sub">Reg. No: ${esc(settings.usgDoctorRegNo)}</div>` : ""}
-    ${classic ? "" : `<div class="sub">Sonologist</div>`}
   </div></div>
 
   ${pcpndt}

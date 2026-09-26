@@ -2,8 +2,8 @@
  * billedStudyType.ts — billing-desk procedure → USG study-type resolution.
  *
  * PRIMARY source of truth when a bill-desk row exists. Returns:
- *   • StudyTypeKey — known USG report format family
- *   • "unmapped"   — billed procedure has no USG format (e.g. ECHO) → block auto-bootstrap
+ *   • StudyTypeKey — known USG report format family (incl. "echo" after Echo template seed)
+ *   • "unmapped"   — billed procedure has no USG format → block auto-bootstrap
  *   • null         — no billed procedure string → fall back to DICOM / manual as today
  *
  * Override the default table via settings key `usg_billing_procedure_map`
@@ -29,6 +29,7 @@ export type StudyTypeKey =
   | "carotid"
   | "doppler-upper"
   | "doppler-lower"
+  | "echo"
   | "ob-bpp"
   | "ob-bpp-twin"
   | "ob-tiffa-4d"
@@ -37,7 +38,10 @@ export type StudyTypeKey =
 /** Settings key — JSON map stored on HospitalSettings.usgBillingProcedureMapJson. */
 export const USG_BILLING_PROCEDURE_MAP_KEY = "usg_billing_procedure_map";
 
-/** Default procedure → study-type table (uppercase keys). */
+/**
+ * Default procedure → study-type table (uppercase keys).
+ * "echo" matches the seeded Echo (2D Echocardiography) template's studyKey.
+ */
 export const DEFAULT_BILLING_PROCEDURE_MAP: Record<string, StudyTypeKey | "unmapped"> = {
   "USG WHOLE ABDOMEN": "whole-abdomen",
   "WHOLE ABDOMEN": "whole-abdomen",
@@ -50,9 +54,10 @@ export const DEFAULT_BILLING_PROCEDURE_MAP: Record<string, StudyTypeKey | "unmap
   "USG LOWER ABDOMEN": "lower-abdomen",
   OB: "ob",
   OBSTETRIC: "ob",
-  ECHO: "unmapped",
-  "2D ECHO": "unmapped",
-  ECHOCARDIOGRAPHY: "unmapped",
+  ECHO: "echo",
+  "2D ECHO": "echo",
+  ECHOCARDIOGRAPHY: "echo",
+  CARDIAC: "echo",
 };
 
 const STUDY_TYPE_KEYS = new Set<string>([
@@ -74,6 +79,7 @@ const STUDY_TYPE_KEYS = new Set<string>([
   "carotid",
   "doppler-upper",
   "doppler-lower",
+  "echo",
   "ob-bpp",
   "ob-bpp-twin",
   "ob-tiffa-4d",
@@ -109,14 +115,15 @@ export function mergeBillingProcedureMap(
 
 /**
  * Fuzzy match for bill strings that are not exact map keys.
- * ECHO family always → unmapped. Unknown → unmapped (never whole-abdomen).
+ * Echo / cardiac → "echo" (seeded Echo template). Unknown → unmapped (never WA).
  */
 function heuristicStudyType(normalizedLower: string): StudyTypeKey | "unmapped" {
   const t = normalizedLower;
 
-  // Cardiology — no USG letterhead format in this studio.
-  if (/\b2\s*d\s*echo\b|\bechocardiogra|\becho\b|\bcardiac\b/.test(t) && !/fetal/.test(t)) {
-    return "unmapped";
+  // Echo family — same studyKey as seeded "Echo (2D Echocardiography)" template.
+  // Matches /(^|[^a-z])(2d\s*)?echo|echocardi(o|ography)|cardiac/i (non-fetal).
+  if (/(^|[^a-z])(2d\s*)?echo\b|\bechocardi(o|ography)\b|\bcardiac\b/.test(t) && !/fetal/.test(t)) {
+    return "echo";
   }
 
   // Obstetrics — match the historic Form F routing (growth before BPP;
@@ -221,6 +228,8 @@ export function studyKeyForStudyType(
       return "doppler-upper";
     case "doppler-lower":
       return "doppler-lower";
+    case "echo":
+      return "echo";
     case "ob-bpp":
       return "ob-bpp";
     case "ob-bpp-twin":
@@ -298,6 +307,8 @@ function npTemplateNameForStudyKey(studyKey: string): string | null {
       return "NP Lower Abdomen — Female";
     case "la-male":
       return "NP Lower Abdomen — Male";
+    case "echo":
+      return "Echo (2D Echocardiography)";
     default:
       return null;
   }

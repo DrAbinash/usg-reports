@@ -11,8 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, CalendarDays, Check, ChevronDown, FileCheck2, Loader2, Maximize2, Minimize2, Phone, Printer, Save, Settings2, Zap } from "lucide-react";
-import { FileDown, MessageCircle, FileCheck2 as FileCheck2Icon, ScanLine, Link2 } from "lucide-react";
+import { ArrowLeft, CalendarDays, Check, ChevronDown, Loader2, Maximize2, Minimize2, Phone, Settings2, Zap } from "lucide-react";
+import { MessageCircle, FileCheck2 as FileCheck2Icon, ScanLine, Link2 } from "lucide-react";
 import type { UsgComposerState, UsgPathologyDef, UsgResolved, UsgStudyDef } from "@/lib/usg/types";
 import { USG_SEX_CHILD } from "@/lib/usg/types";
 import { USG_STUDIES, STUDY_GROUPS, getStudy, type NormalOverrides } from "@/lib/usg/studies";
@@ -30,7 +30,6 @@ import { scanForCriticalFindings } from "@/lib/usg/criticalFindings";
 import { appendTranscript } from "@/lib/usg/dictation";
 import { clearDraft, type DraftSnapshot } from "@/lib/usg/drafts";
 import { buildPregnancyTimeline } from "@/lib/usg/pregnancyTimeline";
-import { downloadReportPdf } from "../sharePdf";
 import { shareReportWhatsapp } from "../shareWhatsapp";
 import { UsgTipsRibbon } from "../UsgTipsRibbon";
 import { UsgCriticalBanner } from "../UsgCriticalBanner";
@@ -498,33 +497,14 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
           </div>
         )}
 
-        {/* Fullscreen toggle — always visible at center-top */}
-        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); void toggleFullscreen(); }}
-          className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground shrink-0"
-          title={fullscreen ? "Exit fullscreen (Esc)" : "Enter fullscreen — hides browser tabs"}>
-          {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-        </Button>
-
-        {/* Quick actions — always visible */}
-        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-          <Button size="sm" variant="outline" onClick={() => persist("")} disabled={busy !== "" || isFinal}
-            className="h-7 border-border bg-panel px-2 text-[10px]">
-            {busy === "save" ? <Loader2 className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
-          </Button>
-          <Button size="sm" onClick={() => void finalizeFast(false)} disabled={busy !== "" || isFinal}
-            className="h-7 bg-emerald-600 px-2 hover:bg-emerald-700"
-            title="Finalize — clean NP skips checklist (Ctrl+Enter). Ctrl+Shift+Enter also prints.">
-            {busy === "finalize" ? <Loader2 className="h-3.5 w-3.5" /> : <FileCheck2 className="h-3.5 w-3.5" />}
-          </Button>
-          <Button size="sm" variant="outline" onClick={print} disabled={busy !== ""}
-            className="h-7 border-rose-200 bg-rose-50 px-2 text-rose-700 hover:bg-rose-100">
-            {busy === "print" ? <Loader2 className="h-3.5 w-3.5" /> : <Printer className="h-3.5 w-3.5" />}
+        {/* Fullscreen + critical-comm only — Save/Finalize/Print live in the sticky bottom bar */}
+        <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <Button variant="ghost" size="sm" onClick={() => void toggleFullscreen()}
+            className="h-7 w-7 shrink-0 p-0 text-muted-foreground hover:text-foreground"
+            title={fullscreen ? "Exit fullscreen (Esc)" : "Enter fullscreen — hides browser tabs"}>
+            {fullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
           </Button>
           {(() => {
-            // v6.9 — show "Log communication" button when a critical
-            // finding is active on this report. Lets the radiologist
-            // document PCPNDT/NMC-required referring-physician contact.
-            // v6.10 — gated by the enableCriticalComm feature toggle.
             if (settings.enableCriticalComm === false) return null;
             const sel = state.organs.flatMap((o) =>
               (o.pathologies ?? (o.pathology ? [o.pathology] : [])).map((k) => ({
@@ -542,12 +522,6 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
               </Button>
             );
           })()}
-          {isFinal ? (
-            <Button size="sm" variant="outline" onClick={() => downloadReportPdf({ reportId: savedIdRef.current ?? report?.id ?? "", patientName, serial, date: fmtPrintDate(scanDate) })}
-              title="Download PDF" className="h-7 border-sky-200 bg-sky-50 px-2 text-sky-700 hover:bg-sky-100">
-              <FileDown className="h-3.5 w-3.5" />
-            </Button>
-          ) : null}
         </div>
       </div>
 

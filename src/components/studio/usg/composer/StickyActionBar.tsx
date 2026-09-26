@@ -1,10 +1,10 @@
 "use client";
 /**
- * Sticky action bar — Save · Finalize · Print · Next pinned to the composer
- * viewport bottom. Calls existing orchestrator callbacks only.
+ * Sticky action bar — sole Save · Finalize · Print · PDF · Next cluster.
+ * Top-toolbar duplicates were removed so actions live in one place.
  */
 import { Button } from "@/components/ui/button";
-import { FileCheck2, Loader2, Printer, Save, ArrowRight } from "lucide-react";
+import { FileCheck2, FileDown, Loader2, Printer, Save, ArrowRight } from "lucide-react";
 
 export type StickyActionBarProps = {
   hidden?: boolean;
@@ -14,6 +14,8 @@ export type StickyActionBarProps = {
   onFinalize: () => void;
   onPrint: () => void;
   onNext: () => void;
+  /** Shown after finalize — PDF download (moved here from the top toolbar). */
+  onDownloadPdf?: () => void;
 };
 
 export function StickyActionBar({
@@ -24,6 +26,7 @@ export function StickyActionBar({
   onFinalize,
   onPrint,
   onNext,
+  onDownloadPdf,
 }: StickyActionBarProps) {
   if (hidden) return null;
   return (
@@ -66,6 +69,18 @@ export function StickyActionBar({
           )}
           Print
         </Button>
+        {isFinal && onDownloadPdf ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onDownloadPdf}
+            className="h-8 border border-sky-400 bg-sky-50 px-3 text-[12px] font-bold text-sky-800 hover:bg-sky-100"
+            title="Download PDF"
+          >
+            <FileDown className="mr-1 h-3.5 w-3.5" />
+            PDF
+          </Button>
+        ) : null}
         <Button
           size="sm"
           variant="ghost"

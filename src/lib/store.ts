@@ -8,7 +8,7 @@
  */
 import { create } from "zustand";
 
-export type View = "usg" | "worklist" | "insights" | "settings" | "pacs-viewer";
+export type View = "usg" | "worklist" | "insights" | "settings";
 
 type StudioState = {
   bootstrapped: boolean;

@@ -41,14 +41,18 @@ function serializeStringRecord(map: Record<string, string> | undefined | null): 
 export type UsgSettingsExtras = {
   studyTechniqueDefaults: Record<string, string>;
   machineLineByStudio: Record<string, string>;
+  /** Settings key `usg_billing_procedure_map` — procedure name → study type. */
+  usgBillingProcedureMap: Record<string, string>;
 };
 
 /** Parse the P2b JSON maps from a settings row (DB or masked client payload). */
 export function readSettingsMaps(row: {
   studyTechniqueDefaultsJson?: string | null;
   machineLineByStudioJson?: string | null;
+  usgBillingProcedureMapJson?: string | null;
   studyTechniqueDefaults?: Record<string, string> | null;
   machineLineByStudio?: Record<string, string> | null;
+  usgBillingProcedureMap?: Record<string, string> | null;
 }): UsgSettingsExtras {
   return {
     studyTechniqueDefaults:
@@ -59,6 +63,10 @@ export function readSettingsMaps(row: {
       row.machineLineByStudio && typeof row.machineLineByStudio === "object"
         ? parseStringRecord(row.machineLineByStudio)
         : parseStringRecord(row.machineLineByStudioJson),
+    usgBillingProcedureMap:
+      row.usgBillingProcedureMap && typeof row.usgBillingProcedureMap === "object"
+        ? parseStringRecord(row.usgBillingProcedureMap)
+        : parseStringRecord(row.usgBillingProcedureMapJson),
   };
 }
 
@@ -175,6 +183,7 @@ export async function getSettings() {
     ...readSettingsMaps(row as {
       studyTechniqueDefaultsJson?: string | null;
       machineLineByStudioJson?: string | null;
+      usgBillingProcedureMapJson?: string | null;
     }),
   };
 }
@@ -398,6 +407,18 @@ export async function updateSettings(patch: SettingsUpdate) {
   }
   if (typeof patch.machineLineByStudioJson === "string") {
     data.machineLineByStudioJson = serializeStringRecord(parseStringRecord(patch.machineLineByStudioJson));
+  }
+  // Billing procedure → study-type map (`usg_billing_procedure_map`).
+  if (patch.usgBillingProcedureMap != null || patch.usg_billing_procedure_map != null) {
+    const raw = patch.usgBillingProcedureMap ?? patch.usg_billing_procedure_map;
+    if (typeof raw === "string") {
+      data.usgBillingProcedureMapJson = serializeStringRecord(parseStringRecord(raw));
+    } else if (typeof raw === "object") {
+      data.usgBillingProcedureMapJson = serializeStringRecord(raw as Record<string, string>);
+    }
+  }
+  if (typeof patch.usgBillingProcedureMapJson === "string") {
+    data.usgBillingProcedureMapJson = serializeStringRecord(parseStringRecord(patch.usgBillingProcedureMapJson));
   }
 
   await getSettings(); // ensure row exists (creates if missing)

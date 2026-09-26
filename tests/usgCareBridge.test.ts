@@ -41,16 +41,18 @@ describe("guessStudyKey — bill-desk test names route to the right study", () =
     expect(guessStudyKey("Sonomammography both breasts", "F")).toBe("breast");
     expect(guessStudyKey("USG Scrotum", "M")).toBe("scrotum");
     expect(guessStudyKey("TRUS Prostate", "M")).toBe("trus");
-    expect(guessStudyKey("2D Echo", "M")).toBe("echo");
+    // ECHO has no USG letterhead format — unmapped (null), never whole-abdomen.
+    expect(guessStudyKey("2D Echo", "M")).toBeNull();
     expect(guessStudyKey("Doppler both lower limbs", "M")).toBe("doppler-lower");
     expect(guessStudyKey("USG Cranium (infant)", "F")).toBe("cranium");
   });
 
-  test("child routing and fallback", () => {
+  test("child routing; unknown / blank never silent-fallback to WA when billed", () => {
     expect(guessStudyKey("USG Abdomen", "F", true)).toBe("wa-child");
     expect(guessStudyKey("Paediatric abdomen screening", "M", true)).toBe("wa-child");
-    expect(guessStudyKey("something unknown", "")).toBe("wa-female");
-    expect(guessStudyKey("something unknown", "M")).toBe("wa-male");
+    expect(guessStudyKey("something unknown", "")).toBeNull();
+    expect(guessStudyKey("something unknown", "M")).toBeNull();
+    expect(guessStudyKey("", "F")).toBeNull();
   });
 
   test("ob study keys are the Form F families", () => {

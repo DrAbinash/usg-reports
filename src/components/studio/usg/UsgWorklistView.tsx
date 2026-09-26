@@ -22,6 +22,10 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { toLocalDateString } from "@/lib/usg/dates";
 import { guessStudyKey, isObStudyKey, testSuggestsChild } from "@/lib/usg/orderStudy";
+import {
+  resolveBilledStudyType,
+  studyTypeBadgeLabel,
+} from "@/lib/usg/billedStudyType";
 import { studyAllowsRushNormals } from "@/lib/usg/quickActions";
 import { getStudy } from "@/lib/usg/studies";
 
@@ -157,6 +161,24 @@ function OrderRow({
         </div>
         <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
           <span className="truncate">{order.testName || "—"}</span>
+          {(() => {
+            const billedType = resolveBilledStudyType(order.testName?.trim() ? order.testName : null);
+            const label = studyTypeBadgeLabel(billedType);
+            if (!label) return null;
+            const unmapped = billedType === "unmapped";
+            return (
+              <span
+                className={
+                  unmapped
+                    ? "shrink-0 rounded-full bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-800 ring-1 ring-amber-200"
+                    : "shrink-0 rounded-full bg-sky-50 px-1.5 py-0.5 text-[9px] font-bold text-sky-800 ring-1 ring-sky-200"
+                }
+                title={unmapped ? "No matching USG report format — choose manually" : `Study type from bill: ${label}`}
+              >
+                {label}
+              </span>
+            );
+          })()}
           {order.referringDoctor ? <span className="hidden shrink-0 text-faint sm:inline">· {order.referringDoctor}</span> : null}
           {order.studyDate ? <span className="shrink-0 text-faint">· {stampIST(order.studyDate)}</span> : null}
         </div>
@@ -383,7 +405,7 @@ export function UsgWorklistView() {
   const orderAllowsRush = (order: Order): boolean => {
     const child = testSuggestsChild(order.testName ?? "");
     const key = guessStudyKey(order.testName ?? "", order.patientSex === "M" ? "M" : "F", child);
-    if (isObStudyKey(key)) return false;
+    if (!key || isObStudyKey(key)) return false;
     const study = getStudy(key);
     return study ? studyAllowsRushNormals(study) : false;
   };
@@ -393,6 +415,7 @@ export function UsgWorklistView() {
     if (!orderAllowsRush(order)) return false;
     const child = testSuggestsChild(order.testName ?? "");
     const key = guessStudyKey(order.testName ?? "", order.patientSex === "M" ? "M" : "F", child);
+    if (!key) return false;
     const study = getStudy(key);
     return !!study?.organs.some((o) => o.key === "liver");
   };

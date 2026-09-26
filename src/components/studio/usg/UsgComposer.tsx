@@ -8,7 +8,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { UsgComposerState, UsgPathologyDef } from "@/lib/usg/types";
 import { USG_SEX_CHILD } from "@/lib/usg/types";
-import { USG_STUDIES, applyNormalOverrides, getStudy, initialState as freshComposerState, normalOverrideKey, studyKeyForBillTest, type NormalOverrides } from "@/lib/usg/studies";
+import { USG_STUDIES, applyNormalOverrides, getStudy, initialState as freshComposerState, normalOverrideKey, type NormalOverrides } from "@/lib/usg/studies";
+import { resolveNormalBootstrapFormat } from "@/lib/usg/billedStudyType";
+import { testSuggestsChild } from "@/lib/usg/orderStudy";
+import type { UsgStudyDef } from "@/lib/usg/types";
 import { isObStudyKey } from "@/lib/usg/orderStudy";
 import {
   applyPathologies,
@@ -106,17 +109,47 @@ function fmtPrintDate(iso: string): string {
     : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+/** Empty study shell — billed-unmapped canvas until the doctor picks a format. */
+const EMPTY_STUDY: UsgStudyDef = {
+  key: "",
+  label: "Choose a format",
+  title: "USG STUDY",
+  technique: "",
+  organs: [],
+  allNormalImpression: [],
+};
+
 export function UsgComposer({ pathologies, settings, report, prefill, diffSource, normalOverrides, pathologyWording, onPathologyWordingChange, order, formFDefaults, onBack, onSaved }: UsgComposerProps) {
   const lastStudyKey =
     typeof window !== "undefined" ? localStorage.getItem("usg:lastStudyKey") : null;
-  const studyKey0 =
-    report?.studyKey ??
-    studyKeyForBillTest(
-      (report as any)?.testName ?? (prefill as any)?.testName ?? "",
-      (report as any)?.sex ?? (report as any)?.gender ?? (report as any)?.patientGender ?? "",
-    ) ??
-    (lastStudyKey && getStudy(lastStudyKey) ? lastStudyKey : null) ??
-    "wa-female";
+
+  // Billing-desk procedure is source #1 whenever an order is linked.
+  const billedProcedure = order?.testName?.trim() ? order.testName.trim() : null;
+  const childBill = billedProcedure ? testSuggestsChild(billedProcedure) : false;
+  const boot = resolveNormalBootstrapFormat({
+    billedProcedure,
+    patientSex: report?.patientSex ?? prefill?.patientSex ?? "F",
+    child: childBill,
+    procedureMap: (settings as { usgBillingProcedureMap?: Record<string, string> }).usgBillingProcedureMap,
+  });
+  const billedUnmapped = boot.kind === "unmapped";
+  const billedBanner = boot.kind === "unmapped" ? boot.banner : null;
+  const billedStudyKey = boot.kind === "mapped" ? boot.studyKey : null;
+
+  const studyKey0 = (() => {
+    // Unmapped bill (ECHO etc.) — never fall through to whole-abdomen.
+    if (billedUnmapped) return "";
+    // Finalized reports are frozen.
+    if (report?.status === "FINALIZED" && report.studyKey && getStudy(report.studyKey)) {
+      return report.studyKey;
+    }
+    // Billing wins for drafts when a procedure maps cleanly.
+    if (billedStudyKey) return billedStudyKey;
+    if (report?.studyKey && getStudy(report.studyKey)) return report.studyKey;
+    // No billed row — DICOM / last-used / classic default.
+    if (lastStudyKey && getStudy(lastStudyKey)) return lastStudyKey;
+    return "wa-female";
+  })();
 
   const initial = useMemo(() => {
     if (!report) return null;
@@ -124,12 +157,17 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
       const raw = JSON.parse(report.stateJson) as unknown;
       // Strict: NEVER migrate FINALIZED stateJson — frozen forever.
       if (report.status === "FINALIZED") return raw as UsgComposerState;
+      // Unmapped billed canvas — keep empty organs even if an older draft
+      // was wrongly seeded as whole-abdomen.
+      if (billedUnmapped) {
+        return { studyKey: "", organs: [], impressionOverride: null } as UsgComposerState;
+      }
       // Draft reopen/edit — coerce grid rows in memory (persisted only on save).
-      return normaliseState(raw, report.studyKey ?? studyKey0, normalOverrides);
+      return normaliseState(raw, studyKey0 || report.studyKey || "wa-female", normalOverrides);
     } catch {
       return null;
     }
-  }, [report, normalOverrides, studyKey0]);
+  }, [report, normalOverrides, studyKey0, billedUnmapped]);
 
   const [patientName, setPatientName] = useState(report?.patientName ?? prefill?.patientName ?? "");
   const [patientPhone, setPatientPhone] = useState(report?.patient?.phone ?? prefill?.patientPhone ?? "");
@@ -140,13 +178,19 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const [referredBy, setReferredBy] = useState(report?.referredBy ?? prefill?.referredBy ?? (typeof window !== "undefined" ? localStorage.getItem("usg:lastReferredBy") ?? "" : ""));
   const [studyKey, setStudyKey] = useState(studyKey0);
   const study = useMemo(
-    () => applyNormalOverrides(getStudy(studyKey) ?? USG_STUDIES[0], normalOverrides),
+    () =>
+      applyNormalOverrides(
+        getStudy(studyKey) ?? (studyKey ? USG_STUDIES[0]! : EMPTY_STUDY),
+        normalOverrides,
+      ),
     [studyKey, normalOverrides],
   );
   const [technique, setTechnique] = useState(report?.technique ?? study.technique);
-  const [state, setState] = useState<UsgComposerState>(
-    () => initial ?? freshComposerState(studyKey0, normalOverrides),
-  );
+  const [state, setState] = useState<UsgComposerState>(() => {
+    if (initial) return initial;
+    if (!studyKey0) return { studyKey: "", organs: [], impressionOverride: null };
+    return freshComposerState(studyKey0, normalOverrides);
+  });
   const [scanDate, setScanDate] = useState(() => toScanDateInput(report?.scanDate ? new Date(report.scanDate) : null));
 
   useEffect(() => {
@@ -230,10 +274,21 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   };
   const queryClient = useQueryClient();
   const lookup = useMemo(() => makeLookup(pathologies), [pathologies]);
-  const resolved = useMemo(
-    () => resolve(state, lookup, technique, normalOverrides, pathologyWording),
-    [state, lookup, technique, normalOverrides, pathologyWording],
-  );
+  const resolved = useMemo(() => {
+    // Unmapped billed canvas — never let resolve() fall back to whole-abdomen.
+    if (!state.studyKey || study.organs.length === 0) {
+      return {
+        study: EMPTY_STUDY,
+        title: billedProcedure || report?.studyTitle || "USG STUDY",
+        sections: [],
+        impression: [],
+        advice: [],
+        suggestions: [],
+        technique: "",
+      };
+    }
+    return resolve(state, lookup, technique, normalOverrides, pathologyWording);
+  }, [state, lookup, technique, normalOverrides, pathologyWording, study.organs.length, billedProcedure, report?.studyTitle]);
 
   const patientsQ = useQuery({
     queryKey: ["usg", "patients"],
@@ -643,6 +698,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         finalizeFast={finalizeFast}
         print={print}
         settings={settings}
+        billedBanner={billedBanner}
         normalOverrides={normalOverrides}
         state={state}
         setState={setState}
@@ -701,6 +757,14 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
 
         <div className="studio-scroll min-h-0 space-y-1 overflow-y-auto pr-1 cursor-pointer" onClick={(e) => { e.stopPropagation(); onWorkspaceFocus(); }} onDoubleClick={(e) => { e.stopPropagation(); onResetFocus(); setOhifLayout("split"); }} title="Click to focus writing (hides OHIF) · Double-click to restore split">
           <div className="space-y-1">
+            {study.organs.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-amber-300 bg-amber-50/40 px-4 py-8 text-center text-[12px] text-amber-900">
+                <p className="font-semibold">No format applied</p>
+                <p className="mt-1 text-amber-800/90">
+                  {billedBanner ?? "Choose a study format from the Formats library or study picker."}
+                </p>
+              </div>
+            ) : null}
             {study.organs.map((def, organIdx) => {
               const st = state.organs.find((o) => o.organ === def.key);
               if (!st) return null;

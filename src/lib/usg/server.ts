@@ -86,7 +86,16 @@ export async function resolveColumns(stateJson: string, technique: string) {
   } catch {
     parsed = {};
   }
-  const state = normaliseState(parsed, "wa-female", overrides);
+  // Preserve an explicitly empty studyKey (billed-unmapped canvas) — never
+  // coerce it back to whole-abdomen via the normaliseState fallback.
+  const parsedKey =
+    parsed && typeof parsed === "object" && "studyKey" in parsed
+      ? String((parsed as { studyKey?: unknown }).studyKey ?? "")
+      : null;
+  if (parsedKey === "") {
+    return { studyKey: "", studyTitle: "", findings: "", impression: "" };
+  }
+  const state = normaliseState(parsed, parsedKey || "wa-female", overrides);
   const r = resolve(state, lookup, technique, overrides);
   return {
     studyKey: state.studyKey,

@@ -48,6 +48,13 @@ describe("guessStudyKey — bill-desk test names route to the right study", () =
     expect(guessStudyKey("USG Cranium (infant)", "F")).toBe("cranium");
   });
 
+  test("bill-desk catalog code + name (test-catalog CSV)", () => {
+    expect(guessStudyKey({ testCode: "ECHO", testName: "ECHO" }, "M")).toBe("echo");
+    expect(guessStudyKey({ testCode: "ECHO", testName: "" }, "F")).toBe("echo");
+    expect(guessStudyKey({ testCode: "USG W", testName: "USG WHOLE ABDOMEN" }, "F")).toBe("wa-female");
+    expect(guessStudyKey({ testCode: "USGFE", testName: "USG FETAL ECHO" }, "F")).toBe("ob");
+  });
+
   test("child routing; unknown / blank never silent-fallback to WA when billed", () => {
     expect(guessStudyKey("USG Abdomen", "F", true)).toBe("wa-child");
     expect(guessStudyKey("Paediatric abdomen screening", "M", true)).toBe("wa-child");

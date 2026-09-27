@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { UsgQuickSelect } from "./UsgQuickSelect";
+import { UsgQueuePicker } from "./UsgQueuePicker";
 import { useStudio } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -149,42 +149,6 @@ async function fetchPathologyWording(): Promise<PathologyWordingOverrides> {
   };
 }
 
-async function fetchQuickSelectPatients() {
-  for (const url of ["/api/usg/worklist", "/api/usg/reports"]) {
-    try {
-      const r = await fetch(url);
-      if (!r.ok) continue;
-      const d = await r.json();
-      const arr: any[] = Array.isArray(d)
-        ? d
-        : Array.isArray(d?.rows)
-          ? d.rows
-          : Array.isArray(d?.reports)
-            ? d.reports
-            : Array.isArray(d?.items)
-              ? d.items
-              : [];
-      if (arr.length) {
-        return arr
-          .map((x: any) => ({
-            id: x.id ?? x.reportId ?? x.worklistId ?? String(x.patientId ?? ""),
-            name: x.patientName ?? x.name ?? "",
-            age: x.age ?? x.patientAge ?? "",
-            sex: x.sex ?? x.patientSex ?? "",
-            studyDate: x.scanDate ?? x.studyDate ?? x.date ?? "",
-            study: x.studyTitle ?? x.study ?? x.testName ?? "",
-            referrer: x.referredBy ?? x.referringDoctor ?? "",
-            status: x.status ?? "",
-          }))
-          .filter((q: any) => q.id);
-      }
-    } catch {
-      /* try next */
-    }
-  }
-  return [] as any[];
-}
-
 export function UsgStudioView() {
   const queryClient = useQueryClient();
 
@@ -195,26 +159,27 @@ export function UsgStudioView() {
       if (!pRes.ok) throw new Error("pathologies");
       return ((await pRes.json()).pathologies ?? []) as UsgPathologyDef[];
     },
+    staleTime: 5 * 60_000,
   });
   const settingsQ = useQuery({
     queryKey: ["usg", "settings"],
     queryFn: fetchSettingsBundle,
+    staleTime: 60_000,
   });
   const reportsQ = useQuery({
     queryKey: ["usg", "reports"],
     queryFn: fetchReportsList,
+    staleTime: 30_000,
   });
   const normalsQ = useQuery({
     queryKey: ["usg", "normals"],
     queryFn: fetchNormalsMap,
+    staleTime: 5 * 60_000,
   });
   const pathologyWordingQ = useQuery({
     queryKey: ["usg", "pathology-wording"],
     queryFn: fetchPathologyWording,
-  });
-  const quickSelectQ = useQuery({
-    queryKey: ["usg", "quick-select"],
-    queryFn: fetchQuickSelectPatients,
+    staleTime: 5 * 60_000,
   });
 
   const [query, setQuery] = useState("");
@@ -251,7 +216,6 @@ export function UsgStudioView() {
   const normalOverrides = normalsQ.data ?? {};
   const pathologyWording = pathologyWordingQ.data ?? { impressions: {}, advice: {} };
   const patients = patientsQ.data ?? [];
-  const quickSelectPatients = quickSelectQ.data ?? [];
 
   const loading =
     pathologiesQ.isLoading ||
@@ -260,6 +224,8 @@ export function UsgStudioView() {
     normalsQ.isLoading ||
     pathologyWordingQ.isLoading;
 
+  /** Composer can open as soon as settings + pathologies are warm — don't wait on reports list. */
+  const composerReady = !!settingsQ.data && !pathologiesQ.isLoading && !normalsQ.isLoading;
   const setPathologyWording = useCallback(
     (next: PathologyWordingOverrides) => {
       queryClient.setQueryData(["usg", "pathology-wording"], next);
@@ -310,13 +276,14 @@ export function UsgStudioView() {
   const openReportId = useStudio((s) => s.openReportId);
   const clearOpenReport = useStudio((s) => s.clearOpenReport);
   useEffect(() => {
-    if (!openReportId || loading) return;
+    if (!openReportId || !composerReady) return;
     let alive = true;
     void (async () => {
       try {
         const d = await queryClient.fetchQuery({
           queryKey: ["usg", "report", openReportId],
           queryFn: () => fetchUsgReport(openReportId),
+          staleTime: 30_000,
         });
         if (alive) {
           setEditing(d.report);
@@ -334,7 +301,7 @@ export function UsgStudioView() {
     return () => {
       alive = false;
     };
-  }, [openReportId, loading, clearOpenReport, queryClient]);
+  }, [openReportId, composerReady, clearOpenReport, queryClient]);
 
   const openReport = async (row: UsgReportRow) => {
     setEditing(row);
@@ -535,61 +502,85 @@ export function UsgStudioView() {
     [reports, patients],
   );
 
-  if (loading) {
+  if (openReportId && !composerMode) {
     return (
-      <div className="flex h-full items-center justify-center text-muted-foreground">
-        <div className="px-4 pt-3">
-          <UsgQuickSelect
-            patients={quickSelectPatients}
-            currentPatientId={null}
-            onSelect={(pid) => void openReport({ id: pid } as UsgReportRow)}
-          />
+      <div className="flex h-full flex-col">
+        <div className="border-b border-border bg-card px-3 py-2">
+          <UsgQueuePicker currentReportId={openReportId} />
         </div>
-        <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading USG studio…
+        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          Opening study…
+        </div>
+      </div>
+    );
+  }
+
+  if (loading && !openReportId) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4 text-muted-foreground">
+        <div className="w-full max-w-5xl px-4 pt-3">
+          <UsgQueuePicker />
+        </div>
+        <div className="flex items-center">
+          <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading USG studio…
+        </div>
       </div>
     );
   }
 
   if (composerMode) {
-    if (!settings) {
+    if (!settings || !composerReady) {
       // Audit #15 — the studio cannot render the composer without settings
       // (the live preview needs the letterhead for first paint). Show a
       // minimal loader instead of a flash of unstyled/empty preview.
       return (
-        <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          Loading studio…
+        <div className="flex h-full flex-col">
+          <div className="border-b border-border bg-card px-3 py-2 sm:hidden">
+            <UsgQueuePicker currentReportId={editing?.id ?? null} />
+          </div>
+          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Opening study…
+          </div>
         </div>
       );
     }
     return (
-      <div className="h-full">
-        <UsgComposer
-          pathologies={pathologies}
-          settings={settings}
-          report={editing}
-          prefill={prefill}
-          diffSource={diffSource}
-          normalOverrides={normalOverrides}
-          pathologyWording={pathologyWording}
-          onPathologyWordingChange={setPathologyWording}
-          order={order}
-          formFDefaults={formFDefaults}
-          onBack={() => {
-            setEditing(null);
-            setCreating(false);
-            setOrder(null);
-            setReprintHtml(null);
-            setPrefill(null);
-            setDiffSource(null);
-            refreshReports();
-            if (mode === "patients") void loadPatients();
-          }}
-          onSaved={() => {
-            loadAll();
-            loadPatients();
-          }}
-        />
+      <div className="flex h-full flex-col">
+        {/* Mobile: queue picker lives under the strip (desktop uses header compact picker). */}
+        <div className="border-b border-border bg-card px-3 py-2 sm:hidden">
+          <UsgQueuePicker currentReportId={editing?.id ?? null} />
+        </div>
+        <div className="min-h-0 flex-1">
+          <UsgComposer
+            key={editing?.id ?? "new"}
+            pathologies={pathologies}
+            settings={settings}
+            report={editing}
+            prefill={prefill}
+            diffSource={diffSource}
+            normalOverrides={normalOverrides}
+            pathologyWording={pathologyWording}
+            onPathologyWordingChange={setPathologyWording}
+            order={order}
+            formFDefaults={formFDefaults}
+            onBack={() => {
+              setEditing(null);
+              setCreating(false);
+              setOrder(null);
+              setReprintHtml(null);
+              setPrefill(null);
+              setDiffSource(null);
+              void refreshReports();
+              if (mode === "patients") void loadPatients();
+            }}
+            onSaved={() => {
+              loadAll();
+              loadPatients();
+            }}
+          />
+        </div>
         {registerHtml ? (
           <RegisterOverlay
             html={registerHtml}
@@ -653,6 +644,9 @@ export function UsgStudioView() {
           <span>{pathologies.length} quick-select findings</span>
         </div>
       </div>
+
+      {/* Patient + study jump — defaults to today; no need to bounce to Worklist */}
+      <UsgQueuePicker />
 
       {/* Reports ↔ Patients mode switch */}
       <div className="flex items-center gap-2">

@@ -6,9 +6,20 @@
  *   • "unmapped"   — billed procedure has no USG format → block auto-bootstrap
  *   • null         — no billed procedure string → fall back to DICOM / manual as today
  *
+ * Resolve from bill-desk **test code** (catalog id, e.g. ECHO / USG W) and/or
+ * **test name**. Code is tried first — short codes often fail name heuristics.
+ *
  * Override the default table via settings key `usg_billing_procedure_map`
  * (JSON object of uppercase procedure name → StudyTypeKey | "unmapped").
  */
+
+/** Bill-desk identity: catalog code and/or display name. */
+export type BillDeskTestRef = {
+  testCode?: string | null;
+  testName?: string | null;
+  /** @deprecated alias for testName — kept for older call sites. */
+  billedProcedure?: string | null;
+};
 
 export type StudyTypeKey =
   | "whole-abdomen"
@@ -40,24 +51,123 @@ export const USG_BILLING_PROCEDURE_MAP_KEY = "usg_billing_procedure_map";
 
 /**
  * Default procedure → study-type table (uppercase keys).
+ * Includes bill-desk catalog **codes** (ECHO, USG W, …) and display names.
  * "echo" matches the seeded Echo (2D Echocardiography) template's studyKey.
  */
 export const DEFAULT_BILLING_PROCEDURE_MAP: Record<string, StudyTypeKey | "unmapped"> = {
+  // ── Whole / upper / lower abdomen ──────────────────────────────────────
+  "USG W": "whole-abdomen",
   "USG WHOLE ABDOMEN": "whole-abdomen",
   "WHOLE ABDOMEN": "whole-abdomen",
+  USG031: "whole-abdomen",
+  "USG WHOLE ABDOMEN WITH INGUINAL REGION": "whole-abdomen",
+  USG024: "upper-abdomen",
   "UPPER ABDOMEN": "upper-abdomen",
   "USG UPPER ABDOMEN": "upper-abdomen",
-  KUB: "kub",
-  "USG KUB": "kub",
-  TVS: "tvs",
+  USGLOWER: "lower-abdomen",
   "LOWER ABDOMEN": "lower-abdomen",
   "USG LOWER ABDOMEN": "lower-abdomen",
+  "USG LOWER ABDOMEM": "lower-abdomen", // catalog typo
+  KUB: "kub",
+  "USG KUB": "kub",
+
+  // ── TVS / follicular ───────────────────────────────────────────────────
+  TVS: "tvs",
+  "USG TVS": "tvs",
+  USG010: "tvs",
+  "TRANSVAGINAL SONOGRAPHY (TVS)": "tvs",
+  FOLLICULAR: "tvs",
+  USG005: "tvs",
+  "USG FOLLICULAR MONITORING": "tvs",
+  "FOLLICULAR MONITORING": "tvs",
+  USG009: "tvs",
+  SONOSALPINGOGRAPHY: "tvs",
+
+  // ── Obstetrics / fetal ─────────────────────────────────────────────────
   OB: "ob",
   OBSTETRIC: "ob",
+  USGA: "ob",
+  "USG ANOMALY SCAN": "ob",
+  USGFETUS: "ob",
+  "USG WHOLE ABDOMEN + FETUS / PREGNANCY": "ob",
+  USGFETUSFWB: "ob",
+  "USG FOR FWB/FETUS/FETAL WELL BEING/OBS/GROWTH SCAN": "ob",
+  FETALDOPPLER: "ob",
+  "USG FETAL DOPPLER": "ob",
+  UFETALDT: "ob",
+  "USG FETAL DOPPLER (TWIN)": "ob",
+  // Fetal echo is obstetric (not adult Echo format).
+  USGFE: "ob",
+  "USG FETAL ECHO": "ob",
+  NTSCAN: "ep",
+  "USG NT SCAN": "ep",
+  USG011: "ob-tiffa-4d",
+  "USG ANOMALY SCAN (4D)": "ob-tiffa-4d",
+  "USGANOMALYLEVEL II": "ob-tiffa-4d",
+  "USG ANOMALY LEVEL II": "ob-tiffa-4d",
+  USGANATWIN: "ob-tiffa-twin",
+  "USG ANOMALY LEVEL II (TWINS)": "ob-tiffa-twin",
+
+  // ── Adult echocardiography (seeded Echo template) ──────────────────────
   ECHO: "echo",
   "2D ECHO": "echo",
   ECHOCARDIOGRAPHY: "echo",
   CARDIAC: "echo",
+
+  // ── Small parts / other USG ────────────────────────────────────────────
+  USG023: "thyroid",
+  "USG THYROID": "thyroid",
+  USGDOPPLERTHYROID: "thyroid",
+  "USG COLOR DOPPLER THYROID": "thyroid",
+  USGDOPPLERNECK: "thyroid",
+  "USG COLOR DOPPLER NECK": "thyroid",
+  SONOMAMMOGRAPHYUL: "breast",
+  SONOMAMMOGRAPHYBL: "breast",
+  "SONOMAMMOGRAPHY U/L": "breast",
+  "SONOMAMMOGRAPHY B/L": "breast",
+  USG022: "scrotum",
+  "USG SCROTUM/TESTIS": "scrotum",
+  USGSCROTUM: "scrotum",
+  "USG COLOR DOPPLER INGUINO-SCROTAL": "scrotum",
+  USGCHEST: "chest",
+  "USG CHEST": "chest",
+  USG012: "cranium",
+  "USG BRAIN": "cranium",
+  USG033: "orbit",
+  "USG EYE": "orbit",
+  USGFNAC: "swelling",
+  "USG GUIDED FNAC": "swelling",
+  USGASPIRATION: "swelling",
+  "USG GUIDED ASPIRATION": "swelling",
+  USG032: "swelling",
+  "USG INGUINAL REGION": "swelling",
+
+  // ── Vascular Doppler ───────────────────────────────────────────────────
+  USGDOPPLER: "doppler-lower",
+  "USG COLOR DOPPLER": "doppler-lower",
+  USGDOPPLERLIMBBL: "doppler-lower",
+  "USG COLOR DOPPLER LIMB B/L": "doppler-lower",
+  USG019: "doppler-lower",
+  "USG LIMB DOPPLER B/L": "doppler-lower",
+  USG027: "doppler-lower",
+  "USG THIGH DOPPLER": "doppler-lower",
+  USG028: "doppler-lower",
+  "USG PENIS DOPPLER": "doppler-lower",
+  USG029: "doppler-lower",
+  "USG RENAL DOPPLER B/L": "doppler-lower",
+  USG030: "doppler-lower",
+  "USG RENAL DOPPLER U/L": "doppler-lower",
+  USGDOPPLERLIMBUL: "doppler-upper",
+  "USG COLOR DOPPLER LIMB U/L": "doppler-upper",
+  USG020: "doppler-upper",
+  "USG LIMB DOPPLER U/L": "doppler-upper",
+
+  // ── Non-report / non-USG catalog rows that still appear on USG modality ─
+  FIBROSCAN: "unmapped",
+  "FIBROSCAN / ELASTOGRAPHY": "unmapped",
+  CARD002: "unmapped",
+  TMT: "unmapped",
+  TRIAL: "unmapped",
 };
 
 const STUDY_TYPE_KEYS = new Set<string>([
@@ -164,24 +274,66 @@ function heuristicStudyType(normalizedLower: string): StudyTypeKey | "unmapped" 
   return "unmapped";
 }
 
+function resolveOneProcedureString(
+  raw: string,
+  map: Record<string, StudyTypeKey | "unmapped">,
+): StudyTypeKey | "unmapped" {
+  const exact = map[normalizeProcedureKey(raw)];
+  if (exact) return exact;
+  return heuristicStudyType(raw.toLowerCase());
+}
+
+function asBillDeskRef(ref: string | null | BillDeskTestRef): BillDeskTestRef {
+  if (ref == null) return {};
+  if (typeof ref === "string") return { testName: ref };
+  return ref;
+}
+
+/** Non-blank candidates in priority order: code, then name / billedProcedure. */
+export function billDeskProcedureCandidates(ref: string | null | BillDeskTestRef): string[] {
+  const r = asBillDeskRef(ref);
+  const out: string[] = [];
+  const push = (v: string | null | undefined) => {
+    const t = (v ?? "").trim();
+    if (!t) return;
+    if (!out.some((x) => normalizeProcedureKey(x) === normalizeProcedureKey(t))) out.push(t);
+  };
+  push(r.testCode);
+  push(r.testName);
+  push(r.billedProcedure);
+  return out;
+}
+
 /**
- * Resolve a billed procedure string to a study-type key.
- * @param billedProcedure bill-desk test name, or null when no billed row
+ * Resolve a billed procedure string **or** `{ testCode, testName }` to a study-type key.
+ * Code is tried before name so catalog short ids (ECHO, USG W) win even when
+ * the display name is blank or generic.
  * @param procedureMap optional settings override (`usg_billing_procedure_map`)
  */
 export function resolveBilledStudyType(
-  billedProcedure: string | null,
+  billedProcedure: string | null | BillDeskTestRef,
   procedureMap?: Record<string, string> | null,
 ): StudyTypeKey | "unmapped" | null {
-  if (billedProcedure == null) return null;
-  const trimmed = billedProcedure.trim();
-  if (!trimmed) return null;
+  const candidates = billDeskProcedureCandidates(billedProcedure);
+  if (candidates.length === 0) return null;
 
   const map = mergeBillingProcedureMap(procedureMap);
-  const exact = map[normalizeProcedureKey(trimmed)];
-  if (exact) return exact;
+  let sawUnmapped = false;
+  for (const c of candidates) {
+    const hit = resolveOneProcedureString(c, map);
+    if (hit === "unmapped") {
+      sawUnmapped = true;
+      continue;
+    }
+    return hit;
+  }
+  return sawUnmapped ? "unmapped" : null;
+}
 
-  return heuristicStudyType(trimmed.toLowerCase());
+/** Label for banners / study title — name preferred, else code. */
+export function billDeskProcedureLabel(ref: string | null | BillDeskTestRef): string {
+  const r = asBillDeskRef(ref);
+  return (r.testName ?? "").trim() || (r.billedProcedure ?? "").trim() || (r.testCode ?? "").trim();
 }
 
 /** Concrete composer study key for a resolved study type + patient sex. */
@@ -263,14 +415,22 @@ export function billedUnmappedBanner(procedure: string): string {
  * Billing is source #1; null procedure → `{ kind: "none" }` (DICOM/manual fallback).
  */
 export function resolveNormalBootstrapFormat(ctx: {
-  billedProcedure: string | null;
+  /** @deprecated prefer testCode + testName — still accepted as the name. */
+  billedProcedure?: string | null;
+  testCode?: string | null;
+  testName?: string | null;
   patientSex?: string | null;
   child?: boolean;
   procedureMap?: Record<string, string> | null;
 }): BilledBootstrapResult {
-  const type = resolveBilledStudyType(ctx.billedProcedure, ctx.procedureMap);
+  const ref: BillDeskTestRef = {
+    testCode: ctx.testCode,
+    testName: ctx.testName ?? ctx.billedProcedure,
+    billedProcedure: ctx.billedProcedure,
+  };
+  const type = resolveBilledStudyType(ref, ctx.procedureMap);
   if (type === null) return { kind: "none" };
-  const procedure = (ctx.billedProcedure ?? "").trim();
+  const procedure = billDeskProcedureLabel(ref);
   if (type === "unmapped") {
     return {
       kind: "unmapped",

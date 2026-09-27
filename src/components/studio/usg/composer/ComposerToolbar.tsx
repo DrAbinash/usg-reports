@@ -526,7 +526,14 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
                 {order.accessionNumber ?? (order.careWorklistId ? `WL ${order.careWorklistId}` : "Bill-desk order")}
               </span>
               {order.billNumber ? <span className="text-sky-700">· Bill {order.billNumber}</span> : null}
-              {order.testName ? <span className="truncate text-sky-700">· {order.testName}</span> : null}
+              {order.testName || order.testCode ? (
+                <span className="truncate text-sky-700">
+                  · {order.testName || order.testCode}
+                  {order.testCode && order.testName ? (
+                    <span className="text-sky-600/80"> ({order.testCode})</span>
+                  ) : null}
+                </span>
+              ) : null}
               {order.billingStatus ? (
                 <span className={cn("rounded-full px-1.5 py-0.5 text-[9px] font-bold ring-1",
                   order.billingStatus === "PAID" ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-amber-50 text-amber-700 ring-amber-200")}>

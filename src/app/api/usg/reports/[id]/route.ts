@@ -45,6 +45,7 @@ export async function GET(_req: Request, ctx: Ctx) {
         billNumber: orderRow.billNumber,
         referringDoctor: orderRow.referringDoctor,
         testName: orderRow.testName,
+        testCode: orderRow.testCode ?? "",
         studyDate: orderRow.studyDate ? orderRow.studyDate.toISOString() : null,
         studyInstanceUid: orderRow.studyInstanceUid,
         billingStatus: orderRow.billingStatus,

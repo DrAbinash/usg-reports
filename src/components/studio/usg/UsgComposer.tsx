@@ -124,9 +124,15 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     typeof window !== "undefined" ? localStorage.getItem("usg:lastStudyKey") : null;
 
   // Billing-desk procedure is source #1 whenever an order is linked.
-  const billedProcedure = order?.testName?.trim() ? order.testName.trim() : null;
-  const childBill = billedProcedure ? testSuggestsChild(billedProcedure) : false;
+  // Prefer catalog code (ECHO, USG W) + display name from the bill desk.
+  const billedTestCode = order?.testCode?.trim() ? order.testCode.trim() : null;
+  const billedProcedure = order?.testName?.trim()
+    ? order.testName.trim()
+    : billedTestCode;
+  const childBill = testSuggestsChild(`${order?.testName ?? ""} ${order?.testCode ?? ""}`);
   const boot = resolveNormalBootstrapFormat({
+    testCode: billedTestCode,
+    testName: order?.testName?.trim() ? order.testName.trim() : null,
     billedProcedure,
     patientSex: report?.patientSex ?? prefill?.patientSex ?? "F",
     child: childBill,
@@ -517,17 +523,20 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const setComposerStrip = useStudio((s) => s.setComposerStrip);
   const setComposerBack = useStudio((s) => s.setComposerBack);
   const setExpandPatientForm = useStudio((s) => s.setExpandPatientForm);
+  const setActiveReportId = useStudio((s) => s.setActiveReportId);
   const onBackRef = useRef(onBack);
   onBackRef.current = onBack;
   useEffect(() => {
     setComposerBack(() => onBackRef.current());
     setExpandPatientForm(() => setHeaderCollapsed(false));
+    setActiveReportId(report?.id ?? savedIdRef.current);
     return () => {
       setComposerStrip(null);
       setComposerBack(null);
       setExpandPatientForm(null);
+      setActiveReportId(null);
     };
-  }, [setComposerBack, setExpandPatientForm, setComposerStrip]);
+  }, [setComposerBack, setExpandPatientForm, setComposerStrip, setActiveReportId, report?.id]);
   useEffect(() => {
     const next = {
       patientName,

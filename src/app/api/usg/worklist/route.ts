@@ -17,6 +17,7 @@ export type WorklistOrderDto = {
   billNumber: string;
   referringDoctor: string;
   testName: string;
+  testCode: string;
   modality: string;
   studyInstanceUid: string | null;
   billingStatus: string | null;
@@ -85,6 +86,7 @@ export async function GET(req: Request) {
     billNumber: o.billNumber,
     referringDoctor: o.referringDoctor,
     testName: o.testName,
+    testCode: o.testCode ?? "",
     modality: o.modality,
     studyInstanceUid: o.studyInstanceUid,
     billingStatus: o.billingStatus,

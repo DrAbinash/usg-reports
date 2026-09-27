@@ -91,6 +91,12 @@ export type CareWorklistItem = {
   patientGender?: string | null;
   referringDoctor?: string | null;
   testName?: string | null;
+  /** Bill-desk catalog short code (e.g. ECHO, USG W). */
+  testCode?: string | null;
+  /** Alias some ERP builds use for the catalog code / tests.id. */
+  testId?: string | number | null;
+  billedTestCode?: string | null;
+  billedTestName?: string | null;
   modality?: string | null;
   studyDate?: string | null;
   studyInstanceUid?: string | null;
@@ -199,6 +205,26 @@ export function isUltrasoundModality(modality: string | null | undefined): boole
   // Substring matches
   if (/ultrasound|sonograph|doppler|echo|fetal|obstetric|antenatal|growth scan/.test(m)) return true;
   return false;
+}
+
+/** Bill-desk catalog code from a CARE worklist row (testCode / testId / billedTestCode). */
+export function careTestCode(w: {
+  testCode?: string | null;
+  testId?: string | number | null;
+  billedTestCode?: string | null;
+}): string {
+  const raw = w.testCode ?? w.billedTestCode ?? w.testId;
+  if (raw == null) return "";
+  return String(raw).trim();
+}
+
+/** Bill-desk display name — prefer testName, fall back to billedTestName. */
+export function careTestName(w: {
+  testName?: string | null;
+  billedTestName?: string | null;
+}): string {
+  const n = (w.testName ?? "").trim() || (w.billedTestName ?? "").trim();
+  return n;
 }
 
 /** Normalise the ERP's patientAge ("54/F", "54") into age + sex. */

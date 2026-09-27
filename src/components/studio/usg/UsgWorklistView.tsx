@@ -160,9 +160,17 @@ function OrderRow({
           ) : null}
         </div>
         <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
-          <span className="truncate">{order.testName || "—"}</span>
+          <span className="truncate">
+            {order.testName || order.testCode || "—"}
+            {order.testCode && order.testName ? (
+              <span className="text-faint"> · {order.testCode}</span>
+            ) : null}
+          </span>
           {(() => {
-            const billedType = resolveBilledStudyType(order.testName?.trim() ? order.testName : null);
+            const billedType = resolveBilledStudyType({
+              testCode: order.testCode?.trim() ? order.testCode : null,
+              testName: order.testName?.trim() ? order.testName : null,
+            });
             const label = studyTypeBadgeLabel(billedType);
             if (!label) return null;
             const unmapped = billedType === "unmapped";
@@ -402,9 +410,14 @@ export function UsgWorklistView() {
   };
 
   /** True when Start NP (rush normals) is useful for this bill-desk row. */
+  const orderBillRef = (order: Order) => ({
+    testCode: order.testCode?.trim() ? order.testCode : null,
+    testName: order.testName?.trim() ? order.testName : null,
+  });
+
   const orderAllowsRush = (order: Order): boolean => {
-    const child = testSuggestsChild(order.testName ?? "");
-    const key = guessStudyKey(order.testName ?? "", order.patientSex === "M" ? "M" : "F", child);
+    const child = testSuggestsChild(`${order.testName ?? ""} ${order.testCode ?? ""}`);
+    const key = guessStudyKey(orderBillRef(order), order.patientSex === "M" ? "M" : "F", child);
     if (!key || isObStudyKey(key)) return false;
     const study = getStudy(key);
     return study ? studyAllowsRushNormals(study) : false;
@@ -413,8 +426,8 @@ export function UsgWorklistView() {
   /** Abdomen studies with a liver organ — NP + Fatty Gr I one-tap. */
   const orderAllowsFattyPreset = (order: Order): boolean => {
     if (!orderAllowsRush(order)) return false;
-    const child = testSuggestsChild(order.testName ?? "");
-    const key = guessStudyKey(order.testName ?? "", order.patientSex === "M" ? "M" : "F", child);
+    const child = testSuggestsChild(`${order.testName ?? ""} ${order.testCode ?? ""}`);
+    const key = guessStudyKey(orderBillRef(order), order.patientSex === "M" ? "M" : "F", child);
     if (!key) return false;
     const study = getStudy(key);
     return !!study?.organs.some((o) => o.key === "liver");
@@ -439,6 +452,7 @@ export function UsgWorklistView() {
         (o.accessionNumber ?? "").toLowerCase().includes(needle) ||
         (o.careWorklistId ?? "").toLowerCase().includes(needle) ||
         (o.testName ?? "").toLowerCase().includes(needle) ||
+        (o.testCode ?? "").toLowerCase().includes(needle) ||
         (o.referringDoctor ?? "").toLowerCase().includes(needle),
     );
   }, [orders, q]);

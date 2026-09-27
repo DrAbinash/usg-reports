@@ -27,7 +27,13 @@
  * counted: the sync response reports the numbers, nothing is silent.
  */
 import { db } from "@/lib/db";
-import { isUltrasoundModality, splitAgeSex, type CareWorklistItem } from "./careClient";
+import {
+  careTestCode,
+  careTestName,
+  isUltrasoundModality,
+  splitAgeSex,
+  type CareWorklistItem,
+} from "./careClient";
 import type { OrthancStudy } from "./orthancClient";
 
 // ── pure row normalisation ──────────────────────────────────────────────────
@@ -209,6 +215,7 @@ type CareOrderRow = {
   billNumber: string;
   referringDoctor: string;
   testName: string;
+  testCode: string;
   billingStatus: string | null;
   billingUpdatedAt: Date | null;
   studyDate: Date | null;
@@ -246,7 +253,7 @@ export async function importCareRows(rows: CareWorklistItem[], clinicId: string 
     // "USG"/"Ultrasound"/"Doppler"/"Echo" etc.
     if (isUltrasoundModality(w.modality)) return true;
     if (!w.modality || !w.modality.trim()) {
-      const tn = (w.testName ?? "").toLowerCase();
+      const tn = `${careTestName(w)} ${careTestCode(w)}`.toLowerCase();
       if (/usg|ultrasound|sonograph|doppler|echo|fetal|antenatal|obstetric|growth scan|whole abdomen|kub|thyroid|breast|scrotum|tvs|trus|prostate|renal/.test(tn)) return true;
     }
     return false;
@@ -333,7 +340,8 @@ export async function importCareRows(rows: CareWorklistItem[], clinicId: string 
               patientAddress: w.patientAddress || target.patientAddress,
               billNumber: w.billNumber || target.billNumber,
               referringDoctor: w.referringDoctor || target.referringDoctor,
-              testName: w.testName || target.testName,
+              testName: careTestName(w) || target.testName,
+              testCode: careTestCode(w) || target.testCode,
               billingStatus: w.billingStatus ?? target.billingStatus,
               billingUpdatedAt: w.billingStatus ? new Date() : undefined,
               careWorklistId: n.wlId ?? target.careWorklistId,
@@ -361,7 +369,8 @@ export async function importCareRows(rows: CareWorklistItem[], clinicId: string 
             patientAddress: w.patientAddress ?? "",
             billNumber: w.billNumber ?? "",
             referringDoctor: w.referringDoctor ?? "",
-            testName: w.testName ?? "",
+            testName: careTestName(w),
+            testCode: careTestCode(w),
             modality: "USG",
             studyInstanceUid: n.uid,
             billingStatus: w.billingStatus ?? null,

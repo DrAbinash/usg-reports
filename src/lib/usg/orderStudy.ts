@@ -1,5 +1,5 @@
 /**
- * orderStudy.ts — bill-desk test name → the studio's own study key.
+ * orderStudy.ts — bill-desk test name/code → the studio's own study key.
  *
  * Delegates study-type decisions to `resolveBilledStudyType` (the only place
  * billing may choose a format). Unmapped bills return null so callers can
@@ -10,6 +10,7 @@ import {
   resolveBilledStudyType,
   resolveNormalBootstrapFormat,
   studyKeyForStudyType,
+  type BillDeskTestRef,
   type StudyTypeKey,
 } from "./billedStudyType";
 
@@ -25,18 +26,22 @@ export function isObStudyKey(key: string): boolean {
 }
 
 /**
- * Guess the studio study for a bill-desk test name.
+ * Guess the studio study for a bill-desk test name and/or catalog code.
  * @returns concrete study key, or null when there is no billed string / unmapped
  *   (unknown / non-USG) — callers must NOT default to whole-abdomen.
  */
 export function guessStudyKey(
-  testName: string,
+  testNameOrRef: string | BillDeskTestRef,
   sex: "F" | "M" | "" = "",
   child = false,
   procedureMap?: Record<string, string> | null,
 ): string | null {
+  const ref: BillDeskTestRef =
+    typeof testNameOrRef === "string" ? { testName: testNameOrRef } : testNameOrRef;
   const boot = resolveNormalBootstrapFormat({
-    billedProcedure: testName?.trim() ? testName : null,
+    testCode: ref.testCode,
+    testName: ref.testName ?? ref.billedProcedure ?? null,
+    billedProcedure: ref.billedProcedure ?? ref.testName ?? null,
     patientSex: sex,
     child,
     procedureMap,
@@ -47,7 +52,7 @@ export function guessStudyKey(
 
 /** Re-export for call sites that only need the type-level decision. */
 export { resolveBilledStudyType, resolveNormalBootstrapFormat, studyKeyForStudyType };
-export type { StudyTypeKey };
+export type { StudyTypeKey, BillDeskTestRef };
 
 /** The sex a report should open with, from the bill's sex string. */
 export function orderSex(gender: string | null | undefined, child = false): "F" | "M" | "CHILD" {
@@ -57,8 +62,8 @@ export function orderSex(gender: string | null | undefined, child = false): "F" 
   return "F";
 }
 
-/** Whether a billed test name suggests a paediatric patient. */
-export function testSuggestsChild(testName: string): boolean {
-  const t = String(testName ?? "").toLowerCase();
+/** Whether a billed test name/code suggests a paediatric patient. */
+export function testSuggestsChild(testNameOrCode: string): boolean {
+  const t = String(testNameOrCode ?? "").toLowerCase();
   return /child|paed|ped|infant|neonat|transfontanelle|baby/.test(t);
 }

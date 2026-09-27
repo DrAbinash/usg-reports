@@ -41,6 +41,8 @@ export type FormFOrderLite = {
   billNumber: string;
   referringDoctor: string;
   testName: string;
+  /** Bill-desk catalog short code (ECHO, USG W, …). */
+  testCode?: string;
   studyDate: string | null;
 };
 

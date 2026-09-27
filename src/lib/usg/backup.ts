@@ -225,6 +225,7 @@ export type BackupCareOrder = {
   billNumber: string;
   referringDoctor: string;
   testName: string;
+  testCode: string;
   modality: string;
   studyDate: string | null;
   studyInstanceUid: string | null;
@@ -349,6 +350,7 @@ export function parseFullBackup(raw: unknown): UsgFullBackupFile {
           billNumber: typeof o.billNumber === "string" ? o.billNumber : "",
           referringDoctor: typeof o.referringDoctor === "string" ? o.referringDoctor : "",
           testName: typeof o.testName === "string" ? o.testName : "",
+          testCode: typeof o.testCode === "string" ? o.testCode : "",
           modality: typeof o.modality === "string" ? o.modality : "USG",
           studyDate: typeof o.studyDate === "string" ? o.studyDate : null,
           studyInstanceUid: typeof o.studyInstanceUid === "string" ? o.studyInstanceUid : null,

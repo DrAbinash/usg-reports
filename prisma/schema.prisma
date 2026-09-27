@@ -395,6 +395,8 @@ model UsgCareOrder {
   billNumber      String    @default("")    // Form F prefill
   referringDoctor String    @default("")
   testName        String    @default("")
+  /** Bill-desk catalog short code (e.g. ECHO, USG W) — CARE may send as testCode / testId. */
+  testCode        String    @default("")
   modality        String    @default("USG")
   studyDate       DateTime?
 

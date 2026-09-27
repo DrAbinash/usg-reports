@@ -9,6 +9,7 @@ import {
   studyKeyForStudyType,
 } from "../src/lib/usg/billedStudyType";
 import { BUILTIN_NP_TEMPLATES } from "../src/lib/usg/npTemplates";
+import { careTestCode, careTestName } from "../src/lib/usg/careClient";
 
 describe("resolveBilledStudyType", () => {
   test("null / blank → null (no billed row → DICOM/manual fallback)", () => {
@@ -61,6 +62,33 @@ describe("resolveBilledStudyType", () => {
     expect(DEFAULT_BILLING_PROCEDURE_MAP.ECHOCARDIOGRAPHY).toBe("echo");
     expect(DEFAULT_BILLING_PROCEDURE_MAP.CARDIAC).toBe("echo");
     expect(DEFAULT_BILLING_PROCEDURE_MAP["USG WHOLE ABDOMEN"]).toBe("whole-abdomen");
+    expect(DEFAULT_BILLING_PROCEDURE_MAP["USG W"]).toBe("whole-abdomen");
+  });
+
+  test("bill-desk catalog codes from test-catalog CSV", () => {
+    // Adult ECHO — code alone (name blank) must NOT fall through to WA.
+    expect(resolveBilledStudyType({ testCode: "ECHO", testName: null })).toBe("echo");
+    expect(resolveBilledStudyType({ testCode: "ECHO", testName: "" })).toBe("echo");
+    expect(resolveBilledStudyType({ testCode: "ECHO", testName: "ECHO" })).toBe("echo");
+    // Whole abdomen catalog code.
+    expect(resolveBilledStudyType({ testCode: "USG W", testName: "USG WHOLE ABDOMEN" })).toBe(
+      "whole-abdomen",
+    );
+    expect(resolveBilledStudyType({ testCode: "USG W", testName: null })).toBe("whole-abdomen");
+    // Fetal echo stays obstetric — not adult Echo format.
+    expect(resolveBilledStudyType({ testCode: "USGFE", testName: "USG FETAL ECHO" })).toBe("ob");
+    expect(resolveBilledStudyType("USG FETAL ECHO")).toBe("ob");
+    // Code wins over a misleading/blank name path.
+    expect(resolveBilledStudyType({ testCode: "ECHO", testName: "USG" })).toBe("echo");
+  });
+
+  test("careTestCode / careTestName accept ERP aliases", () => {
+    expect(careTestCode({ testCode: "ECHO" })).toBe("ECHO");
+    expect(careTestCode({ testId: "ECHO" })).toBe("ECHO");
+    expect(careTestCode({ testId: 42 })).toBe("42");
+    expect(careTestCode({ billedTestCode: "USG W" })).toBe("USG W");
+    expect(careTestName({ testName: "", billedTestName: "ECHO" })).toBe("ECHO");
+    expect(careTestName({ testName: "ECHO", billedTestName: "ignored" })).toBe("ECHO");
   });
 });
 
@@ -120,5 +148,19 @@ describe("studyKeyForStudyType + resolveNormalBootstrapFormat", () => {
 
   test("no billed row → kind none (DICOM/manual unchanged)", () => {
     expect(resolveNormalBootstrapFormat({ billedProcedure: null }).kind).toBe("none");
+  });
+
+  test("catalog ECHO code-only bootstrap → Echo template (not WA)", () => {
+    const boot = resolveNormalBootstrapFormat({
+      testCode: "ECHO",
+      testName: null,
+      patientSex: "M",
+    });
+    expect(boot).toEqual({
+      kind: "mapped",
+      studyType: "echo",
+      studyKey: "echo",
+      npTemplateName: "Echo (2D Echocardiography)",
+    });
   });
 });

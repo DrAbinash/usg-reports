@@ -24,6 +24,8 @@ export type ChipRowProps = {
   onAddCustom: (organKey: string, after?: string) => void;
   onShowAll: () => void;
   onBeforeChip: () => void;
+  /** Finalized reports — chips stay visible but do not toggle. */
+  readOnly?: boolean;
   /** Extra classes — used when chips sit on the organ heading row. */
   className?: string;
 };
@@ -43,6 +45,7 @@ function chipRowEqual(a: ChipRowProps, b: ChipRowProps): boolean {
     a.onAddCustom === b.onAddCustom &&
     a.onShowAll === b.onShowAll &&
     a.onBeforeChip === b.onBeforeChip &&
+    a.readOnly === b.readOnly &&
     a.visible === b.visible &&
     a.selectedKeys === b.selectedKeys &&
     a.className === b.className
@@ -65,17 +68,23 @@ export const ChipRow = memo(function ChipRow({
   onAddCustom,
   onShowAll,
   onBeforeChip,
+  readOnly,
   className,
 }: ChipRowProps) {
+  const locked = !!readOnly;
   return (
-    <div className={cn("flex flex-wrap items-center gap-1", className)}>
+    <div className={cn("flex flex-wrap items-center gap-1", className, locked && "opacity-90")}>
       <button
+        type="button"
+        disabled={locked}
         onClick={() => {
+          if (locked) return;
           onBeforeChip();
           onToggle(null);
         }}
         className={cn(
           "rounded-full border px-2.5 py-0.5 text-[11px] font-bold transition-colors shadow-sm",
+          locked && "cursor-not-allowed",
           !anySelected && !custom && !usingQuickNormal
             ? "border-emerald-600 bg-emerald-600 text-white ring-2 ring-emerald-200"
             : "border-emerald-400 bg-emerald-50 text-emerald-900 hover:border-emerald-500 hover:bg-emerald-100",
@@ -86,12 +95,16 @@ export const ChipRow = memo(function ChipRow({
       </button>
       {showQuickNormal ? (
         <button
+          type="button"
+          disabled={locked}
           onClick={() => {
+            if (locked) return;
             onBeforeChip();
             onQuickNormal?.();
           }}
           className={cn(
             "rounded-full border px-2 py-0.5 text-[10px] font-bold transition-colors",
+            locked && "cursor-not-allowed",
             usingQuickNormal
               ? "border-amber-500 bg-amber-100 text-amber-950"
               : "border-amber-300 bg-amber-50 text-amber-900 hover:border-amber-400 hover:bg-amber-100",
@@ -106,26 +119,32 @@ export const ChipRow = memo(function ChipRow({
         const hotkey = i < 9 ? i + 1 : null;
         return (
           <button
+            type="button"
             key={p.key}
+            disabled={locked}
             onClick={() => {
+              if (locked) return;
               onBeforeChip();
               onToggle(p.key);
             }}
             className={cn(
               "relative rounded-full border px-2 py-0.5 text-[10px] font-bold transition-colors",
+              locked && "cursor-not-allowed",
               on
                 ? "border-rose-500 bg-rose-100 text-rose-900"
                 : "border-slate-300 bg-white text-slate-800 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-800",
               !p.builtin ? "italic" : "",
             )}
             title={
-              p.builtin
-                ? on
-                  ? "Selected — click to remove"
-                  : hotkey
-                    ? `Click to add (hotkey ${hotkey})`
-                    : "Click to add (combine with others)"
-                : `Custom entry${on ? " — click to remove" : ""}`
+              locked
+                ? "Finalized — chips locked to the printed snapshot"
+                : p.builtin
+                  ? on
+                    ? "Selected — click to remove"
+                    : hotkey
+                      ? `Click to add (hotkey ${hotkey})`
+                      : "Click to add (combine with others)"
+                  : `Custom entry${on ? " — click to remove" : ""}`
             }
           >
             {hotkey ? (
@@ -139,16 +158,36 @@ export const ChipRow = memo(function ChipRow({
       })}
       {pathologiesCount > 6 && !showAll ? (
         <button
-          onClick={onShowAll}
-          className="rounded-full border border-dashed border-slate-300 px-2 py-0.5 text-[10px] font-bold text-slate-700 hover:bg-slate-50"
+          type="button"
+          disabled={locked}
+          onClick={() => {
+            if (locked) return;
+            onShowAll();
+          }}
+          className={cn(
+            "rounded-full border border-dashed border-slate-300 px-2 py-0.5 text-[10px] font-bold text-slate-700 hover:bg-slate-50",
+            locked && "cursor-not-allowed",
+          )}
         >
           +{pathologiesCount - 6} more
         </button>
       ) : null}
       <button
-        onClick={() => onAddCustom(def.key)}
-        className="flex items-center gap-0.5 rounded-full border border-dashed border-rose-300 px-2 py-0.5 text-[10px] font-bold text-rose-700 hover:bg-rose-50"
-        title={`Add a custom ${def.label} finding${isKidneySlot ? " (applies to both kidneys)" : ""}`}
+        type="button"
+        disabled={locked}
+        onClick={() => {
+          if (locked) return;
+          onAddCustom(def.key);
+        }}
+        className={cn(
+          "flex items-center gap-0.5 rounded-full border border-dashed border-rose-300 px-2 py-0.5 text-[10px] font-bold text-rose-700 hover:bg-rose-50",
+          locked && "cursor-not-allowed",
+        )}
+        title={
+          locked
+            ? "Finalized — chips locked to the printed snapshot"
+            : `Add a custom ${def.label} finding${isKidneySlot ? " (applies to both kidneys)" : ""}`
+        }
       >
         <Plus className="h-3.5 w-3.5" />
         <span>Custom</span>

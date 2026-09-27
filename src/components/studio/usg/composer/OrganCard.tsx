@@ -133,11 +133,15 @@ export const OrganCard = memo(function OrganCard({
     setState((s) => applyOrganQuickNormal(s, def.key, def));
   }, [setState, def]);
   const onVar = useCallback(
-    (k: string, v: string) => setState((s) => setOrganVar(s, def.key, k, v)),
-    [setState, def.key],
+    (k: string, v: string) => {
+      if (isFinal) return;
+      setState((s) => setOrganVar(s, def.key, k, v));
+    },
+    [isFinal, setState, def.key],
   );
   const onText = useCallback(
     (t: string) => {
+      if (isFinal) return;
       const snip = matchSnippetExact(t);
       if (snip) {
         const p = lookupPathology(snip.pathologyKey);
@@ -149,7 +153,7 @@ export const OrganCard = memo(function OrganCard({
       }
       setState((s) => setOrganText(s, def.key, t));
     },
-    [lookupPathology, onTogglePathology, setState, def.key],
+    [isFinal, lookupPathology, onTogglePathology, setState, def.key],
   );
   const onApplySuggestion = useCallback(
     (pathologyKey: string, text: string) => {
@@ -190,10 +194,11 @@ export const OrganCard = memo(function OrganCard({
           pathologies={pathologiesForOrgan(pathologies, def.key)}
           preferNoSizeChips={preferNoSizeChips}
           normalOverride={normalOverride}
+          readOnly={isFinal}
           onSaveNormal={(text) => onSaveNormal(def.key, text)}
           onResetNormal={() => onResetNormal(def.key)}
           onToggle={onToggle}
-          onQuickNormal={onQuickNormal}
+          onQuickNormal={isFinal ? undefined : onQuickNormal}
           onVar={onVar}
           onText={onText}
           onAddCustom={onAddCustom}

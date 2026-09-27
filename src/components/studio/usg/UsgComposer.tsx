@@ -550,6 +550,9 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   /** Chip toggle — null clears the organ to normal; a key toggles it, so an
    *  organ can carry several pathologies at once (combined findings). */
   const togglePathology = (organKey: string, key: string | null) => {
+    // Finalized snapshot is frozen — never let chip clicks diverge the live
+    // preview from what Print / PDF will emit (reportHtml / stateJson).
+    if (isFinal) return;
     setState((s) => {
       const cur = selectedPathologies(s.organs.find((o) => o.organ === organKey) ?? { pathology: null });
       const next = key === null ? [] : cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key];
@@ -877,14 +880,16 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         onSave={() => void persist("")}
         onFinalize={() => void finalizeFast(false)}
         onPrint={() => void print()}
-        onDownloadPdf={() =>
-          downloadReportPdf({
+        onDownloadPdf={() => {
+          void downloadReportPdf({
             reportId: savedIdRef.current ?? report?.id ?? "",
             patientName,
             serial,
             date: fmtPrintDate(scanDate),
-          })
-        }
+          }).then((r) => {
+            if (r === "downloaded") toast.success("PDF downloaded");
+          });
+        }}
         onNext={onBack}
       />
     </div>

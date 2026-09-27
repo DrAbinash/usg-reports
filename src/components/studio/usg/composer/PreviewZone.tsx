@@ -513,10 +513,15 @@ export async function printReport(opts: {
   }
   opts.setBusy("print");
   try {
-    if (opts.report?.status === "FINALIZED" && opts.report.reportHtml) {
-      opts.frozenHtmlRef.current = opts.report.reportHtml;
-      printInIframe(opts.printRef, opts.report.reportHtml);
-    } else if (opts.finalizedHere || opts.frozenHtmlRef.current) {
+    const isFinalized = opts.report?.status === "FINALIZED" || opts.finalizedHere;
+    if (isFinalized) {
+      // Register discipline: always print the frozen snapshot, never a live
+      // chip edit that could not be saved after finalize.
+      if (opts.report?.reportHtml) {
+        opts.frozenHtmlRef.current = opts.report.reportHtml;
+        printInIframe(opts.printRef, opts.report.reportHtml);
+        return;
+      }
       const id = opts.savedIdRef.current ?? opts.report?.id;
       if (id) {
         const ok = await printFrozenReport(id, opts.frozenHtmlRef, opts.printRef);
@@ -525,18 +530,15 @@ export async function printReport(opts: {
       } else if (opts.frozenHtmlRef.current) {
         printInIframe(opts.printRef, opts.frozenHtmlRef.current);
       }
-    } else {
-      const id = await opts.persist("");
-      if (id) {
-        const res = await fetch(`/api/usg/reports/${id}`, { method: "GET" });
-        const row = res.ok ? ((await res.json()).report as { status?: string; reportHtml?: string | null }) : null;
-        if (row?.status === "FINALIZED" && row.reportHtml) {
-          opts.frozenHtmlRef.current = row.reportHtml;
-          printInIframe(opts.printRef, row.reportHtml);
-        } else {
-          printInIframe(opts.printRef, opts.previewHtml);
-        }
-      }
+      return;
+    }
+
+    // Draft — always print the live letterpad HTML (what the doctor sees).
+    // Ignore any stale frozenHtmlRef left over from a prior session.
+    opts.frozenHtmlRef.current = null;
+    const id = await opts.persist("");
+    if (id) {
+      printInIframe(opts.printRef, opts.previewHtml);
     }
   } finally {
     opts.setBusy("");

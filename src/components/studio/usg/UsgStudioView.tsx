@@ -35,6 +35,7 @@ import { UsgComposer, type UsgReportRow, type ReportOrderLite } from "./UsgCompo
 import type { FormFDefaults } from "./UsgFormFDialog";
 import type { DiffSource } from "./UsgDiffPanel";
 import { shareReportWhatsapp } from "./shareWhatsapp";
+import { downloadReportPdf } from "./sharePdf";
 import { UsgPacsReturnButton } from "./UsgPacsReturnButton";
 import { UsgFollowUpWidget } from "./UsgFollowUpWidget";
 
@@ -1071,11 +1072,25 @@ function ReprintOverlay({
       <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-4 py-2.5">
         <span className="text-[13px] font-bold">Finalized report{serial ? ` — ${serial}` : ""}</span>
         <div className="ml-auto flex flex-wrap gap-2">
-          <a href={`/api/usg/reports/${reportId}/pdf`} target="_blank" rel="noreferrer" download>
-            <Button size="sm" variant="outline" className="h-8 border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100" title="Open / download the PDF">
-              <Download className="mr-1.5 h-4 w-4" /> PDF
-            </Button>
-          </a>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100"
+            title="Download the PDF"
+            onClick={() => {
+              void downloadReportPdf({
+                reportId,
+                patientName,
+                serial,
+                date,
+              }).then((r) => {
+                if (r === "downloaded") toast.success("PDF downloaded");
+                else if (r === "failed") toast.error("PDF download failed");
+              });
+            }}
+          >
+            <Download className="mr-1.5 h-4 w-4" /> PDF
+          </Button>
           <Button
             size="sm"
             variant="outline"

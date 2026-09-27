@@ -30,6 +30,8 @@ type StudioState = {
   view: View;
   /** Report id the USG Studio view should open in the composer on next mount. */
   openReportId: string | null;
+  /** Report currently open in the composer (for queue jump highlight). */
+  activeReportId: string | null;
   /** Active composer patient strip for the pink header (null = not composing). */
   composerStrip: ComposerStrip | null;
   /** Back from composer (set by UsgComposer while mounted). */
@@ -41,6 +43,7 @@ type StudioState = {
   setView: (v: View) => void;
   openComposer: (reportId: string) => void;
   clearOpenReport: () => void;
+  setActiveReportId: (id: string | null) => void;
   setComposerStrip: (s: ComposerStrip | null) => void;
   setComposerBack: (fn: (() => void) | null) => void;
   setExpandPatientForm: (fn: (() => void) | null) => void;
@@ -52,14 +55,16 @@ export const useStudio = create<StudioState>((set) => ({
   authenticated: false,
   view: "usg",
   openReportId: null,
+  activeReportId: null,
   composerStrip: null,
   composerBack: null,
   expandPatientForm: null,
 
   setAuth: (v) => set({ ...v, bootstrapped: true }),
   setView: (view) => set({ view }),
-  openComposer: (reportId) => set({ openReportId: reportId, view: "usg" }),
+  openComposer: (reportId) => set({ openReportId: reportId, activeReportId: reportId, view: "usg" }),
   clearOpenReport: () => set({ openReportId: null }),
+  setActiveReportId: (activeReportId) => set({ activeReportId }),
   setComposerStrip: (composerStrip) => set({ composerStrip }),
   setComposerBack: (composerBack) => set({ composerBack }),
   setExpandPatientForm: (expandPatientForm) => set({ expandPatientForm }),

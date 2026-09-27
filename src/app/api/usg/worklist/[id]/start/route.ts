@@ -74,8 +74,10 @@ export async function POST(req: Request, ctx: Ctx) {
     }
   }
 
-  const child = testSuggestsChild(order.testName);
+  const child = testSuggestsChild(`${order.testName} ${order.testCode}`);
   const boot = resolveNormalBootstrapFormat({
+    testCode: order.testCode?.trim() ? order.testCode : null,
+    testName: order.testName?.trim() ? order.testName : null,
     billedProcedure: order.testName?.trim() ? order.testName : null,
     patientSex: order.patientSex,
     child,
@@ -92,7 +94,11 @@ export async function POST(req: Request, ctx: Ctx) {
         ob: isObStudyKey(existing.studyKey),
         rushApplied: false,
         billedUnmapped: boot.kind === "unmapped",
-        billedProcedure: boot.kind === "unmapped" ? boot.procedure : order.testName,
+        billedProcedure:
+          boot.kind === "unmapped"
+            ? boot.procedure
+            : order.testName?.trim() || order.testCode?.trim() || null,
+        billedTestCode: order.testCode?.trim() || null,
         billedBanner: boot.kind === "unmapped" ? boot.banner : null,
         npTemplateName: boot.kind === "mapped" ? boot.npTemplateName : null,
       });
@@ -124,7 +130,7 @@ export async function POST(req: Request, ctx: Ctx) {
         stateJson: JSON.stringify(emptyState),
         scanDate: order.studyDate,
         studyKey: "",
-        studyTitle: order.testName?.trim() || "USG Study",
+        studyTitle: order.testName?.trim() || order.testCode?.trim() || "USG Study",
         findings: "",
         impression: "",
       },
@@ -145,6 +151,7 @@ export async function POST(req: Request, ctx: Ctx) {
       rushApplied: false,
       billedUnmapped: true,
       billedProcedure: boot.procedure,
+      billedTestCode: order.testCode?.trim() || null,
       billedBanner: boot.banner,
       npTemplateName: null,
     });
@@ -229,7 +236,8 @@ export async function POST(req: Request, ctx: Ctx) {
     rushApplied,
     rushPreset: rushPresetApplied,
     billedUnmapped: false,
-    billedProcedure: order.testName,
+    billedProcedure: order.testName?.trim() || order.testCode?.trim() || null,
+    billedTestCode: order.testCode?.trim() || null,
     billedBanner: null,
     npTemplateName: boot.kind === "mapped" ? boot.npTemplateName : null,
   });

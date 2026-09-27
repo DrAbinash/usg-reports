@@ -124,9 +124,15 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     typeof window !== "undefined" ? localStorage.getItem("usg:lastStudyKey") : null;
 
   // Billing-desk procedure is source #1 whenever an order is linked.
-  const billedProcedure = order?.testName?.trim() ? order.testName.trim() : null;
-  const childBill = billedProcedure ? testSuggestsChild(billedProcedure) : false;
+  // Prefer catalog code (ECHO, USG W) + display name from the bill desk.
+  const billedTestCode = order?.testCode?.trim() ? order.testCode.trim() : null;
+  const billedProcedure = order?.testName?.trim()
+    ? order.testName.trim()
+    : billedTestCode;
+  const childBill = testSuggestsChild(`${order?.testName ?? ""} ${order?.testCode ?? ""}`);
   const boot = resolveNormalBootstrapFormat({
+    testCode: billedTestCode,
+    testName: order?.testName?.trim() ? order.testName.trim() : null,
     billedProcedure,
     patientSex: report?.patientSex ?? prefill?.patientSex ?? "F",
     child: childBill,

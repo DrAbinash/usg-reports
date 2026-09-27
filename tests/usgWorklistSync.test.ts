@@ -205,6 +205,43 @@ describe("F · null billingStatus does not suppress the row", () => {
   });
 });
 
+describe("F2 · bill-desk testCode + testName persist on import", () => {
+  test("ECHO catalog code/name land on the order row", async () => {
+    const stats = await importCareRows([
+      {
+        worklistId: "echo-1",
+        accessionNumber: "",
+        patientName: "Echo Patient",
+        patientAge: "40/M",
+        modality: "USG",
+        testName: "ECHO",
+        testCode: "ECHO",
+        studyInstanceUid: "1.2.840.echo.test",
+      },
+    ]);
+    expect(stats.imported).toBe(1);
+    const order = await db.usgCareOrder.findFirstOrThrow({ where: { careWorklistId: "echo-1" } });
+    expect(order.testName).toBe("ECHO");
+    expect(order.testCode).toBe("ECHO");
+  });
+
+  test("testId alias fills testCode when testCode omitted", async () => {
+    await importCareRows([
+      {
+        worklistId: "echo-2",
+        accessionNumber: "ACC-ECHO-2",
+        patientName: "Code Only",
+        modality: "US",
+        testName: "",
+        testId: "ECHO",
+      },
+    ]);
+    const order = await db.usgCareOrder.findFirstOrThrow({ where: { careWorklistId: "echo-2" } });
+    expect(order.testCode).toBe("ECHO");
+    expect(order.testName).toBe("");
+  });
+});
+
 describe("G · CT/MR rows are excluded from the USG Studio", () => {
   test("non-ultrasound modalities are filtered with a count", async () => {
     const stats = await importCareRows([

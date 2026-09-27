@@ -70,6 +70,8 @@ worklist table by reading the existing handlers in `src/routes/radiology.ts` and
     "patientName": "…", "patientAge": "54/F" | "54", "patientGender": "F",
     "referringDoctor": "Dr. …",
     "testName": "MRI Lumbosacral Spine",
+    "testCode": "ECHO | USG W | … (bill-desk catalog short code; optional)",
+    "testId": "same as testCode on some ERP builds (string or number; optional)",
     "modality": "MR" | "CT",
     "studyDate": "2026-08-29T04:30:00.000Z",
     "studyInstanceUid": "1.2.840… (nullable)",

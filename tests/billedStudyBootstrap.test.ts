@@ -9,7 +9,9 @@ import { normaliseState } from "../src/lib/usg/composer";
 
 /** Mirror of the start-route decision: apply format only when mapped. */
 function bootstrapComposerState(ctx: {
-  billedProcedure: string | null;
+  billedProcedure?: string | null;
+  testCode?: string | null;
+  testName?: string | null;
   patientSex?: string;
   child?: boolean;
 }) {
@@ -55,6 +57,14 @@ describe("billed study bootstrap integration", () => {
     expect(r.state.organs.length).toBeGreaterThan(0);
     expect(r.state.organs.some((o) => o.organ === "echo-mmode" || o.organ === "echo-valves")).toBe(true);
     expect(getStudy(r.state.studyKey)?.title).toMatch(/ECHO|ECHOCARDIOGRAPHY/i);
+  });
+
+  test("catalog ECHO code with blank name → Echo (never whole abdomen)", () => {
+    const r = bootstrapComposerState({ testCode: "ECHO", testName: null, patientSex: "F" });
+    expect(r.formatApplied).toBe(true);
+    expect(r.banner).toBeNull();
+    expect(r.state.studyKey).toBe("echo");
+    expect(r.state.studyKey).not.toMatch(/^wa-/);
   });
 
   test("billed 2D ECHO / ECHOCARDIOGRAPHY → same Echo canvas, banner false", () => {

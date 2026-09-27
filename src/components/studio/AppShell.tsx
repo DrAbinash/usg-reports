@@ -11,6 +11,7 @@ import { UsgDarkModeToggle } from "./usg/UsgDarkModeToggle";
 import { UsgCommandPalette } from "./usg/UsgCommandPalette";
 import { UsgClinicSwitcher } from "./usg/UsgClinicSwitcher";
 import { UsgClinicLink } from "./usg/UsgClinicLink";
+import { UsgQueuePicker } from "./usg/UsgQueuePicker";
 import { OnboardingLayer } from "./usg/OnboardingLayer";
 import { UsgBirthdayGreeting, BirthdayHeaderButton, birthdayDismissed, rememberBirthdayDismissed, useBirthdayFlag } from "./usg/UsgBirthdayGreeting";
 import { Waves, Settings2, LogOut, Stethoscope, BarChart3, ClipboardList, ExternalLink, ArrowLeft } from "lucide-react";
@@ -37,6 +38,7 @@ export function AppShell() {
     composerStrip,
     composerBack,
     expandPatientForm,
+    activeReportId,
   } = useStudio();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -63,6 +65,39 @@ export function AppShell() {
         if (!res.ok) throw new Error("patients");
         return ((await res.json()).patients ?? []) as unknown[];
       },
+    });
+    // Warm studio essentials so worklist → composer open is instant.
+    void queryClient.prefetchQuery({
+      queryKey: ["usg", "settings"],
+      queryFn: async () => {
+        const sRes = await fetch("/api/settings");
+        if (!sRes.ok) throw new Error("settings");
+        return sRes.json();
+      },
+      staleTime: 60_000,
+    });
+    void queryClient.prefetchQuery({
+      queryKey: ["usg", "pathologies"],
+      queryFn: async () => {
+        const pRes = await fetch("/api/usg/pathologies");
+        if (!pRes.ok) throw new Error("pathologies");
+        return ((await pRes.json()).pathologies ?? []) as unknown[];
+      },
+      staleTime: 5 * 60_000,
+    });
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, "0");
+    const d = String(today.getDate()).padStart(2, "0");
+    const todayStr = `${y}-${m}-${d}`;
+    void queryClient.prefetchQuery({
+      queryKey: ["usg", "worklist", todayStr, todayStr],
+      queryFn: async () => {
+        const res = await fetch(`/api/usg/worklist?from=${todayStr}&to=${todayStr}`);
+        if (!res.ok) throw new Error("worklist");
+        return res.json();
+      },
+      staleTime: 30_000,
     });
   }, [queryClient]);
 
@@ -108,7 +143,7 @@ export function AppShell() {
           ) : null}
         </div>
 
-        {/* While composing: patient/study strip replaces the bulky composer header */}
+        {/* While composing: patient strip + queue jump (patient/study selects) */}
         {composing && composerStrip ? (
           <div className="flex min-w-0 flex-1 items-center gap-1.5">
             <button
@@ -122,7 +157,7 @@ export function AppShell() {
             <button
               type="button"
               onClick={() => expandPatientForm?.()}
-              className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 py-0.5 text-left hover:bg-rose-50"
+              className="flex min-w-0 max-w-[18rem] items-center gap-1.5 rounded-md px-1.5 py-0.5 text-left hover:bg-rose-50 xl:max-w-[22rem]"
               title="Click to edit patient details"
             >
               <span className="truncate text-[12px] font-bold text-foreground">
@@ -134,21 +169,7 @@ export function AppShell() {
               <span className="shrink-0 text-[11px] text-muted-foreground">
                 {composerStrip.patientSex === "C" ? "Child" : composerStrip.patientSex}
               </span>
-              {composerStrip.referredBy ? (
-                <span className="hidden truncate text-[11px] text-faint md:inline">· {composerStrip.referredBy}</span>
-              ) : null}
               <span className="hidden truncate text-[11px] text-faint lg:inline">· {composerStrip.studyLabel}</span>
-              <span
-                className={cn(
-                  "shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold",
-                  composerStrip.allNormal ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700",
-                )}
-              >
-                {composerStrip.allNormal ? "All normal" : "Findings"}
-              </span>
-              <span className="hidden shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-slate-700 sm:inline">
-                {composerStrip.title}
-              </span>
               <span
                 className={cn(
                   "shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold",
@@ -157,12 +178,13 @@ export function AppShell() {
               >
                 {composerStrip.status === "final" ? "final" : "draft"}
               </span>
-              {composerStrip.serial ? (
-                <span className="hidden shrink-0 rounded-full bg-sky-50 px-1.5 py-0.5 text-[9px] font-bold text-sky-700 xl:inline">
-                  {composerStrip.serial}
-                </span>
-              ) : null}
             </button>
+            <div className="mx-0.5 hidden h-5 w-px bg-border sm:block" />
+            <UsgQueuePicker
+              compact
+              className="hidden min-w-0 flex-1 sm:flex"
+              currentReportId={activeReportId}
+            />
           </div>
         ) : (
           <nav className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]" aria-label="Primary">
@@ -240,8 +262,13 @@ export function AppShell() {
       </header>
 
       <main className="studio-scroll min-h-0 flex-1 overflow-y-auto">
-        {view === "worklist" && <UsgWorklistView />}
-        {view === "usg" && <UsgStudioView />}
+        {/* Keep worklist + studio mounted so open/back is instant (CARE workspace pattern). */}
+        <div className={cn("h-full", view === "worklist" ? "block" : "hidden")} aria-hidden={view !== "worklist"}>
+          <UsgWorklistView />
+        </div>
+        <div className={cn("h-full", view === "usg" ? "block" : "hidden")} aria-hidden={view !== "usg"}>
+          <UsgStudioView />
+        </div>
         {view === "insights" && <UsgInsightsView />}
         {view === "settings" && <SettingsView />}
       </main>

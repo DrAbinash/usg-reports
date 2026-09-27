@@ -9,7 +9,7 @@
  */
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useStudio } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -200,58 +200,58 @@ function OrderRow({
 export function UsgWorklistView() {
   const { openComposer } = useStudio();
   const queryClient = useQueryClient();
-  const [data, setData] = useState<WorklistResponse | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [q, setQ] = useState("");
   const [formFOpen, setFormFOpen] = useState(false);
   const [formFOrder, setFormFOrder] = useState<Order | null>(null);
   const [defaults, setDefaults] = useState<FormFDefaults | null>(null);
 
-  // v6.14: date range filter state
+  // v6.14: date range filter state — today default (matches Studio queue picker)
   type DatePreset = "all" | "today" | "yesterday" | "week" | "custom";
   const [datePreset, setDatePreset] = useState<DatePreset>("today");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
 
   /** Compute the from/to query params from the preset. */
-  const dateParams = useCallback((): string => {
+  const dateRange = useCallback((): { from: string; to: string } => {
     const now = new Date();
     const today = toLocalDateString(now);
     const yesterday = (() => { const d = new Date(now); d.setDate(d.getDate() - 1); return toLocalDateString(d); })();
     const weekAgo = (() => { const d = new Date(now); d.setDate(d.getDate() - 7); return toLocalDateString(d); })();
 
     switch (datePreset) {
-      case "today": return `&from=${today}&to=${today}`;
-      case "yesterday": return `&from=${yesterday}&to=${yesterday}`;
-      case "week": return `&from=${weekAgo}&to=${today}`;
+      case "today": return { from: today, to: today };
+      case "yesterday": return { from: yesterday, to: yesterday };
+      case "week": return { from: weekAgo, to: today };
       case "custom":
-        if (customFrom || customTo) {
-          const params: string[] = [];
-          if (customFrom) params.push(`from=${customFrom}`);
-          if (customTo) params.push(`to=${customTo}`);
-          return `&${params.join("&")}`;
-        }
-        return "";
-      default: return "";
+        return { from: customFrom || "", to: customTo || "" };
+      default: return { from: "", to: "" };
     }
   }, [datePreset, customFrom, customTo]);
 
-  const load = useCallback(() => {
-    const params = dateParams();
-    fetch(`/api/usg/worklist${params ? `?${params.slice(1)}` : ""}`)
-      .then((r) => r.json())
-      .then((r: (WorklistResponse & { error?: string }) | null) => {
-        if (!r || r.error) return;
-        setData(r);
-      })
-      .catch(() => {});
-  }, [dateParams]);
+  const range = dateRange();
 
-  useEffect(() => {
-    load();
-    const t = setInterval(load, 5 * 60 * 1000);
-    return () => clearInterval(t);
-  }, [load]);
+  const worklistQ = useQuery({
+    queryKey: ["usg", "worklist", range.from, range.to],
+    queryFn: async (): Promise<WorklistResponse> => {
+      const qs = new URLSearchParams();
+      if (range.from) qs.set("from", range.from);
+      if (range.to) qs.set("to", range.to);
+      const url = qs.toString() ? `/api/usg/worklist?${qs}` : "/api/usg/worklist";
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`worklist ${r.status}`);
+      const body = (await r.json()) as WorklistResponse & { error?: string };
+      if (body.error) throw new Error(body.error);
+      return body;
+    },
+    staleTime: 30_000,
+    refetchInterval: 5 * 60_000,
+  });
+
+  const data = worklistQ.data ?? null;
+  const load = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["usg", "worklist"] });
+  }, [queryClient]);
 
   // Prefetch patients + any already-linked reports so opening a study is warm.
   useEffect(() => {

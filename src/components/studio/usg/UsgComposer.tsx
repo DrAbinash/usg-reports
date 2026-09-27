@@ -495,17 +495,20 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const setComposerStrip = useStudio((s) => s.setComposerStrip);
   const setComposerBack = useStudio((s) => s.setComposerBack);
   const setExpandPatientForm = useStudio((s) => s.setExpandPatientForm);
+  const setActiveReportId = useStudio((s) => s.setActiveReportId);
   const onBackRef = useRef(onBack);
   onBackRef.current = onBack;
   useEffect(() => {
     setComposerBack(() => onBackRef.current());
     setExpandPatientForm(() => setHeaderCollapsed(false));
+    setActiveReportId(report?.id ?? savedIdRef.current);
     return () => {
       setComposerStrip(null);
       setComposerBack(null);
       setExpandPatientForm(null);
+      setActiveReportId(null);
     };
-  }, [setComposerBack, setExpandPatientForm, setComposerStrip]);
+  }, [setComposerBack, setExpandPatientForm, setComposerStrip, setActiveReportId, report?.id]);
   useEffect(() => {
     const next = {
       patientName,

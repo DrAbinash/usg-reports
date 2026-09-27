@@ -82,40 +82,106 @@ describe("formatFindingsBodyHtml — fatty liver", () => {
     expect(html).toMatch(/<strong>[^<]*Grade I Fatty Changes[^<]*<\/strong>/);
   });
 
+  test("dotted abbreviations like S.O.L stay in one scaffold sentence", () => {
+    const text =
+      "Spleen is enlarged in size. Appears normal in morphology and parenchymal echogenicity. No evidence of focal lesion or S.O.L seen. No evidence of splenic collateral vessels.";
+    const html = formatFindingsBodyHtml(text, {
+      abnormal: true,
+      normalText:
+        "Spleen appears normal in morphology and parenchymal echogenicity. No evidence of focal lesion or S.O.L seen. No evidence of splenic collateral vessels.",
+    });
+    expect(html).toContain("No evidence of focal lesion or S.O.L seen.");
+    expect(html).not.toMatch(/<strong>No evidence of focal lesion/);
+    expect(html).not.toMatch(/<strong>L seen/);
+    expect(html).toMatch(/<strong>Spleen is enlarged in size\.<\/strong>/);
+  });
+
   test("normal organ — no strong tags", () => {
     const html = formatFindingsBodyHtml(LIVER_N, { abnormal: false, normalText: LIVER_N });
     expect(html).not.toContain("<strong>");
   });
 });
 
-describe("print HTML — fatty liver organ body", () => {
-  test("LIVER label and measure lines are not bold; fatty claim is", () => {
+describe("print HTML — every abnormal organ (not liver-only)", () => {
+  const patient = {
+    name: "Rani Devi",
+    age: "30",
+    sex: "F",
+    referredBy: "Dr. Kumar",
+    date: "01-Sep-2026",
+    serial: "USG-0001",
+  };
+
+  test("LIVER — label/measure plain; fatty claim bold", () => {
     let state = initialState("wa-female");
     state = applyPathology(state, "liver", "liver-fatty-g1", lookup);
-    const resolved = resolve(state, lookup, "Routine transabdominal scan.");
     const html = buildUsgReportHtml(
       SETTINGS,
-      {
-        name: "Rani Devi",
-        age: "30",
-        sex: "F",
-        referredBy: "Dr. Kumar",
-        date: "01-Sep-2026",
-        serial: "USG-0001",
-      },
-      resolved,
+      patient,
+      resolve(state, lookup, "Routine transabdominal scan."),
     );
-    // Organ label not wrapped.
     expect(html).toMatch(/<th>LIVER<\/th>/);
     expect(html).not.toMatch(/<th><strong>LIVER<\/strong><\/th>/);
-    // Measure line plain; fatty sentence bold.
-    expect(html).toMatch(/Liver measures in mid-clavicular line/);
     expect(html).not.toMatch(/<strong>Liver measures/);
     expect(html).toMatch(/<strong>[^<]*Grade I Fatty Changes[^<]*<\/strong>/);
-    // Must not wrap the entire liver td in one strong.
     expect(html).not.toMatch(
       /<td><strong>Liver measures in mid-clavicular line[\s\S]*It measures ___ cm\.<\/strong><\/td>/,
     );
+  });
+
+  test("G.B. — scaffold plain; calculus sentence bold", () => {
+    let state = initialState("wa-female");
+    state = applyPathology(state, "gb", "gb-calculus", lookup);
+    const html = buildUsgReportHtml(
+      SETTINGS,
+      patient,
+      resolve(state, lookup, "Routine transabdominal scan."),
+    );
+    expect(html).toMatch(/<th>G\. B<\/th>/);
+    expect(html).not.toMatch(/<th><strong>G\. B<\/strong><\/th>/);
+    // Opening scaffold stays regular.
+    expect(html).toMatch(
+      /<td>Gall bladder is normal in physiological distension\. <strong>/,
+    );
+    expect(html).toMatch(/<strong>[^<]*suggestive of calculus[^<]*<\/strong>/);
+    expect(html).not.toMatch(/<strong>Wall thickness is normal/);
+    expect(html).not.toMatch(
+      /<td><strong>Gall bladder is normal in physiological distension[\s\S]*Murphy/,
+    );
+  });
+
+  test("SPLEEN — enlarged claim bold; normal morphology / no SOL plain", () => {
+    let state = initialState("wa-female");
+    state = applyPathology(state, "spleen", "spleen-splenomegaly", lookup);
+    const html = buildUsgReportHtml(
+      SETTINGS,
+      patient,
+      resolve(state, lookup, "Routine transabdominal scan."),
+    );
+    expect(html).toMatch(/<th>SPLEEN<\/th>/);
+    expect(html).not.toMatch(/<th><strong>SPLEEN<\/strong><\/th>/);
+    expect(html).toMatch(/<strong>[^<]*Spleen is enlarged[^<]*<\/strong>/);
+    expect(html).not.toMatch(/<strong>Appears normal in morphology/);
+    expect(html).not.toMatch(/<strong>No evidence of focal lesion/);
+  });
+
+  test("multi-organ report — each organ bolds only its own abnormal sentences", () => {
+    let state = initialState("wa-female");
+    state = applyPathology(state, "liver", "liver-fatty-g1", lookup);
+    state = applyPathology(state, "gb", "gb-calculus", lookup);
+    state = applyPathology(state, "spleen", "spleen-splenomegaly-nosize", lookup);
+    const html = buildUsgReportHtml(
+      SETTINGS,
+      patient,
+      resolve(state, lookup, "Routine transabdominal scan."),
+    );
+    expect(html).toMatch(/<strong>[^<]*Grade I Fatty Changes[^<]*<\/strong>/);
+    expect(html).toMatch(/<strong>[^<]*suggestive of calculus[^<]*<\/strong>/);
+    expect(html).toMatch(/<strong>[^<]*Spleen is enlarged[^<]*<\/strong>/);
+    // No whole-organ strong wrappers.
+    expect(html).not.toMatch(/<th><strong>/);
+    expect(html).not.toMatch(/<strong>Liver measures/);
+    expect(html).not.toMatch(/<strong>Gall bladder is normal in physiological distension/);
   });
 });
 

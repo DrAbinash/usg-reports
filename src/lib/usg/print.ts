@@ -294,8 +294,8 @@ function renderSections(resolved: UsgResolved): string {
         parts.push(gridSectionHtml(s));
       }
     } else {
-      // Bold only abnormal finding sentences — not the organ label or
-      // neutral measure / scaffold lines ("Liver measures … cm.").
+      // Every organ: bold only abnormal finding sentences — never the organ
+      // label or neutral measure / scaffold lines ("… measures … cm.").
       const textHtml = formatFindingsBodyHtml(s.text, {
         abnormal: s.abnormal,
         normalText: s.normalText,

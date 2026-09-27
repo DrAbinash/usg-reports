@@ -1,10 +1,11 @@
 /**
- * Line/sentence-level bolding for abnormal organ findings.
+ * Line/sentence-level bolding for abnormal organ findings (every organ).
  *
- * When a pathology chip is selected, the organ section is marked abnormal —
+ * When any pathology chip is selected, that organ section is marked abnormal —
  * but only the sentences that actually state the abnormality should print
- * bold. Neutral scaffold / measurement lines ("Liver measures … cm.") stay
- * regular weight.
+ * bold. Neutral scaffold / measurement lines ("… measures … cm.") stay
+ * regular weight. Applies to liver, GB, kidneys, spleen, uterus, etc. —
+ * not a liver-only special case.
  */
 
 /** Collapse tokens / blanks so pathology text can be compared to the organ normal. */
@@ -36,16 +37,20 @@ export function isNeutralMeasurementSentence(sentence: string): boolean {
 }
 
 /** Split a paragraph into sentences, keeping trailing whitespace on each piece.
- *  Decimal measurements (`14.8 cm`) must not be treated as sentence boundaries. */
+ *  Decimal measurements (`14.8 cm`) and dotted abbreviations (`S.O.L`) must not
+ *  be treated as sentence boundaries. */
 export function splitFindingSentences(paragraph: string): string[] {
   if (!paragraph) return [];
-  // Shield digit.digit so "14.8 cm" stays one sentence.
   const shielded: string[] = [];
-  const protectedText = paragraph.replace(/(\d)\.(\d)/g, (_, a: string, b: string) => {
+  const shield = (raw: string) => {
     const token = `\uE000${shielded.length}\uE001`;
-    shielded.push(`${a}.${b}`);
+    shielded.push(raw);
     return token;
-  });
+  };
+  // Shield digit.digit and dotted initialisms (S.O.L / S.O.L.).
+  const protectedText = paragraph
+    .replace(/(\d)\.(\d)/g, (_, a: string, b: string) => shield(`${a}.${b}`))
+    .replace(/\b(?:[A-Za-z]\.){2,}[A-Za-z]?\.?/g, (m) => shield(m));
   const parts = protectedText.match(/[^.!?]+(?:[.!?]+(?:\s+|$)|$)/g);
   if (!parts || !parts.length) return paragraph.trim() ? [paragraph] : [];
   return parts.map((p) =>
@@ -71,6 +76,14 @@ export function isBaselineFindingSentence(sentence: string, normalText: string):
   const norms = baselineNormals(normalText);
   const n = normalizeFindingSentence(core);
   if (n && norms.has(n)) return true;
+  // Pathology wording often drops the organ name prefix
+  // ("Spleen appears…" → "Appears…") — treat as scaffold when it's a
+  // suffix/prefix of a normal sentence.
+  if (n) {
+    for (const nn of norms) {
+      if (nn.endsWith(` ${n}`) || n.endsWith(` ${nn}`)) return true;
+    }
+  }
   if (isNeutralMeasurementSentence(core)) return true;
   return false;
 }

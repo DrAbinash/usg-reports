@@ -234,7 +234,7 @@ export async function updateSettings(patch: SettingsUpdate) {
     "usgDoctorName", "usgDoctorQual", "usgDoctorRegNo", "usgMachineLine",
     "usgDoctorBirthday",
     "usgFooterLine", "usgDeclarationLine", "usgPrintStyle",
-    "usgPrintPaper", "usgSignatureUrl", "usgPrintSpacing",
+    "usgPrintPaper", "usgPrintBodyFit", "usgSignatureUrl", "usgPrintSpacing",
     "usgSidebarPosition", "usgLogoPosition", "usgAddressPosition", "usgPrintFontFamily",
     // v6 integrations (URLs only — keys go through SECRET_FIELDS below)
     "careApiBase", "orthancUrl", "orthancUsername",
@@ -304,6 +304,10 @@ export async function updateSettings(patch: SettingsUpdate) {
     data.usgPrintCompact = !/^(0|false|off|no)$/i.test(patch.usgPrintCompact.trim());
   } else if (typeof patch.usgPrintCompact === "boolean") {
     data.usgPrintCompact = patch.usgPrintCompact;
+  }
+  // Clinical-body fit: one_page (default) | multi.
+  if (typeof patch.usgPrintBodyFit === "string") {
+    data.usgPrintBodyFit = patch.usgPrintBodyFit.trim() === "multi" ? "multi" : "one_page";
   }
   // v6.2 print fine-tuning — the numeric dials arrive as strings from the
   // sliders and are clamped so a stray value can never wreck the letterhead.

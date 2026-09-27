@@ -18,9 +18,12 @@
  *   • body font size + line-height dials (gaps between lines);
  *   • section-gap preset — tight / normal / relaxed;
  *   • Technique band and "Thanks For Your Referral." tagline toggles;
- *   • the trailing block (signature + PC-PNDT + declaration + footer) moves
- *     to a new page as ONE unit with tighter default gaps — a report that
- *     is close to fitting no longer strands a lone signature on page two.
+ *   • the trailing block (signature + PC-PNDT + declaration + footer) stays
+ *     with the clinical narrative as ONE unbreakable unit;
+ *   • USG stills print on a following appendix page so findings stay readable
+ *     at full size (no auto-zoom shrink-to-fit that crushes long reports).
+ *   • letterpad screen preview can omit letterhead chrome and show only a
+ *     one-line demography strip above Findings.
  *
  * Register & legal discipline:
  *   • a USG serial number cell (USG-0001 from the sequential register);
@@ -72,6 +75,13 @@ export type UsgPrintSettings = {
   usgPrintStyle?: string;
   /** Compact density — smaller type + tighter spacing for long reports. */
   usgPrintCompact?: boolean;
+  /**
+   * Clinical-body pagination on A4:
+   *   • "one_page" (default) — pack letterhead + findings + impression + advice
+   *     onto one A4; stills stay on a following appendix page.
+   *   • "multi" — comfortable multi-page flow for long studies.
+   */
+  usgPrintBodyFit?: string;
   /** "a4" (default) or "a5" — half-sheet print for short studies. */
   usgPrintPaper?: string;
   /** Scanned signature image (URL/data-URL) printed above the name line. */
@@ -153,6 +163,7 @@ export function toUsgPrintSettings(s: Record<string, unknown> | UsgPrintSettings
     usgDeclarationLine: str(r.usgDeclarationLine),
     usgPrintStyle: str(r.usgPrintStyle, "premium") || "premium",
     usgPrintCompact: bool(r.usgPrintCompact, false),
+    usgPrintBodyFit: str(r.usgPrintBodyFit, "one_page") === "multi" ? "multi" : "one_page",
     usgPrintPaper: str(r.usgPrintPaper, "a4") || "a4",
     usgSignatureUrl: str(r.usgSignatureUrl),
     usgPrintFontSize: num(r.usgPrintFontSize),
@@ -509,6 +520,42 @@ const COMPACT_CSS = `
   .footer { margin-top: 12px; }
 `;
 
+/** Pack letterhead + findings + impression + advice onto one A4 (stills appendix). */
+const ONE_PAGE_BODY_CSS = `
+  @page { size: A4; margin: 8mm; }
+  body { font-size: 8.7pt; line-height: 1.28; }
+  .masthead { padding: 6px 10px; gap: 8px; border-radius: 8px; }
+  .logo-slot { width: 48px; height: 48px; border-radius: 8px; }
+  .masthead .hospital { font-size: 12.5pt; }
+  .masthead-addr { font-size: 6.5pt; line-height: 1.25; }
+  table.patient { margin-top: 4px; border-radius: 6px; font-size: 8pt; }
+  table.patient td { padding: 1.5px 6px; }
+  table.patient td.k { font-size: 6.5pt; }
+  .thanks { font-size: 8pt; margin: 2px 0 0; }
+  .study { margin-top: 2px; }
+  .study .name { font-size: 11pt; letter-spacing: 1.2px; }
+  .study .rule { margin: 3px 12px 0; height: 2.5px; }
+  .machine { font-size: 7.5pt; margin-top: 3px; }
+  h2.band { font-size: 8pt; letter-spacing: 1.2px; padding: 3px 9px; margin: 6px 0 3px; border-radius: 5px; }
+  p.technique { margin: 1.5px 0; }
+  table.organs th { font-size: 7pt; width: 18mm; padding: 2px 5px 2px 0; }
+  table.organs td { padding: 2px 0; }
+  .impression-box { padding: 5px 10px; margin-top: 1px; }
+  .impression-box li { margin: 1.5px 0; font-size: 8.5pt; }
+  .advice-box { margin-top: 4px; }
+  .advice-box .advice-h { font-size: 8pt; margin-bottom: 1px; }
+  .advice-box p, .suggestions p { margin: 1.5px 0; font-size: 8pt; }
+  .sig-block { margin-top: 8px; }
+  .sig .line { height: 10px; margin-bottom: 3px; }
+  .sig-img { height: 12mm; }
+  .sig .name { font-size: 10pt; }
+  .sig .sub { font-size: 7.5pt; }
+  .declaration { margin-top: 6px; font-size: 7pt; padding: 4px 7px; }
+  .pcpndt { margin-top: 6px; padding: 5px 8px; }
+  .footer { margin-top: 6px; padding-top: 3px; font-size: 7pt; }
+  .tail { margin-top: 6px; }
+`;
+
 /** A5 half-sheet — the full report scaled onto 148 × 210 mm stock. Applied
  *  AFTER the style sheet so both premium and classic shrink consistently. */
 const A5_CSS = `
@@ -606,11 +653,12 @@ const TAIL_CSS = `
 
 /**
  * Shared print patches appended after every letterhead's `<style>` block:
- * force left-aligned body text, unpin absolute signature fossils, and
- * auto-zoom oversized sheets to one printable page height.
+ * force left-aligned body text and unpin absolute signature fossils.
+ * Do NOT auto-zoom to one page — shrinking long WA reports with stills made
+ * findings unreadable and still orphaned the signature on page 2.
  * Byte-identical across classic / premium / sidebar generators.
  */
-const PRINT_CSS = `<style id="usg-justify-kill">p, li, td, th, div, span, .organ-body, .ob-body, .pbody { text-align: left !important; hyphens: none !important; word-spacing: normal !important; letter-spacing: normal !important; }</style><style id="usg-study-center">.study,.study .name,.machine{text-align:center !important;}.thanks{text-align:left !important;}</style><style id="usg-sig-fit">.signature-block,.sig-wrap,.sig-pin{position:static !important;bottom:auto !important;right:auto !important;transform:none !important;}</style><script>window.addEventListener("beforeprint",function(){var mm=277/25.4*96;var h=document.body.scrollHeight;if(h>mm){document.body.style.zoom=(mm/h).toFixed(3);}});</script>`;
+const PRINT_CSS = `<style id="usg-justify-kill">p, li, td, th, div, span, .organ-body, .ob-body, .pbody { text-align: left !important; hyphens: none !important; word-spacing: normal !important; letter-spacing: normal !important; }</style><style id="usg-study-center">.study,.study .name,.machine{text-align:center !important;}.thanks{text-align:left !important;}</style><style id="usg-sig-fit">.signature-block,.sig-wrap,.sig-pin{position:static !important;bottom:auto !important;right:auto !important;transform:none !important;}</style>`;
 
 /** Clamp a numeric setting to a safe range (bad/absent values fall back). */
 function clampNum(v: unknown, min: number, max: number, dflt: number): number {
@@ -743,28 +791,45 @@ function renderMasthead(settings: UsgPrintSettings, classic: boolean): string {
   </div>`;
 }
 
+/** Options for {@link buildUsgReportHtml}. */
+export type BuildUsgReportHtmlOpts = {
+  /**
+   * Screen letterpad under OHIF — thin demography strip only (no masthead,
+   * thanks, study title, machine, or technique) so Findings fit in one glance.
+   * Print / finalize / PDF must omit this flag.
+   */
+  preview?: boolean;
+};
+
 export function buildUsgReportHtml(
   settings: UsgPrintSettings,
   patient: UsgPrintPatient,
   resolved: UsgResolved,
   images: UsgPrintImage[] = [],
   qr?: UsgPrintQr | null,
+  opts?: BuildUsgReportHtmlOpts,
 ): string {
-  // v6.7 — route to the two-column sidebar layout when selected
-  if (settings.usgPrintStyle === "premium_sidebar") {
+  const preview = opts?.preview === true;
+  // v6.7 — route to the two-column sidebar layout when selected (print only;
+  // letterpad preview always uses the compact single-column strip).
+  if (!preview && settings.usgPrintStyle === "premium_sidebar") {
     return buildSidebarReportHtml(settings, patient, resolved, images, qr);
   }
 
   const classic = settings.usgPrintStyle === "classic";
-  const preprinted = settings.usgPrintStyle === "preprinted";
+  const preprinted = !preview && settings.usgPrintStyle === "preprinted";
   const compact = settings.usgPrintCompact === true;
   const a5 = settings.usgPrintPaper === "a5";
+  // Default one_page — CARE WA reports pack clinical body onto a single A4.
+  const fitOnePage = !a5 && settings.usgPrintBodyFit !== "multi";
   const provisional = patient.provisional === true;
   // v6.2 dials: the Technique band and referral tagline are switchable.
   // Section bands are unnumbered — short reports (Findings + Impression) read cleaner.
-  const showTechnique = settings.usgPrintShowTechnique !== false && !!resolved.technique?.trim();
-  const showThanks = settings.usgPrintShowThanks !== false;
-  const logoMm = clampNum(settings.usgLogoSizeMm, 8, 30, 18);
+  // Preview strips chrome above Findings — technique / thanks never show there.
+  const showTechnique =
+    !preview && settings.usgPrintShowTechnique !== false && !!resolved.technique?.trim();
+  const showThanks = !preview && settings.usgPrintShowThanks !== false;
+  const logoMm = clampNum(settings.usgLogoSizeMm, 8, 30, fitOnePage ? 12 : 18);
   // Convert mm → CSS px (~3.78 px/mm) for the white logo slot so the dial fills it.
   const logoBoxPx = Math.round(logoMm * 3.78);
   const css =
@@ -772,7 +837,8 @@ export function buildUsgReportHtml(
     SIGNATURE_CSS +
     TAIL_CSS +
     (a5 ? A5_CSS : "") +
-    (compact ? COMPACT_CSS : "") +
+    (compact || fitOnePage ? COMPACT_CSS : "") +
+    (fitOnePage ? ONE_PAGE_BODY_CSS : "") +
     tuningCss(settings, a5) +
     (provisional ? (classic ? PROVISIONAL_CSS_CLASSIC : PROVISIONAL_CSS) : "") +
     (preprinted
@@ -782,7 +848,7 @@ export function buildUsgReportHtml(
 
   const resolvedMachine = resolveMachineLine(settings);
   const machineLine =
-    settings.usgShowMachine && resolvedMachine
+    !preview && settings.usgShowMachine && resolvedMachine
       ? `<p class="machine">${esc(resolvedMachine)}</p>`
       : "";
 
@@ -801,17 +867,18 @@ export function buildUsgReportHtml(
 
   const sectionsHtml = renderSections(resolved);
 
-  // Machine stills — 2-up grid with captions, printed after the findings.
-  const imagesHtml = images.length
-    ? `<div class="images-grid">${images
-        .map(
-          (img) =>
-            `<figure class="img-cell"><img src="${esc(img.dataUrl)}" alt="USG still" /><figcaption>${esc(img.caption ?? "")}</figcaption></figure>`,
-        )
-        .join("")}</div>`
-    : "";
-  const imagesBand = images.length
-    ? `<h2 class="band">USG Images</h2>`
+  // Machine stills — 2-up grid on a dedicated appendix page after the
+  // signature so findings + impression stay full-size and readable.
+  const imagesAppendix = images.length
+    ? `<div class="images-appendix">
+  <h2 class="band">USG Images</h2>
+  <div class="images-grid">${images
+    .map(
+      (img) =>
+        `<figure class="img-cell"><img src="${esc(img.dataUrl)}" alt="USG still" /><figcaption>${esc(img.caption ?? "")}</figcaption></figure>`,
+    )
+    .join("")}</div>
+</div>`
     : "";
 
   const impressionHtml = resolved.impression.length
@@ -847,33 +914,15 @@ export function buildUsgReportHtml(
 
   const serial = patient.serial?.trim();
 
-  return `<!DOCTYPE html>
-<html><head><meta charset="utf-8" />
-<title>${esc(clinicDisplayName(settings))} — ${esc(patient.name)} — ${esc(resolved.title)}</title>
-<style>${css}
-/* Flow layout for signature / PC-PNDT / footer — never pin to page-1 bottom
-   so long reports push the tail cleanly onto page 2 as one unit. */
-.tail { page-break-inside: avoid; break-inside: avoid; margin-top: 12px; }
-.sig-block { page-break-inside: avoid; break-inside: avoid; }
-
-/* Two-line demography strip */
-.patient-strip { display: flex; flex-direction: column; gap: 4px; margin: 4mm 0 3mm; }
-.strip-row { display: flex; justify-content: space-between; align-items: center; }
-.strip-row .field { flex: 1; display: flex; justify-content: space-between; align-items: baseline; }
-.strip-row .field:first-child { padding-right: 8mm; }
-.strip-row .label { font-size: 8.5pt; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
-.strip-row .value { font-size: 9.5pt; font-weight: 500; text-align: right; }
-.strip-row .field:first-child .value { text-align: left; }
-
-/* Honour size dials */
-.top-bar .logo-block img { height: var(--logo-h, 14mm); }
-.top-bar .logo-block .hospital-name { font-size: var(--name-fs, 15pt); }
-.top-bar .contact-block { font-size: var(--addr-fs, 8.5pt); }
-</style>${PRINT_CSS}</head>
-<body>
-${watermark}
-<div class="sheet">
-  ${preprinted ? `<div class="letterpad-reserve" aria-hidden="true"></div>` : renderMasthead(settings, classic)}
+  const chromeHtml = preview
+    ? `<div class="demo-strip" data-testid="letterpad-demo-strip">
+    <span><span class="lbl">Name</span><span class="n">${esc(patient.name || "—")}</span></span>
+    <span class="sep" aria-hidden="true">·</span>
+    <span><span class="lbl">Age/Sex</span>${esc(patient.age || "—")} / ${esc(patient.sex || "—")}</span>
+    <span class="sep" aria-hidden="true">·</span>
+    <span><span class="lbl">Refd by</span>${esc(patient.referredBy || "—")}</span>
+  </div>`
+    : `${preprinted ? `<div class="letterpad-reserve" aria-hidden="true"></div>` : renderMasthead(settings, classic)}
   ${provisionalTag}
 
   <table class="patient">
@@ -898,13 +947,55 @@ ${watermark}
   ${machineLine}
 
   ${showTechnique ? `<h2 class="band">Technique</h2>
-  <p class="technique">${esc(resolved.technique).replace(/\n/g, "<br/>")}</p>` : ""}
+  <p class="technique">${esc(resolved.technique).replace(/\n/g, "<br/>")}</p>` : ""}`;
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8" />
+<title>${esc(clinicDisplayName(settings))} — ${esc(patient.name)} — ${esc(resolved.title)}</title>
+<style>${css}
+/* Flow layout for signature / PC-PNDT / footer — never pin to page-1 bottom
+   so long reports push the tail cleanly onto page 2 as one unit. */
+.tail { page-break-inside: avoid; break-inside: avoid; margin-top: 12px; }
+.sig-block { page-break-inside: avoid; break-inside: avoid; }
+
+/* Stills appendix — own A4 page after the signed report body. */
+.images-appendix { page-break-before: always; break-before: page; margin-top: 0; }
+.images-appendix .img-cell img { max-height: 72mm; }
+
+/* Letterpad preview — one-line demography strip above Findings. */
+.demo-strip {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px;
+  font-size: 8.5pt; line-height: 1.3; padding: 2px 0 5px; margin: 0 0 2px;
+  border-bottom: 1px solid #AFCDE8; color: #16222E;
+}
+.demo-strip .lbl {
+  font-size: 7pt; font-weight: 700; color: #61788C; text-transform: uppercase;
+  letter-spacing: 0.4px; margin-right: 3px;
+}
+.demo-strip .n { font-weight: 800; }
+.demo-strip .sep { color: #AFCDE8; font-weight: 400; }
+
+/* Two-line demography strip */
+.patient-strip { display: flex; flex-direction: column; gap: 4px; margin: 4mm 0 3mm; }
+.strip-row { display: flex; justify-content: space-between; align-items: center; }
+.strip-row .field { flex: 1; display: flex; justify-content: space-between; align-items: baseline; }
+.strip-row .field:first-child { padding-right: 8mm; }
+.strip-row .label { font-size: 8.5pt; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
+.strip-row .value { font-size: 9.5pt; font-weight: 500; text-align: right; }
+.strip-row .field:first-child .value { text-align: left; }
+
+/* Honour size dials */
+.top-bar .logo-block img { height: var(--logo-h, 14mm); }
+.top-bar .logo-block .hospital-name { font-size: var(--name-fs, 15pt); }
+.top-bar .contact-block { font-size: var(--addr-fs, 8.5pt); }
+</style>${PRINT_CSS}</head>
+<body>
+${watermark}
+<div class="sheet">
+  ${chromeHtml}
 
   <h2 class="band">Findings</h2>
   ${sectionsHtml}
-
-  ${imagesBand}
-  ${imagesHtml}
 
   <h2 class="band">Impression</h2>
   ${impressionHtml}
@@ -927,6 +1018,8 @@ ${watermark}
     <span>${esc(clinicDisplayName(settings))}</span>
   </div>
   </div>
+
+  ${imagesAppendix}
 </div>
 </body></html>`;
 }

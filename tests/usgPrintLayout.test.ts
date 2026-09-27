@@ -239,9 +239,78 @@ describe("signature never spills alone — the tail block", () => {
   });
 
   test("default trailing gaps are the tighter v6.2 values", () => {
-    const html = buildUsgReportHtml(BASE_SETTINGS, PATIENT, resolvedReport());
+    // multi-page mode keeps the classic 16px sig gap; one_page densifies further.
+    const html = buildUsgReportHtml(
+      { ...BASE_SETTINGS, usgPrintBodyFit: "multi" },
+      PATIENT,
+      resolvedReport(),
+    );
     expect(html).toContain(".sig-block { margin-top: 16px;");
     expect(html).not.toContain(".sig-block { margin-top: 30px;");
+  });
+});
+
+describe("clinical body fit — one A4 vs multi-page", () => {
+  test("one_page (default) densifies CSS and keeps stills as appendix after the tail", () => {
+    const html = buildUsgReportHtml(BASE_SETTINGS, PATIENT, resolvedReport(), [
+      { dataUrl: "data:image/png;base64,AAAA", caption: "liver" },
+    ]);
+    expect(html).toContain("font-size: 8.7pt");
+    expect(html).toContain("images-appendix");
+    expect(html).not.toContain("beforeprint");
+    const body = html.split("<body>")[1] ?? "";
+    expect(body.indexOf("Findings")).toBeLessThan(body.indexOf("Impression"));
+    expect(body.indexOf('class="tail"')).toBeLessThan(body.indexOf("images-appendix"));
+  });
+
+  test("multi skips one-page density CSS", () => {
+    const html = buildUsgReportHtml(
+      { ...BASE_SETTINGS, usgPrintBodyFit: "multi" },
+      PATIENT,
+      resolvedReport(),
+    );
+    expect(html).not.toContain("font-size: 8.7pt");
+    expect(html).toContain("images-appendix");
+  });
+
+  test("letterpad preview is demography strip only — no letterhead chrome", () => {
+    const html = buildUsgReportHtml(BASE_SETTINGS, PATIENT, resolvedReport(), [], null, {
+      preview: true,
+    });
+    expect(html).toContain('data-testid="letterpad-demo-strip"');
+    expect(html).not.toContain('class="masthead"');
+    expect(html).not.toContain("Thanks For Your Referral");
+    expect(html).toContain(">Findings</h2>");
+  });
+
+  test("PDF one_page is denser than multi (fewer pages for WA + stills)", async () => {
+    const png =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mNk+M9Qz0AEYBxVSF+FABJADveWkH6oAAAAAElFTkSuQmCC";
+    const images = [
+      { dataUrl: png, caption: "a" },
+      { dataUrl: png, caption: "b" },
+    ];
+    const one = await buildUsgReportPdf({
+      settings: { ...BASE_SETTINGS, usgPrintBodyFit: "one_page", usgPrintSpacing: "tight" },
+      patient: PATIENT,
+      resolved: resolvedReport(),
+      images,
+    });
+    const multi = await buildUsgReportPdf({
+      settings: { ...BASE_SETTINGS, usgPrintBodyFit: "multi", usgPrintSpacing: "relaxed" },
+      patient: PATIENT,
+      resolved: resolvedReport(),
+      images,
+    });
+    const oneDoc = await PDFDocument.load(one);
+    const multiDoc = await PDFDocument.load(multi);
+    // one_page: clinical body + images appendix → 2 pages for typical WA
+    expect(oneDoc.getPageCount()).toBe(2);
+    expect(multiDoc.getPageCount()).toBeGreaterThanOrEqual(oneDoc.getPageCount());
+    const raw = await pdfText(Promise.resolve(one));
+    expect(raw).toContain(hex("FINDINGS"));
+    expect(raw).toContain(hex("IMPRESSION"));
+    expect(raw).toContain(hex("USG IMAGES"));
   });
 });
 

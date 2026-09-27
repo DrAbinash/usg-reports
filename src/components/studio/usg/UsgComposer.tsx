@@ -450,25 +450,47 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     toast.success("Local draft restored");
   };
 
+  const printPatient = useMemo(
+    () => ({
+      name: patientName || "—",
+      age: patientAge,
+      sex: patientSex === USG_SEX_CHILD ? "Child" : patientSex,
+      referredBy,
+      date: fmtPrintDate(scanDate),
+      serial,
+      // Draft discipline: an unfinalized sheet prints watermarked so it
+      // can never be filed as the record by mistake.
+      provisional: !isFinal,
+    }),
+    [patientName, patientAge, patientSex, referredBy, scanDate, serial, isFinal],
+  );
+  const printImages = useMemo(
+    () => [...images, ...pendingImages].map((i) => ({ dataUrl: i.dataUrl, caption: i.caption })),
+    [images, pendingImages],
+  );
+  // Letterpad under OHIF — demography strip only so Findings fit in one glance.
   const previewHtml = useMemo(
     () =>
       buildUsgReportHtml(
         { ...settings, usgPrintPaper: settings.usgPrintPaper ?? "a4" },
-        {
-          name: patientName || "—",
-          age: patientAge,
-          sex: patientSex === USG_SEX_CHILD ? "Child" : patientSex,
-          referredBy,
-          date: fmtPrintDate(scanDate),
-          serial,
-          // Draft discipline: an unfinalized sheet prints watermarked so it
-          // can never be filed as the record by mistake.
-          provisional: !isFinal,
-        },
+        printPatient,
         resolved,
-        [...images, ...pendingImages].map((i) => ({ dataUrl: i.dataUrl, caption: i.caption })),
+        printImages,
+        null,
+        { preview: true },
       ),
-    [settings, patientName, patientAge, patientSex, referredBy, scanDate, serial, resolved, isFinal, images, pendingImages],
+    [settings, printPatient, resolved, printImages],
+  );
+  // Full letterhead for draft Print — finalize freezes its own server HTML.
+  const printHtml = useMemo(
+    () =>
+      buildUsgReportHtml(
+        { ...settings, usgPrintPaper: settings.usgPrintPaper ?? "a4" },
+        printPatient,
+        resolved,
+        printImages,
+      ),
+    [settings, printPatient, resolved, printImages],
   );
   // Debounce iframe srcDoc + share the same 400 ms window as autosave (Ctrl+S stays immediate).
   const [debouncedPreviewHtml, setDebouncedPreviewHtml] = useState(previewHtml);
@@ -601,7 +623,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         frozenHtmlRef,
         savedIdRef,
         printRef,
-        previewHtml,
+        printHtml,
         persist,
       }),
   });

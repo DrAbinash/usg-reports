@@ -94,8 +94,9 @@ describe("print embeds the stills grid", () => {
     expect(html.match(/<figure class="img-cell">/g)?.length).toBe(2);
     expect(html).toContain("Longitudinal view");
     expect(html).toContain('alt="USG still"');
-    // Section bands stay unnumbered even when images insert between Findings / Impression
+    // Stills appendix after the signed body — Impression stays unnumbered.
     expect(html).toContain('<h2 class="band">Impression</h2>');
+    expect(html).toContain("images-appendix");
     expect(html).not.toMatch(/<span class="n">\d+<\/span>/);
   });
 

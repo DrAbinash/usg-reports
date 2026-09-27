@@ -416,9 +416,8 @@ export function printInIframe(printRef: React.RefObject<HTMLIFrameElement | null
     toast.error("Print frame missing — reload the page");
     return;
   }
-  // CRITICAL: the off-screen print iframe used to be 1×1px. The shared
-  // beforeprint auto-zoom then measured a huge wrapped scrollHeight and
-  // shrunk the A4 report to a postage stamp. Size to real A4 before print.
+  // Size the off-screen print iframe to real A4 so layout/pagination matches
+  // a physical sheet (a 1×1px frame used to collapse the flow).
   const prev = {
     width: frame.style.width,
     height: frame.style.height,
@@ -504,7 +503,8 @@ export async function printReport(opts: {
   frozenHtmlRef: React.MutableRefObject<string | null>;
   savedIdRef: React.MutableRefObject<string | null>;
   printRef: React.RefObject<HTMLIFrameElement | null>;
-  previewHtml: string;
+  /** Full letterhead HTML for draft print (letterpad preview uses a compact strip). */
+  printHtml: string;
   persist: (status: "" | "finalize") => Promise<string | null>;
 }) {
   if (!opts.patientName.trim()) {
@@ -533,12 +533,12 @@ export async function printReport(opts: {
       return;
     }
 
-    // Draft — always print the live letterpad HTML (what the doctor sees).
+    // Draft — full letterhead (not the compact letterpad preview strip).
     // Ignore any stale frozenHtmlRef left over from a prior session.
     opts.frozenHtmlRef.current = null;
     const id = await opts.persist("");
     if (id) {
-      printInIframe(opts.printRef, opts.previewHtml);
+      printInIframe(opts.printRef, opts.printHtml);
     }
   } finally {
     opts.setBusy("");

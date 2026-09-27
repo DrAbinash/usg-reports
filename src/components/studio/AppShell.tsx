@@ -66,16 +66,6 @@ export function AppShell() {
         return ((await res.json()).patients ?? []) as unknown[];
       },
     });
-    // Warm studio essentials so worklist → composer open is instant.
-    void queryClient.prefetchQuery({
-      queryKey: ["usg", "settings"],
-      queryFn: async () => {
-        const sRes = await fetch("/api/settings");
-        if (!sRes.ok) throw new Error("settings");
-        return sRes.json();
-      },
-      staleTime: 60_000,
-    });
     void queryClient.prefetchQuery({
       queryKey: ["usg", "pathologies"],
       queryFn: async () => {

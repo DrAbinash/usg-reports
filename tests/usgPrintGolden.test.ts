@@ -4,7 +4,8 @@
  * Golden HTML snapshots for the USG print letterhead (8 cases).
  * Baselines 1–3 (classic / premium / sidebar) are the original fossil referees.
  * Baselines 04–08 were added deliberately via scripts/generateMissingBaselines.ts
- * (throwaway) — never regenerate with `vitest -u`.
+ * (throwaway). Sentence-level abnormal bolding was rewritten deliberately via
+ * scripts/rewrite-abnormal-bold-goldens.ts — never regenerate with `vitest -u`.
  */
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { buildUsgReportHtml } from "@/lib/usg/print";
@@ -53,7 +54,8 @@ const REF_MS = Date.parse("2026-09-01T12:00:00.000Z");
 const lookup = makeLookup(USG_PATHOLOGIES_ALL);
 
 function resolved() {
-  // Fatty Gr I selected → liver section is abnormal (must print bold / <strong>).
+  // Fatty Gr I selected → only the fatty-change sentence prints bold (<strong>),
+  // not the organ label or neutral measure / scaffold lines.
   const state = applyPathology(initialState("wa-female"), "liver", "liver-fatty-g1", lookup);
   return resolve(state, lookup, "Routine transabdominal scan.");
 }

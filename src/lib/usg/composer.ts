@@ -479,6 +479,7 @@ export function resolve(
         text: prose,
         kind: "grid",
         abnormal: chipAbnormal || scoreAbnormal,
+        normalText: def.normal,
         grid: {
           columns: def.grid.columns,
           rows: o.rows,
@@ -494,6 +495,7 @@ export function resolve(
         text,
         kind: def.kind === "grid" ? "rows" : def.kind,
         abnormal: selectedPathologies(o).length > 0,
+        normalText: def.normal,
       });
     }
 

@@ -209,6 +209,8 @@ export type UsgResolved = {
     kind?: "rows" | "table" | "grid";
     /** True when a non-normal pathology chip (or non-normal grid score) is selected. */
     abnormal?: boolean;
+    /** Organ normal scaffold — used to bold only abnormal sentences on print. */
+    normalText?: string;
     /** Structured grid payload for print (BPP etc.). */
     grid?: {
       columns: UsgGridColumn[];

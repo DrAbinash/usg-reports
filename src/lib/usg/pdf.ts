@@ -15,6 +15,7 @@ import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFP
 import type { UsgResolved } from "./types";
 import { clinicDisplayName, clinicFooterText } from "./branding";
 import { mastheadAddressLines, resolveMachineLine, type UsgPrintSettings, type UsgPrintImage } from "./print";
+import { segmentAbnormalFindings } from "./abnormalBold";
 
 export type UsgPrintPatient = {
   name: string;
@@ -278,17 +279,41 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
   // ── Findings ──────────────────────────────────────────────────────────
   section("Findings");
   const labelW = a5 ? 60 : 78;
+  const bodyW = contentW - labelW - 8;
   for (const s of resolved.sections) {
-    const bodyFont = s.abnormal ? fonts.bold : fonts.reg;
-    const lines = wrap(S(s.text), bodyFont, base, contentW - labelW - 8);
-    const blockH = Math.max(lines.length * lead, a5 ? 14 : 17);
+    // Sentence-level bold: only abnormal claims, not measure/scaffold lines.
+    const segs = s.abnormal
+      ? segmentAbnormalFindings(s.text, s.normalText ?? "")
+      : [{ text: s.text, bold: false as const }];
+    type DrawnLine = { text: string; bold: boolean };
+    const drawn: DrawnLine[] = [];
+    for (const seg of segs) {
+      if (/^\n+$/.test(seg.text)) {
+        drawn.push({ text: "", bold: false });
+        continue;
+      }
+      const font = seg.bold ? fonts.bold : fonts.reg;
+      for (const line of wrap(S(seg.text.trim()), font, base, bodyW)) {
+        drawn.push({ text: line, bold: seg.bold });
+      }
+    }
+    if (!drawn.length) drawn.push({ text: "", bold: false });
+    const blockH = Math.max(drawn.length * lead, a5 ? 14 : 17);
     if (ctx.y - blockH < ctx.margin + 30) {
       newPage(ctx);
     }
     ctx.page.drawText(S(s.label), { x: margin, y: ctx.y, size: a5 ? 6.5 : 7.5, font: fonts.bold, color: NAVY });
     let ly = ctx.y;
-    for (const line of lines) {
-      ctx.page.drawText(line, { x: margin + labelW, y: ly, size: base, font: bodyFont, color: INK });
+    for (const line of drawn) {
+      if (line.text) {
+        ctx.page.drawText(line.text, {
+          x: margin + labelW,
+          y: ly,
+          size: base,
+          font: line.bold ? fonts.bold : fonts.reg,
+          color: INK,
+        });
+      }
       ly -= lead;
     }
     ctx.y -= Math.max(blockH, a5 ? 14 : 17) + gap(a5 ? 2 : 3);

@@ -27,6 +27,7 @@ export const BACKUP_SETTINGS_KEYS = [
   "usgDeclarationLine",
   "usgPrintStyle",
   "usgPrintCompact",
+  "usgPrintBodyFit",
   "usgPrintPaper",
   "usgSignatureUrl",
   // v6.2 print fine-tuning dials (numbers are font size / line height)

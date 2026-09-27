@@ -3,8 +3,9 @@
  *
  * A real PDF (pdf-lib, vector text) mirroring the classic letterhead: hospital
  * header, patient strip, study title, technique, findings rows (word-wrapped),
- * stills grid, impression, suggestions, signature image + credentials,
- * declaration / PC-PNDT block and the verification QR. A4 or A5, paginated.
+ * impression, suggestions, signature image + credentials, declaration /
+ * PC-PNDT block, then stills on a following appendix page, plus the
+ * verification QR. A4 or A5, paginated.
  * Drafts carry the diagonal PROVISIONAL watermark, same as the HTML print.
  *
  * v6.2: honours the print fine-tuning dials (font size, line-height, section
@@ -115,18 +116,28 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
   const { settings, patient, resolved, images = [], qrPng } = input;
   const a5 = settings.usgPrintPaper === "a5";
   const compact = settings.usgPrintCompact === true;
+  // Default one_page — pack clinical body on a single A4; stills appendix after.
+  const fitOnePage = !a5 && settings.usgPrintBodyFit !== "multi";
 
   // v6.2 dials — same meaning as the HTML print, mapped into PDF points:
   //   font dial (HTML pt) → PDF body size (A4 ≈ 0.9×, A5 ≈ 0.81×, compact −1);
   //   line-height dial → wrapped-line leading (1.5 keeps the classic base+2.5);
   //   spacing preset scales the inter-section gaps (tight 0.6 / relaxed 1.5).
+  // one_page fit further densifies so WA findings + impression stay on sheet 1.
   const clampNum = (v: unknown, min: number, max: number, dflt: number): number => {
     const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
     return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : dflt;
   };
-  const fontDial = clampNum(settings.usgPrintFontSize, 8.5, 13, 10.5);
-  const lhDial = clampNum(settings.usgPrintLineHeight, 1.15, 1.9, 1.5);
-  const sp = settings.usgPrintSpacing === "tight" ? 0.6 : settings.usgPrintSpacing === "relaxed" ? 1.5 : 1;
+  const fontDial = clampNum(settings.usgPrintFontSize, 8.5, 13, fitOnePage ? 9.5 : 10.5);
+  const lhDial = clampNum(settings.usgPrintLineHeight, 1.15, 1.9, fitOnePage ? 1.25 : 1.5);
+  const sp =
+    fitOnePage
+      ? 0.45
+      : settings.usgPrintSpacing === "tight"
+        ? 0.6
+        : settings.usgPrintSpacing === "relaxed"
+          ? 1.5
+          : 1;
 
   const doc = await PDFDocument.create();
   doc.setTitle(`${S(patient.name)} — ${S(resolved.title)}`);
@@ -140,12 +151,12 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
 
   const pageW = a5 ? A5.w : A4.w;
   const pageH = a5 ? A5.h : A4.h;
-  const margin = a5 ? 26 : 40;
+  const margin = a5 ? 26 : fitOnePage ? 28 : 40;
   const contentW = pageW - margin * 2;
   let base = a5 ? fontDial * 0.81 : fontDial * 0.9;
-  if (compact) base -= 1;
-  const lead = Math.max(base + 1, base + 2.5 + (lhDial - 1.5) * 5);
-  const leadBold = Math.max(base + 1.5, base + 3 + (lhDial - 1.5) * 5);
+  if (compact || fitOnePage) base -= fitOnePage ? 1.2 : 1;
+  const lead = Math.max(base + 0.6, base + (fitOnePage ? 1.4 : 2.5) + (lhDial - 1.5) * 5);
+  const leadBold = Math.max(base + 1, base + (fitOnePage ? 1.8 : 3) + (lhDial - 1.5) * 5);
   const gap = (v: number) => v * sp;
 
   const first = doc.addPage([pageW, pageH]);
@@ -158,9 +169,9 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
   // physical pad (mirrors HTML `.letterpad-reserve`).
   const preprinted = settings.usgPrintStyle === "preprinted";
   const hospital = S(clinicDisplayName(settings));
-  const nameSize = clampNum(settings.usgNameSizePt, 10, 22, a5 ? 13 : 15);
-  const addrSize = clampNum(settings.usgAddressSizePt, 6, 12, a5 ? 6.5 : 8);
-  const logoSizeMm = clampNum(settings.usgLogoSizeMm, 8, 30, a5 ? 14 : 18);
+  const nameSize = clampNum(settings.usgNameSizePt, 10, 22, a5 ? 13 : fitOnePage ? 12 : 15);
+  const addrSize = clampNum(settings.usgAddressSizePt, 6, 12, a5 ? 6.5 : fitOnePage ? 7 : 8);
+  const logoSizeMm = clampNum(settings.usgLogoSizeMm, 8, 30, a5 ? 14 : fitOnePage ? 12 : 18);
   if (preprinted) {
     ctx.y -= a5 ? 70 : 108; // ~38mm letterpad reserve
   } else {
@@ -321,42 +332,26 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
   }
   ctx.y -= gap(6);
 
-  // ── Images ────────────────────────────────────────────────────────────
-  if (images.length) {
-    section("USG Images");
-    const cols = 2;
-    const gap = a5 ? 6 : 10;
-    const cellW = (contentW - gap) / cols;
-    const cellH = a5 ? 78 : 108;
-    let col = 0;
-    let rowTop = ctx.y;
-    for (const img of images) {
-      const image = await embedDataUrl(doc, img.dataUrl);
-      if (!image) continue;
-      if (col === 0) {
-        ensure(ctx, cellH + 14);
-        rowTop = ctx.y;
-      }
-      const x = margin + col * (cellW + gap);
-      const maxImgH = cellH - (a5 ? 10 : 12);
-      const scale = Math.min(cellW / image.width, maxImgH / image.height);
-      const w = image.width * scale;
-      const h = image.height * scale;
-      ctx.page.drawImage(image, { x: x + (cellW - w) / 2, y: rowTop - h, width: w, height: h });
-      if (img.caption) {
-        const cap = S(img.caption);
-        const cw = Math.min(fonts.reg.widthOfTextAtSize(cap, a5 ? 6 : 7), cellW);
-        ctx.page.drawText(cap.slice(0, 60), { x: x + (cellW - cw) / 2, y: rowTop - h - (a5 ? 7 : 9), size: a5 ? 6 : 7, font: fonts.reg, color: GREY });
-      }
-      ctx.page.drawRectangle({ x, y: rowTop - cellH, width: cellW, height: cellH, borderColor: LINE, borderWidth: 0.7 });
-      col++;
-      if (col === cols) {
-        col = 0;
-        ctx.y = rowTop - cellH - (a5 ? 8 : 12);
-      }
+  // ── Closing block (Impression + Advice + Signature) ───────────────────
+  // multi: reserve so the signed closing never lands alone on a blank page.
+  // one_page: stay on the current sheet — density above is sized to fit WA.
+  const doctor = S(settings.usgDoctorName?.trim() || "Sonologist");
+  if (!fitOnePage) {
+    let closingH = (a5 ? 12 : 15) + gap(7); // Impression band
+    for (const [i, line] of resolved.impression.entries()) {
+      const numbered = `${i + 1}. ${S(line)}`;
+      closingH += wrap(numbered, fonts.bold, base, contentW - 6).length * leadBold;
     }
-    if (col !== 0) ctx.y = rowTop - cellH - (a5 ? 8 : 12);
-    ctx.y -= 4;
+    closingH += gap(4);
+    if (resolved.suggestions.length) {
+      closingH += (a5 ? 12 : 15) + gap(7);
+      for (const s of resolved.suggestions) {
+        closingH += wrap(S(s), fonts.bold, base - (a5 ? 0.5 : 1), contentW).length * base;
+      }
+      closingH += 4;
+    }
+    closingH += a5 ? 55 : 75; // signature block
+    if (ctx.y - closingH < ctx.margin + 30) newPage(ctx);
   }
 
   // ── Impression ────────────────────────────────────────────────────────
@@ -384,29 +379,27 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
   }
 
   // ── Signature ─────────────────────────────────────────────────────────
-  ensure(ctx, a5 ? 55 : 75);
-  ctx.y -= a5 ? 12 : 16;
-  const doctor = S(settings.usgDoctorName?.trim() || "Sonologist");
-  const sigW = a5 ? 130 : 170;
+  ctx.y -= a5 ? 12 : fitOnePage ? 8 : 16;
+  const sigW = a5 ? 130 : fitOnePage ? 150 : 170;
   const sigX = pageW - margin - sigW;
   if (settings.usgSignatureUrl?.trim()) {
     const sig = await embedDataUrl(doc, settings.usgSignatureUrl.trim());
     if (sig) {
-      const h = a5 ? 20 : 26;
+      const h = a5 ? 20 : fitOnePage ? 18 : 26;
       const w = Math.min((sig.width / sig.height) * h, sigW);
       ctx.page.drawImage(sig, { x: sigX + (sigW - w) / 2, y: ctx.y, width: w, height: h });
-      ctx.y -= h + 4;
+      ctx.y -= h + 3;
     }
   } else {
-    ctx.y -= a5 ? 10 : 14;
+    ctx.y -= a5 ? 10 : fitOnePage ? 8 : 14;
   }
   ctx.page.drawLine({ start: { x: sigX, y: ctx.y }, end: { x: sigX + sigW, y: ctx.y }, thickness: 1.2, color: NAVY });
-  ctx.y -= a5 ? 10 : 12;
-  ctx.page.drawText(doctor, { x: sigX, y: ctx.y, size: a5 ? 8.5 : 10.5, font: fonts.bold, color: NAVY });
-  ctx.y -= a5 ? 9 : 11;
+  ctx.y -= a5 ? 10 : fitOnePage ? 9 : 12;
+  ctx.page.drawText(doctor, { x: sigX, y: ctx.y, size: a5 ? 8.5 : fitOnePage ? 9.5 : 10.5, font: fonts.bold, color: NAVY });
+  ctx.y -= a5 ? 9 : fitOnePage ? 8 : 11;
   for (const sub of [settings.usgDoctorQual, settings.usgDoctorRegNo ? `Reg. No: ${settings.usgDoctorRegNo}` : ""].filter(Boolean)) {
-    ctx.page.drawText(S(sub), { x: sigX, y: ctx.y, size: a5 ? 6.5 : 8, font: fonts.reg, color: GREY });
-    ctx.y -= a5 ? 8 : 10;
+    ctx.page.drawText(S(sub), { x: sigX, y: ctx.y, size: a5 ? 6.5 : fitOnePage ? 7 : 8, font: fonts.reg, color: GREY });
+    ctx.y -= a5 ? 8 : fitOnePage ? 7 : 10;
   }
 
   // ── PC-PNDT declaration (obstetric scans) ─────────────────────────────
@@ -434,6 +427,45 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
       ctx.page.drawText(l, { x: margin, y: ctx.y, size: a5 ? 6 : 7.5, font: fonts.reg, color: GREY });
       ctx.y -= a5 ? 7 : 9;
     }
+  }
+
+  // ── Images appendix (own page after the signed clinical body) ─────────
+  // Keeps findings readable at full size; stills no longer compete for page 1.
+  if (images.length) {
+    newPage(ctx);
+    section("USG Images");
+    const cols = 2;
+    const imgGap = a5 ? 6 : 10;
+    const cellW = (contentW - imgGap) / cols;
+    const cellH = a5 ? 90 : 120;
+    let col = 0;
+    let rowTop = ctx.y;
+    for (const img of images) {
+      const image = await embedDataUrl(doc, img.dataUrl);
+      if (!image) continue;
+      if (col === 0) {
+        ensure(ctx, cellH + 14);
+        rowTop = ctx.y;
+      }
+      const x = margin + col * (cellW + imgGap);
+      const maxImgH = cellH - (a5 ? 10 : 12);
+      const scale = Math.min(cellW / image.width, maxImgH / image.height);
+      const w = image.width * scale;
+      const h = image.height * scale;
+      ctx.page.drawImage(image, { x: x + (cellW - w) / 2, y: rowTop - h, width: w, height: h });
+      if (img.caption) {
+        const cap = S(img.caption);
+        const cw = Math.min(fonts.reg.widthOfTextAtSize(cap, a5 ? 6 : 7), cellW);
+        ctx.page.drawText(cap.slice(0, 60), { x: x + (cellW - cw) / 2, y: rowTop - h - (a5 ? 7 : 9), size: a5 ? 6 : 7, font: fonts.reg, color: GREY });
+      }
+      ctx.page.drawRectangle({ x, y: rowTop - cellH, width: cellW, height: cellH, borderColor: LINE, borderWidth: 0.7 });
+      col++;
+      if (col === cols) {
+        col = 0;
+        ctx.y = rowTop - cellH - (a5 ? 8 : 12);
+      }
+    }
+    if (col !== 0) ctx.y = rowTop - cellH - (a5 ? 8 : 12);
   }
 
   // ── Footer + QR ───────────────────────────────────────────────────────

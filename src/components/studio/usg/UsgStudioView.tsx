@@ -108,6 +108,7 @@ async function fetchSettingsBundle(): Promise<SettingsBundle> {
     usgDeclarationLine: s.usgDeclarationLine ?? "",
     usgPrintStyle: s.usgPrintStyle ?? "premium",
     usgPrintCompact: s.usgPrintCompact === true || s.usgPrintCompact === "true",
+    usgPrintBodyFit: s.usgPrintBodyFit === "multi" ? "multi" : "one_page",
     usgPrintPaper: s.usgPrintPaper ?? "a4",
     usgSignatureUrl: s.usgSignatureUrl ?? "",
     usgPrintFontSize: Number(s.usgPrintFontSize) > 0 ? Number(s.usgPrintFontSize) : 10,

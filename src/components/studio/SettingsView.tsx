@@ -25,6 +25,7 @@ type Settings = {
   usgMachineLine: string; usgShowMachine: boolean;
   usgFooterLine: string; usgDeclarationLine: string;
   usgPrintStyle: string; usgPrintCompact: boolean;
+  usgPrintBodyFit?: string;
   usgPrintPaper: string; usgSignatureUrl: string;
   usgPrintFontSize: number; usgPrintLineHeight: number;
   usgPrintSpacing: string; usgPrintShowTechnique: boolean; usgPrintShowThanks: boolean;
@@ -693,6 +694,39 @@ export function SettingsView() {
               </button>
             </div>
           </Field>
+          <Field
+            label="Clinical body on A4"
+            hint="Fit packs letterhead + findings + impression + advice on one A4 (readable density). Stills always print on the next page. Choose 2+ pages for a more open layout on long studies."
+          >
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setS({ ...s, usgPrintBodyFit: "one_page" } as Settings)}
+                className={cn(
+                  "flex-1 rounded-lg border px-3 py-2 text-left text-[12px] font-semibold transition-colors",
+                  (s.usgPrintBodyFit ?? "one_page") !== "multi"
+                    ? "border-rose-300 bg-rose-50 text-rose-800 ring-1 ring-rose-200"
+                    : "border-border bg-panel text-muted-foreground hover:border-rose-200",
+                )}
+              >
+                Fit on 1 A4
+                <span className="block text-[10px] font-normal text-faint">Letterhead · findings · impression · advice</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setS({ ...s, usgPrintBodyFit: "multi" } as Settings)}
+                className={cn(
+                  "flex-1 rounded-lg border px-3 py-2 text-left text-[12px] font-semibold transition-colors",
+                  s.usgPrintBodyFit === "multi"
+                    ? "border-rose-300 bg-rose-50 text-rose-800 ring-1 ring-rose-200"
+                    : "border-border bg-panel text-muted-foreground hover:border-rose-200",
+                )}
+              >
+                Allow 2+ pages
+                <span className="block text-[10px] font-normal text-faint">Comfortable spacing · long studies</span>
+              </button>
+            </div>
+          </Field>
 
           {/* v6.20 — Print Layout Studio: size dials */}
           <Field label={`Logo size — ${(s.usgLogoSizeMm ?? 14).toFixed(0)} mm`}>
@@ -826,7 +860,7 @@ export function SettingsView() {
               onChange={(e) => setS({ ...s, usgPrintCompact: e.target.checked } as Settings)}
               className="h-4 w-4 accent-rose-600"
             />
-            Compact print density (smaller type — long studies like echo fit one page)
+            Extra-compact type (pairs with “Fit on 1 A4” for very long studies)
           </label>
 
           {/* Backup & restore — the whole studio personalisation as one JSON file */}

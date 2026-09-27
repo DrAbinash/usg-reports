@@ -7,21 +7,24 @@
   body { font-family: "Georgia", "Times New Roman", "Noto Serif", serif; color: #000; font-size: 10.5pt; line-height: 1.55; }
   .sheet { max-width: 182mm; margin: 0 auto; }
 
-  .masthead { text-align: center; border-bottom: 3px double #000; padding: 2px 0 9px; }
-  .logo { width: 46px; height: 46px; object-fit: contain; margin: 0 auto 2px; display: block; }
-  .logo-fallback { display: none; }
+  .masthead { text-align: center; border-bottom: 3px double #000; padding: 2px 0 9px; display: block; }
+  .logo-slot { width: 52px; height: 52px; margin: 0 auto 3px; background: transparent; border-radius: 0; }
+  .logo-slot .logo { width: 100%; height: 100%; object-fit: contain; }
+  .logo-slot .logo-fallback { display: none; }
+  .masthead-mid { text-align: center; }
   .masthead .hospital { font-size: 17pt; font-weight: 700; letter-spacing: 2px; line-height: 1.2; text-transform: uppercase; }
-  .masthead .addr { font-size: 9pt; margin-top: 3px; }
+  .masthead-addr { text-align: center; max-width: none; margin: 3px auto 0; font-size: 9pt; opacity: 1; }
   .masthead .brand { display: none; }
+  .letterpad-reserve { height: 38mm; }
 
   table.patient { width: 100%; border-collapse: collapse; margin-top: 10px; border: 1px solid #000; font-size: 9.5pt; }
   table.patient td { padding: 4px 8px; border: 1px solid #000; }
   table.patient td.k { font-weight: 700; width: 15%; white-space: nowrap; font-size: 8.5pt; text-transform: uppercase; letter-spacing: .5px; background: #f2f2f2; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   table.patient td.v { font-weight: 600; }
 
-  .thanks { text-align: center; font-style: italic; font-size: 9.5pt; margin-top: 7px; }
+  .thanks { text-align: left; font-style: italic; font-size: 9.5pt; margin: 4px 0 0; }
 
-  .study { margin-top: 13px; width: 100%; text-align: center; page-break-after: avoid; }
+  .study { margin-top: 4px; width: 100%; text-align: center; page-break-after: avoid; }
   .study .name { display: block; width: 100%; font-size: 13.5pt; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; text-align: center; border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 4px 0; }
   .study .rule { display: none; }
 
@@ -89,7 +92,7 @@ body { font-size: 10pt; line-height: 1.4; }
   .sig .name { font-size: 1.1em; }
   .suggestions { font-size: 0.95em; }
 
-  .study { margin-top: 8px; }
+  .study { margin-top: 3px; }
   .thanks { margin-top: 3px; }
   h2.band { margin-top: 8px; margin-bottom: 5px; }
   p.technique { margin: 2px 0; }
@@ -99,6 +102,8 @@ body { font-size: 10pt; line-height: 1.4; }
   .declaration { margin-top: 7px; }
   .pcpndt { margin-top: 7px; }
   .footer { margin-top: 7px; }
+
+  :root { --logo-box: 53px; }
 
 /* Flow layout for signature / PC-PNDT / footer — never pin to page-1 bottom
    so long reports push the tail cleanly onto page 2 as one unit. */
@@ -118,16 +123,14 @@ body { font-size: 10pt; line-height: 1.4; }
 .top-bar .logo-block img { height: var(--logo-h, 14mm); }
 .top-bar .logo-block .hospital-name { font-size: var(--name-fs, 15pt); }
 .top-bar .contact-block { font-size: var(--addr-fs, 8.5pt); }
-</style><style id="usg-justify-kill">p, li, td, th, div, span, .organ-body, .ob-body, .pbody { text-align: left !important; hyphens: none !important; word-spacing: normal !important; letter-spacing: normal !important; }</style><style id="usg-study-center">.study,.study .name,.thanks,.machine{text-align:center !important;}</style><style id="usg-sig-fit">.signature-block,.sig-wrap,.sig-pin{position:static !important;bottom:auto !important;right:auto !important;transform:none !important;}</style><script>window.addEventListener("beforeprint",function(){var mm=277/25.4*96;var h=document.body.scrollHeight;if(h>mm){document.body.style.zoom=(mm/h).toFixed(3);}});</script></head>
+</style><style id="usg-justify-kill">p, li, td, th, div, span, .organ-body, .ob-body, .pbody { text-align: left !important; hyphens: none !important; word-spacing: normal !important; letter-spacing: normal !important; }</style><style id="usg-study-center">.study,.study .name,.machine{text-align:center !important;}.thanks{text-align:left !important;}</style><style id="usg-sig-fit">.signature-block,.sig-wrap,.sig-pin{position:static !important;bottom:auto !important;right:auto !important;transform:none !important;}</style><script>window.addEventListener("beforeprint",function(){var mm=277/25.4*96;var h=document.body.scrollHeight;if(h>mm){document.body.style.zoom=(mm/h).toFixed(3);}});</script></head>
 <body>
 
 <div class="sheet">
   <div class="masthead">
-    <div class="logo logo-fallback">USG</div>
-    <div>
-      <div class="hospital">CARE Diagnostics</div>
-      <div class="addr">Subhash Chowk, Deoghar &nbsp;·&nbsp; 06432-123456 &nbsp;·&nbsp; care@example.com</div>
-    </div>
+    <div class="logo-slot"><div class="logo logo-fallback"><span class="mark">♥</span><span class="word">CARE</span></div></div>
+    <div class="masthead-mid"><div class="hospital">CARE Diagnostics</div></div>
+    <div class="masthead-addr"><span class="line">Subhash Chowk, Deoghar</span><span class="line">06432-123456</span><span class="line">care@example.com</span></div>
   </div>
   
 

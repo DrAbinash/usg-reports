@@ -20,7 +20,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { PDFDocument, PDFRawStream, decodePDFRawStream } from "pdf-lib";
 import { db } from "@/lib/db";
-import { buildUsgReportHtml } from "@/lib/usg/print";
+import { buildUsgReportHtml, mastheadAddressLines } from "@/lib/usg/print";
 import { buildUsgReportPdf } from "@/lib/usg/pdf";
 import { initialState } from "@/lib/usg/studies";
 import { makeLookup, resolve } from "@/lib/usg/composer";
@@ -147,10 +147,11 @@ describe("technique row toggle", () => {
     expect(withoutTech).not.toContain(hex("1. FINDINGS"));
   });
 
-  test("study title is forced center (beats the left-align body kill)", () => {
+  test("study title is forced center; thanks stays left (beats the body kill)", () => {
     const html = buildUsgReportHtml(BASE_SETTINGS, PATIENT, resolvedReport());
     expect(html).toContain('id="usg-study-center"');
-    expect(html).toMatch(/\.study,\s*\.study \.name,\s*\.thanks,\s*\.machine\s*\{\s*text-align:\s*center\s*!important/);
+    expect(html).toMatch(/\.study,\s*\.study \.name,\s*\.machine\s*\{\s*text-align:\s*center\s*!important/);
+    expect(html).toMatch(/\.thanks\s*\{\s*text-align:\s*left\s*!important/);
     expect(html).not.toMatch(/Sonologist<\/div>/);
   });
 });
@@ -167,6 +168,59 @@ describe("referral tagline toggle", () => {
     const html = buildUsgReportHtml({ ...BASE_SETTINGS, usgPrintShowThanks: false }, PATIENT, resolvedReport());
     expect(html).not.toContain("Thanks For Your Referral.");
     expect(html).not.toContain('class="thanks"');
+  });
+});
+
+describe("masthead address + preprinted letterpad", () => {
+  test("Castair-style address stacks right into ≤4 lines", () => {
+    const lines = mastheadAddressLines({
+      ...BASE_SETTINGS,
+      addressLine: "Castair's Town, Subhash Chowk, Deoghar, Jharkhand - 814112",
+      phone: "+91 9973497200",
+      email: "care.deoghar@gmail.com",
+    });
+    expect(lines).toEqual([
+      "Castair's Town, Subhash Chowk",
+      "Deoghar, Jharkhand - 814112",
+      "+91 9973497200",
+      "care.deoghar@gmail.com",
+    ]);
+    const html = buildUsgReportHtml(
+      {
+        ...BASE_SETTINGS,
+        addressLine: "Castair's Town, Subhash Chowk, Deoghar, Jharkhand - 814112",
+        phone: "+91 9973497200",
+        email: "care.deoghar@gmail.com",
+      },
+      PATIENT,
+      resolvedReport(),
+    );
+    expect(html).toContain('class="masthead-addr"');
+    expect(html).toContain("Castair&#39;s Town, Subhash Chowk");
+    expect(html).toContain("Deoghar, Jharkhand - 814112");
+  });
+
+  test("preprinted style reserves letterpad space and omits digital masthead", () => {
+    const html = buildUsgReportHtml(
+      { ...BASE_SETTINGS, usgPrintStyle: "preprinted" },
+      PATIENT,
+      resolvedReport(),
+    );
+    expect(html).toContain('class="letterpad-reserve"');
+    expect(html).not.toMatch(/<div class="masthead">/);
+    expect(html).toContain("Thanks For Your Referral.");
+    expect(html).toContain('class="study"');
+  });
+
+  test("premium still prints the digital masthead (kept option)", () => {
+    const html = buildUsgReportHtml(
+      { ...BASE_SETTINGS, usgPrintStyle: "premium" },
+      PATIENT,
+      resolvedReport(),
+    );
+    expect(html).toContain('class="masthead"');
+    expect(html).toContain('class="logo-slot"');
+    expect(html).not.toContain('class="letterpad-reserve"');
   });
 });
 

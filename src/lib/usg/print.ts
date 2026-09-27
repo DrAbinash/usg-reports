@@ -1,10 +1,13 @@
 /**
  * USG report — print document, version 3.
  *
- * Two letterhead styles, switchable in Settings → USG Studio:
- *   • premium — the studio's gradient masthead and banded sections (default);
- *   • classic — plain black-and-white serif letterhead that behaves like a
- *     traditional printed radiology report (ink-saver, thermal-printer safe).
+ * Letterhead styles, switchable in Settings → USG Studio:
+ *   • premium — gradient masthead, logo fills the white slot, address stacked
+ *     right in 3–4 lines (default);
+ *   • classic — plain black-and-white serif letterhead (ink-saver);
+ *   • premium_sidebar — two-column layout with image sidebar;
+ *   • preprinted — same premium body on A4 with the digital masthead omitted
+ *     and a top margin reserved for a physical clinic letterpad.
  *
  * Paper: A4 (default) or A5 half-sheet — the same document scaled for the
  * clinic's A5 stock, ideal for short studies and quick prints.
@@ -64,7 +67,7 @@ export type UsgPrintSettings = {
   usgBillingProcedureMap?: Record<string, string>;
   usgFooterLine: string;
   usgDeclarationLine: string;
-  /** "premium" (default) or "classic" (plain B/W letterhead). */
+  /** "premium" | "classic" | "premium_sidebar" | "preprinted" (A4 physical letterpad). */
   usgPrintStyle?: string;
   /** Compact density — smaller type + tighter spacing for long reports. */
   usgPrintCompact?: boolean;
@@ -310,13 +313,19 @@ const PREMIUM_CSS = `
   body { font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; color: #16222E; font-size: 10.5pt; line-height: 1.5; }
   .sheet { max-width: 186mm; margin: 0 auto; }
 
-  .masthead { background: linear-gradient(120deg, #143E6E 0%, #1B4F8A 45%, #2E6DA4 100%); color: #fff; border-radius: 12px; padding: 13px 18px 11px; display: flex; align-items: center; gap: 14px; box-shadow: 0 2px 6px rgba(20,62,110,.25); }
-  .logo { width: 54px; height: 54px; background: #fff; border-radius: 11px; padding: 4px; object-fit: contain; flex-shrink: 0; }
-  .logo-fallback { display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12pt; color: #1B4F8A; letter-spacing: 1px; }
+  .masthead { background: linear-gradient(120deg, #143E6E 0%, #1B4F8A 45%, #2E6DA4 100%); color: #fff; border-radius: 12px; padding: 10px 14px; display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 6px rgba(20,62,110,.25); }
+  .logo-slot { width: var(--logo-box, 78px); height: var(--logo-box, 78px); background: #fff; border-radius: 11px; flex-shrink: 0; overflow: hidden; display: flex; align-items: stretch; justify-content: stretch; padding: 0; }
+  .logo-slot .logo { width: 100%; height: 100%; object-fit: cover; object-position: center; display: block; border-radius: 0; background: transparent; padding: 0; }
+  .logo-slot .logo.logo-contain { object-fit: contain; padding: 1px; }
+  /* Split brand mark: heart band + CARE word — fills the whole white slot. */
+  .logo-slot .logo-fallback { width: 100%; height: 100%; display: grid; grid-template-rows: 1.15fr 1fr; align-items: stretch; justify-items: stretch; font-weight: 800; color: #C41E3A; line-height: 1; background: linear-gradient(180deg, #FFF7F8 0%, #FFFFFF 55%); }
+  .logo-slot .logo-fallback .mark { display: flex; align-items: center; justify-content: center; font-size: calc(var(--logo-box, 78px) * 0.38); color: #C41E3A; }
+  .logo-slot .logo-fallback .word { display: flex; align-items: center; justify-content: center; font-size: calc(var(--logo-box, 78px) * 0.22); letter-spacing: 0.08em; color: #143E6E; border-top: 1px solid #E8F1FA; }
+  .masthead-mid { flex: 1; min-width: 0; }
   .masthead .hospital { font-size: 16.5pt; font-weight: 800; letter-spacing: .4px; line-height: 1.15; text-shadow: 0 1px 2px rgba(0,0,0,.2); }
-  .masthead .addr { font-size: 8.5pt; font-weight: 500; opacity: .95; margin-top: 2px; }
-  .masthead .brand { margin-left: auto; text-align: right; flex-shrink: 0; }
-  .masthead .brand .t { font-size: 8.5pt; font-weight: 800; letter-spacing: 2px; border: 1.5px solid rgba(255,255,255,.75); border-radius: 20px; padding: 3px 10px; }
+  .masthead-addr { margin-left: auto; text-align: right; flex-shrink: 0; max-width: 48%; font-size: 8pt; font-weight: 550; opacity: .97; line-height: 1.35; }
+  .masthead-addr .line { display: block; }
+  .masthead .brand { display: none; }
 
   table.patient { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 9px; border: 1.5px solid #AFCDE8; border-radius: 9px; overflow: hidden; font-size: 9.5pt; }
   table.patient td { padding: 4px 9px; border-bottom: 1px solid #E1ECF7; }
@@ -324,11 +333,13 @@ const PREMIUM_CSS = `
   table.patient td.k { background: #E8F1FA; font-weight: 800; color: #1B4F8A; width: 15%; white-space: nowrap; font-size: 8pt; text-transform: uppercase; letter-spacing: .5px; border-right: 1px solid #E1ECF7; }
   table.patient td.v { font-weight: 600; }
 
-  .thanks { text-align: center; font-style: italic; font-weight: 600; color: #4A6581; font-size: 9.5pt; margin-top: 6px; }
+  .thanks { text-align: left; font-style: italic; font-weight: 600; color: #4A6581; font-size: 9.5pt; margin: 4px 0 0; }
 
-  .study { margin-top: 12px; width: 100%; text-align: center; page-break-after: avoid; }
+  .study { margin-top: 4px; width: 100%; text-align: center; page-break-after: avoid; }
   .study .name { display: block; width: 100%; font-size: 14.5pt; font-weight: 800; color: #143E6E; letter-spacing: 2px; text-transform: uppercase; text-align: center; }
   .study .rule { height: 3.5px; background: linear-gradient(90deg, transparent 4%, #2E6DA4 25%, #3E86C4 50%, #2E6DA4 75%, transparent 96%); border-radius: 3px; margin: 5px 18px 0; }
+
+  .letterpad-reserve { height: 38mm; } /* space for physical A4 letterpad when preprinted */
 
   .machine { text-align: center; font-size: 9.5pt; font-weight: 700; color: #2E6DA4; font-style: italic; margin-top: 7px; }
 
@@ -402,21 +413,24 @@ const CLASSIC_CSS = `
   body { font-family: "Georgia", "Times New Roman", "Noto Serif", serif; color: #000; font-size: 10.5pt; line-height: 1.55; }
   .sheet { max-width: 182mm; margin: 0 auto; }
 
-  .masthead { text-align: center; border-bottom: 3px double #000; padding: 2px 0 9px; }
-  .logo { width: 46px; height: 46px; object-fit: contain; margin: 0 auto 2px; display: block; }
-  .logo-fallback { display: none; }
+  .masthead { text-align: center; border-bottom: 3px double #000; padding: 2px 0 9px; display: block; }
+  .logo-slot { width: 52px; height: 52px; margin: 0 auto 3px; background: transparent; border-radius: 0; }
+  .logo-slot .logo { width: 100%; height: 100%; object-fit: contain; }
+  .logo-slot .logo-fallback { display: none; }
+  .masthead-mid { text-align: center; }
   .masthead .hospital { font-size: 17pt; font-weight: 700; letter-spacing: 2px; line-height: 1.2; text-transform: uppercase; }
-  .masthead .addr { font-size: 9pt; margin-top: 3px; }
+  .masthead-addr { text-align: center; max-width: none; margin: 3px auto 0; font-size: 9pt; opacity: 1; }
   .masthead .brand { display: none; }
+  .letterpad-reserve { height: 38mm; }
 
   table.patient { width: 100%; border-collapse: collapse; margin-top: 10px; border: 1px solid #000; font-size: 9.5pt; }
   table.patient td { padding: 4px 8px; border: 1px solid #000; }
   table.patient td.k { font-weight: 700; width: 15%; white-space: nowrap; font-size: 8.5pt; text-transform: uppercase; letter-spacing: .5px; background: #f2f2f2; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   table.patient td.v { font-weight: 600; }
 
-  .thanks { text-align: center; font-style: italic; font-size: 9.5pt; margin-top: 7px; }
+  .thanks { text-align: left; font-style: italic; font-size: 9.5pt; margin: 4px 0 0; }
 
-  .study { margin-top: 13px; width: 100%; text-align: center; page-break-after: avoid; }
+  .study { margin-top: 4px; width: 100%; text-align: center; page-break-after: avoid; }
   .study .name { display: block; width: 100%; font-size: 13.5pt; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; text-align: center; border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 4px 0; }
   .study .rule { display: none; }
 
@@ -476,12 +490,12 @@ const CLASSIC_CSS = `
 
 const COMPACT_CSS = `
   body { font-size: 9.5pt; line-height: 1.38; }
-  .masthead { padding-top: 9px; padding-bottom: 8px; }
+  .masthead { padding-top: 8px; padding-bottom: 7px; }
   .masthead .hospital { font-size: 14pt; }
-  .logo { width: 44px; height: 44px; }
+  .logo-slot { width: 58px; height: 58px; }
   table.patient { margin-top: 6px; }
   table.patient td { padding: 2.5px 7px; }
-  .study { margin-top: 8px; }
+  .study { margin-top: 3px; }
   .study .name { font-size: 12.5pt; }
   h2.band { margin: 9px 0 5px; padding: 3.5px 11px; }
   table.organs th, table.organs td { padding-top: 3px; padding-bottom: 3px; }
@@ -501,17 +515,17 @@ const A5_CSS = `
   @page { size: A5; margin: 8mm; }
   .sheet { max-width: 132mm; }
   body { font-size: 8.5pt; line-height: 1.4; }
-  .masthead { padding: 8px 11px 7px; gap: 9px; border-radius: 9px; }
-  .logo { width: 34px; height: 34px; border-radius: 8px; }
+  .masthead { padding: 7px 10px 6px; gap: 8px; border-radius: 9px; }
+  .logo-slot { width: 48px; height: 48px; border-radius: 8px; }
   .masthead .hospital { font-size: 11.5pt; }
-  .masthead .addr { font-size: 6.5pt; margin-top: 1px; }
-  .masthead .brand .t { font-size: 6.5pt; letter-spacing: 1.2px; padding: 2px 7px; }
+  .masthead-addr { font-size: 6.5pt; max-width: 46%; }
   table.patient { margin-top: 6px; border-radius: 6px; border-width: 1px; font-size: 7.5pt; }
   table.patient td { padding: 2.5px 6px; }
   table.patient td.k { font-size: 6.5pt; }
-  .thanks { font-size: 7.5pt; margin-top: 4px; }
-  .study { margin-top: 8px; }
+  .thanks { font-size: 7.5pt; margin-top: 3px; }
+  .study { margin-top: 3px; }
   .study .name { font-size: 10.5pt; letter-spacing: 1.5px; }
+  .letterpad-reserve { height: 28mm; }
   .study .rule { margin: 3px 10px 0; }
   .machine { font-size: 7.5pt; margin-top: 4px; }
   h2.band { font-size: 8pt; letter-spacing: 1.2px; padding: 3.5px 9px; border-radius: 5px; margin: 9px 0 5px; }
@@ -596,7 +610,7 @@ const TAIL_CSS = `
  * auto-zoom oversized sheets to one printable page height.
  * Byte-identical across classic / premium / sidebar generators.
  */
-const PRINT_CSS = `<style id="usg-justify-kill">p, li, td, th, div, span, .organ-body, .ob-body, .pbody { text-align: left !important; hyphens: none !important; word-spacing: normal !important; letter-spacing: normal !important; }</style><style id="usg-study-center">.study,.study .name,.thanks,.machine{text-align:center !important;}</style><style id="usg-sig-fit">.signature-block,.sig-wrap,.sig-pin{position:static !important;bottom:auto !important;right:auto !important;transform:none !important;}</style><script>window.addEventListener("beforeprint",function(){var mm=277/25.4*96;var h=document.body.scrollHeight;if(h>mm){document.body.style.zoom=(mm/h).toFixed(3);}});</script>`;
+const PRINT_CSS = `<style id="usg-justify-kill">p, li, td, th, div, span, .organ-body, .ob-body, .pbody { text-align: left !important; hyphens: none !important; word-spacing: normal !important; letter-spacing: normal !important; }</style><style id="usg-study-center">.study,.study .name,.machine{text-align:center !important;}.thanks{text-align:left !important;}</style><style id="usg-sig-fit">.signature-block,.sig-wrap,.sig-pin{position:static !important;bottom:auto !important;right:auto !important;transform:none !important;}</style><script>window.addEventListener("beforeprint",function(){var mm=277/25.4*96;var h=document.body.scrollHeight;if(h>mm){document.body.style.zoom=(mm/h).toFixed(3);}});</script>`;
 
 /** Clamp a numeric setting to a safe range (bad/absent values fall back). */
 function clampNum(v: unknown, min: number, max: number, dflt: number): number {
@@ -637,7 +651,7 @@ function tuningCss(settings: UsgPrintSettings, a5: boolean): string {
 
   if (sp === "tight") {
     css += `
-  .study { margin-top: 8px; }
+  .study { margin-top: 3px; }
   .thanks { margin-top: 3px; }
   h2.band { margin-top: 8px; margin-bottom: 5px; }
   p.technique { margin: 2px 0; }
@@ -650,8 +664,8 @@ function tuningCss(settings: UsgPrintSettings, a5: boolean): string {
 `;
   } else if (sp === "relaxed") {
     css += `
-  .study { margin-top: 16px; }
-  .thanks { margin-top: 10px; }
+  .study { margin-top: 8px; }
+  .thanks { margin-top: 6px; }
   h2.band { margin-top: 20px; margin-bottom: 11px; }
   p.technique { margin: 6px 0; }
   table.organs th, table.organs td { padding-top: 7px; padding-bottom: 7px; }
@@ -663,6 +677,70 @@ function tuningCss(settings: UsgPrintSettings, a5: boolean): string {
 `;
   }
   return css;
+}
+
+/**
+ * Split clinic contact into ≤4 right-aligned masthead lines:
+ * address (1–2 lines) + phone + email (+ optional reg no if room).
+ */
+export function mastheadAddressLines(settings: UsgPrintSettings): string[] {
+  const lines: string[] = [];
+  const raw = (settings.addressLine ?? "").trim();
+  if (raw) {
+    if (raw.includes("\n")) {
+      for (const l of raw.split(/\n+/)) {
+        const t = l.trim();
+        if (t) lines.push(t);
+      }
+    } else {
+      // Prefer splitting on commas: "Castair's Town, Subhash Chowk, Deoghar…"
+      const parts = raw.split(/\s*,\s*/).map((p) => p.trim()).filter(Boolean);
+      if (parts.length <= 2) {
+        lines.push(raw);
+      } else {
+        // First two locality parts on line 1; remainder (city / PIN) on line 2.
+        lines.push(parts.slice(0, 2).join(", "));
+        lines.push(parts.slice(2).join(", "));
+      }
+    }
+  }
+  if (settings.phone?.trim()) lines.push(settings.phone.trim());
+  if (settings.email?.trim()) lines.push(settings.email.trim());
+  if (settings.registrationNo?.trim() && lines.length < 4) {
+    lines.push(`Reg. No: ${settings.registrationNo.trim()}`);
+  }
+  return lines.slice(0, 4);
+}
+
+function renderLogoSlot(settings: UsgPrintSettings): string {
+  const safeLogo = safeImgUrl(settings.logoUrl);
+  if (safeLogo) {
+    // Wide wordmark logos fill better with contain; square marks use cover.
+    // Default contain so CARE heart+wordmark stays fully visible inside the slot.
+    return `<div class="logo-slot"><img src="${esc(safeLogo)}" alt="logo" class="logo logo-contain" /></div>`;
+  }
+  // Split fallback: heart mark + CARE word — fills the white box as two bands.
+  return `<div class="logo-slot"><div class="logo logo-fallback"><span class="mark">♥</span><span class="word">CARE</span></div></div>`;
+}
+
+function renderMasthead(settings: UsgPrintSettings, classic: boolean): string {
+  const logo = renderLogoSlot(settings);
+  const addrLines = mastheadAddressLines(settings);
+  const addrHtml = addrLines.length
+    ? `<div class="masthead-addr">${addrLines.map((l) => `<span class="line">${esc(l)}</span>`).join("")}</div>`
+    : "";
+  if (classic) {
+    return `<div class="masthead">
+    ${logo}
+    <div class="masthead-mid"><div class="hospital">${esc(clinicDisplayName(settings))}</div></div>
+    ${addrHtml}
+  </div>`;
+  }
+  return `<div class="masthead">
+    ${logo}
+    <div class="masthead-mid"><div class="hospital">${esc(clinicDisplayName(settings))}</div></div>
+    ${addrHtml}
+  </div>`;
 }
 
 export function buildUsgReportHtml(
@@ -678,6 +756,7 @@ export function buildUsgReportHtml(
   }
 
   const classic = settings.usgPrintStyle === "classic";
+  const preprinted = settings.usgPrintStyle === "preprinted";
   const compact = settings.usgPrintCompact === true;
   const a5 = settings.usgPrintPaper === "a5";
   const provisional = patient.provisional === true;
@@ -685,6 +764,9 @@ export function buildUsgReportHtml(
   // Section bands are unnumbered — short reports (Findings + Impression) read cleaner.
   const showTechnique = settings.usgPrintShowTechnique !== false && !!resolved.technique?.trim();
   const showThanks = settings.usgPrintShowThanks !== false;
+  const logoMm = clampNum(settings.usgLogoSizeMm, 8, 30, 18);
+  // Convert mm → CSS px (~3.78 px/mm) for the white logo slot so the dial fills it.
+  const logoBoxPx = Math.round(logoMm * 3.78);
   const css =
     (classic ? CLASSIC_CSS : PREMIUM_CSS) +
     SIGNATURE_CSS +
@@ -692,12 +774,11 @@ export function buildUsgReportHtml(
     (a5 ? A5_CSS : "") +
     (compact ? COMPACT_CSS : "") +
     tuningCss(settings, a5) +
-    (provisional ? (classic ? PROVISIONAL_CSS_CLASSIC : PROVISIONAL_CSS) : "");
-
-  const safeLogo = safeImgUrl(settings.logoUrl);
-  const logo = safeLogo
-    ? `<img src="${esc(safeLogo)}" alt="logo" class="logo" />`
-    : `<div class="logo logo-fallback">USG</div>`;
+    (provisional ? (classic ? PROVISIONAL_CSS_CLASSIC : PROVISIONAL_CSS) : "") +
+    (preprinted
+      ? `\n  @page { size: A4; margin: 10mm; margin-top: 12mm; }\n  .masthead { display: none !important; }\n`
+      : "") +
+    `\n  :root { --logo-box: ${logoBoxPx}px; }\n`;
 
   const resolvedMachine = resolveMachineLine(settings);
   const machineLine =
@@ -792,13 +873,7 @@ export function buildUsgReportHtml(
 <body>
 ${watermark}
 <div class="sheet">
-  <div class="masthead">
-    ${logo}
-    <div>
-      <div class="hospital">${esc(clinicDisplayName(settings))}</div>
-      <div class="addr">${esc(settings.addressLine)}${settings.registrationNo?.trim() ? ` &nbsp;·&nbsp; Reg. No: ${esc(settings.registrationNo.trim())}` : ""}${settings.phone ? ` &nbsp;·&nbsp; ${esc(settings.phone)}` : ""}${settings.email ? ` &nbsp;·&nbsp; ${esc(settings.email)}` : ""}</div>
-    </div>
-  </div>
+  ${preprinted ? `<div class="letterpad-reserve" aria-hidden="true"></div>` : renderMasthead(settings, classic)}
   ${provisionalTag}
 
   <table class="patient">

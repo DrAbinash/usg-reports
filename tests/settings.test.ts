@@ -76,11 +76,13 @@ describe("USG settings persist and reload exactly", () => {
 });
 
 describe("print enum + checkbox normalisation (string form contract)", () => {
-  it("anything other than classic means premium", async () => {
+  it("accepts classic / sidebar / preprinted; unknown falls back to premium", async () => {
     await updateSettings({ usgPrintStyle: "classic" });
     expect((await getSettings()).usgPrintStyle).toBe("classic");
     await updateSettings({ usgPrintStyle: "premium" });
     expect((await getSettings()).usgPrintStyle).toBe("premium");
+    await updateSettings({ usgPrintStyle: "preprinted" });
+    expect((await getSettings()).usgPrintStyle).toBe("preprinted");
     await updateSettings({ usgPrintStyle: "gibberish" });
     expect((await getSettings()).usgPrintStyle).toBe("premium");
   });

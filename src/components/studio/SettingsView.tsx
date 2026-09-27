@@ -552,26 +552,26 @@ export function SettingsView() {
           <Field label="Declaration (optional)" hint="Boxed legal line under the signature, e.g. the PC-PNDT declaration. Leave blank to omit.">
             <Textarea value={s.usgDeclarationLine ?? ""} onChange={(e) => set("usgDeclarationLine", e.target.value)} rows={2} className="text-[12px]" />
           </Field>
-          <Field label="Print style" hint="Premium = gradient masthead with banded sections. Classic = plain B/W serif. Premium Sidebar = two-column layout with images in a sidebar (like the reference clinic format).">
-            <div className="flex gap-2">
+          <Field label="Print style" hint="Premium = digital gradient letterhead (logo fills the white slot; address stacked right). Classic = plain B/W. Premium Sidebar = two-column with images. Pre-printed letterpad = omit digital masthead and reserve top space for your physical A4 letterpad.">
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => setS({ ...s, usgPrintStyle: "premium" } as Settings)}
                 className={cn(
-                  "flex-1 rounded-lg border px-3 py-2 text-left text-[12px] font-semibold transition-colors",
+                  "rounded-lg border px-3 py-2 text-left text-[12px] font-semibold transition-colors",
                   (s.usgPrintStyle ?? "premium") === "premium"
                     ? "border-rose-300 bg-rose-50 text-rose-800 ring-1 ring-rose-200"
                     : "border-border bg-panel text-muted-foreground hover:border-rose-200",
                 )}
               >
                 Premium
-                <span className="block text-[10px] font-normal text-faint">Gradient masthead · banded sections</span>
+                <span className="block text-[10px] font-normal text-faint">Digital masthead · address right</span>
               </button>
               <button
                 type="button"
                 onClick={() => setS({ ...s, usgPrintStyle: "classic" } as Settings)}
                 className={cn(
-                  "flex-1 rounded-lg border px-3 py-2 text-left text-[12px] font-semibold transition-colors",
+                  "rounded-lg border px-3 py-2 text-left text-[12px] font-semibold transition-colors",
                   s.usgPrintStyle === "classic"
                     ? "border-rose-300 bg-rose-50 text-rose-800 ring-1 ring-rose-200"
                     : "border-border bg-panel text-muted-foreground hover:border-rose-200",
@@ -584,7 +584,7 @@ export function SettingsView() {
                 type="button"
                 onClick={() => setS({ ...s, usgPrintStyle: "premium_sidebar" } as Settings)}
                 className={cn(
-                  "flex-1 rounded-lg border px-3 py-2 text-left text-[12px] font-semibold transition-colors",
+                  "rounded-lg border px-3 py-2 text-left text-[12px] font-semibold transition-colors",
                   s.usgPrintStyle === "premium_sidebar"
                     ? "border-violet-300 bg-violet-50 text-violet-800 ring-1 ring-violet-200"
                     : "border-border bg-panel text-muted-foreground hover:border-violet-200",
@@ -592,6 +592,19 @@ export function SettingsView() {
               >
                 Premium Sidebar
                 <span className="block text-[10px] font-normal text-faint">Two-column · image sidebar</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setS({ ...s, usgPrintStyle: "preprinted", usgPrintPaper: "a4" } as Settings)}
+                className={cn(
+                  "rounded-lg border px-3 py-2 text-left text-[12px] font-semibold transition-colors",
+                  s.usgPrintStyle === "preprinted"
+                    ? "border-sky-300 bg-sky-50 text-sky-800 ring-1 ring-sky-200"
+                    : "border-border bg-panel text-muted-foreground hover:border-sky-200",
+                )}
+              >
+                Pre-printed letterpad
+                <span className="block text-[10px] font-normal text-faint">A4 physical pad · no digital header</span>
               </button>
             </div>
           </Field>

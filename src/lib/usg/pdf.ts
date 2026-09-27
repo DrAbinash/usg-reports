@@ -14,7 +14,7 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
 import type { UsgResolved } from "./types";
 import { clinicDisplayName, clinicFooterText } from "./branding";
-import { resolveMachineLine, type UsgPrintSettings, type UsgPrintImage } from "./print";
+import { mastheadAddressLines, resolveMachineLine, type UsgPrintSettings, type UsgPrintImage } from "./print";
 
 export type UsgPrintPatient = {
   name: string;
@@ -153,52 +153,53 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
   };
 
   // ── Header (white-label clinic name + optional logo) ──────────────────
+  // Pre-printed A4 letterpad: skip digital header; reserve top band for the
+  // physical pad (mirrors HTML `.letterpad-reserve`).
+  const preprinted = settings.usgPrintStyle === "preprinted";
   const hospital = S(clinicDisplayName(settings));
   const nameSize = clampNum(settings.usgNameSizePt, 10, 22, a5 ? 13 : 15);
   const addrSize = clampNum(settings.usgAddressSizePt, 6, 12, a5 ? 6.5 : 8);
-  const logoSizeMm = clampNum(settings.usgLogoSizeMm, 8, 30, a5 ? 11 : 14);
-  ensure(ctx, nameSize + 30);
+  const logoSizeMm = clampNum(settings.usgLogoSizeMm, 8, 30, a5 ? 14 : 18);
+  if (preprinted) {
+    ctx.y -= a5 ? 70 : 108; // ~38mm letterpad reserve
+  } else {
+  ensure(ctx, nameSize + 40);
   let headerX = margin;
   let logo: PDFImage | null = null;
   if (settings.logoUrl) logo = await embedDataUrl(doc, settings.logoUrl);
   if (logo) {
     const h = logoSizeMm * 2.83; // mm to pt
-    const w = (logo.width / logo.height) * h;
-    ctx.page.drawImage(logo, { x: margin, y: ctx.y - h, height: h, width: Math.min(w, contentW * 0.25) });
-    headerX = margin + Math.min(w, contentW * 0.25) + 10;
+    // Fill a near-square slot (logo dial) — keep aspect, clamp width.
+    const slot = h;
+    const w = Math.min((logo.width / logo.height) * h, slot * 1.35, contentW * 0.28);
+    ctx.page.drawImage(logo, { x: margin, y: ctx.y - slot, height: Math.min(h, slot), width: w });
+    headerX = margin + Math.max(w, slot) + 10;
   }
   ctx.page.drawText(hospital, { x: headerX, y: ctx.y - nameSize, size: nameSize, font: fonts.bold, color: NAVY });
-  
-  // Address pinned to right edge when usgAddressPosition = "right"
+
+  // Address stacked on the right in ≤4 lines (Castair's Town… / phone / email).
   const addrPos = settings.usgAddressPosition ?? "right";
-  const addrLines = [
-    settings.addressLine,
-    settings.registrationNo?.trim() ? `Reg. No: ${settings.registrationNo.trim()}` : null,
-    settings.phone ? `Ph: ${settings.phone}` : null,
-    settings.email ? `Email: ${settings.email}` : null,
-  ].filter((x): x is string => !!x);
+  const addrLines = mastheadAddressLines(settings);
   if (addrLines.length > 0) {
-    const addrY = ctx.y - nameSize - 4;
+    const addrY = ctx.y - 2;
     if (addrPos === "right") {
-      // Right-pinned: draw each line right-aligned
       let lineY = addrY;
       for (const line of addrLines) {
         const txt = S(line);
         const w = fonts.reg.widthOfTextAtSize(txt, addrSize);
-        ctx.page.drawText(txt, { x: pageW - margin - w, y: lineY, size: addrSize, font: fonts.reg, color: GREY });
-        lineY -= addrSize * 1.3;
+        ctx.page.drawText(txt, { x: pageW - margin - w, y: lineY - addrSize, size: addrSize, font: fonts.reg, color: GREY });
+        lineY -= addrSize * 1.35;
       }
     } else {
-      // Left or center: join with ·
       const contact = S(addrLines.join("  ·  "));
       const w = fonts.reg.widthOfTextAtSize(contact, addrSize);
       const x = addrPos === "center" ? (pageW - w) / 2 : headerX;
-      ctx.page.drawText(contact, { x, y: addrY, size: addrSize, font: fonts.reg, color: GREY });
+      ctx.page.drawText(contact, { x, y: addrY - addrSize, size: addrSize, font: fonts.reg, color: GREY });
     }
   }
-  // Header height: hospital name (was titleSize before Print Layout Studio
-  // renamed it to nameSize). Keep the same post-header gap as before.
-  ctx.y -= nameSize + (a5 ? 18 : 24);
+  const addrBlockH = Math.max(nameSize + 8, addrLines.length * addrSize * 1.35 + 4);
+  ctx.y -= addrBlockH + (a5 ? 10 : 14);
+  }
   ctx.page.drawLine({
     start: { x: margin, y: ctx.y }, end: { x: pageW - margin, y: ctx.y },
     thickness: a5 ? 1 : 1.4, color: NAVY,

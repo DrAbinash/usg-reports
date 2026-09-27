@@ -272,10 +272,12 @@ export async function updateSettings(patch: SettingsUpdate) {
   } else if (typeof patch.usgShowMachine === "boolean") {
     data.usgShowMachine = patch.usgShowMachine;
   }
-  // Print style: "classic" | "premium" | "premium_sidebar"
+  // Print style: "classic" | "premium" | "premium_sidebar" | "preprinted"
   if (typeof patch.usgPrintStyle === "string") {
     const style = patch.usgPrintStyle.trim();
-    data.usgPrintStyle = (["classic", "premium_sidebar", "couture"].includes(style)) ? style : "premium";
+    data.usgPrintStyle = (["classic", "premium_sidebar", "couture", "preprinted"].includes(style))
+      ? style
+      : "premium";
   }
   // v6.7 sidebar layout settings
   if (typeof patch.usgSidebarPosition === "string") {

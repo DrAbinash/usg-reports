@@ -30,6 +30,7 @@ export async function GET(req: Request, ctx: Ctx) {
   const guard = await requireSession();
   if (guard) return guard;
   const { id } = await ctx.params;
+  const wantDownload = new URL(req.url).searchParams.get("download") === "1";
 
   const report = await db.usgReport.findUnique({
     where: { id },
@@ -71,10 +72,14 @@ export async function GET(req: Request, ctx: Ctx) {
       ? `${formatUsgSerial(report.serialNo)}-${report.patientName.replace(/[^a-z0-9]+/gi, "-").slice(0, 30)}.pdf`
       : `usg-draft-${report.id.slice(0, 8)}.pdf`;
 
+  // `download=1` → attachment so the sticky PDF button saves a file;
+  // otherwise inline for open-in-tab / verify links.
+  const disposition = wantDownload ? "attachment" : "inline";
   return new Response(bytes as unknown as BodyInit, {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${filename}"`,
+      "Content-Disposition": `${disposition}; filename="${filename}"`,
+      "Cache-Control": "no-store",
     },
   });
 }

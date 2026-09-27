@@ -56,6 +56,8 @@ export type OrganCardProps = {
   triadAdviceTexts?: string[];
   /** Apply a suggestion via adviceEdits (triad ownership). */
   onApplySuggestion?: (pathologyKey: string, text: string) => void;
+  /** Finalized — chips and text locked to the printed snapshot. */
+  readOnly?: boolean;
 };
 
 function varLabel(defs: UsgVarDef[] | undefined, token: string): { label: string; unit?: string } {
@@ -64,7 +66,7 @@ function varLabel(defs: UsgVarDef[] | undefined, token: string): { label: string
   return { label: token.replace(/_/g, " ") };
 }
 
-export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, normalOverride, onSaveNormal, onResetNormal, onToggle, onQuickNormal, onVar, onText, onAddCustom, triadAdviceTexts, onApplySuggestion }: OrganCardProps) {
+export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, normalOverride, onSaveNormal, onResetNormal, onToggle, onQuickNormal, onVar, onText, onAddCustom, triadAdviceTexts, onApplySuggestion, readOnly }: OrganCardProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(state.text);
   const [showAll, setShowAll] = useState(false);
@@ -163,12 +165,14 @@ export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, norma
           onAddCustom={onAddCustom}
           onShowAll={() => setShowAll(true)}
           onBeforeChip={() => setEditing(false)}
+          readOnly={readOnly}
           className="min-w-0 flex-1"
         />
         <div className="ml-auto flex shrink-0 items-center gap-0.5">
           <Button
             variant="ghost"
             size="sm"
+            disabled={!!readOnly}
             className={cn("h-6 w-6 p-0", normalOverride ? "text-violet-500" : "text-muted-foreground")}
             title={normalOverride ? "Customise the normal wording (currently your own)" : "Customise this organ's normal wording — saved for every future report"}
             onClick={() => {
@@ -278,7 +282,7 @@ export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, norma
               return (
                 <label key={t} className="flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50/40 px-2 py-1">
                   <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
-                  <Select value={state.vars[t] ?? ""} onValueChange={(v) => onVar(t, v)}>
+                  <Select value={state.vars[t] ?? ""} onValueChange={(v) => onVar(t, v)} disabled={!!readOnly}>
                     <SelectTrigger className="h-6 w-32 border-0 bg-transparent px-1 text-[12px] font-bold text-foreground focus:ring-1 focus:ring-sky-300">
                       <SelectValue placeholder="Select…" />
                     </SelectTrigger>
@@ -302,6 +306,7 @@ export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, norma
                 <Input
                   value={state.vars[t] ?? ""}
                   onChange={(e) => onVar(t, e.target.value)}
+                  disabled={!!readOnly}
                   className="h-6 w-16 border-0 bg-transparent px-1 text-[12px] font-bold text-foreground focus-visible:ring-1 focus-visible:ring-rose-300"
                   placeholder="___"
                   inputMode="decimal"

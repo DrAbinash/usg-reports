@@ -26,3 +26,23 @@ export function toScanDateInput(d: Date | null | undefined): string {
 export function toLocalDateString(d: Date = new Date()): string {
   return toScanDateInput(d);
 }
+
+/**
+ * Clinic "today" in Asia/Kolkata (yyyy-mm-dd).
+ * Prefer this over the browser's local calendar — workstation clocks are often
+ * wrong (wrong year is common), which empties the Worklist "Today" filter
+ * even when Orthanc/CARE have same-day studies.
+ */
+export function clinicTodayIST(d: Date = new Date()): string {
+  // en-CA → ISO-like YYYY-MM-DD
+  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+}
+
+/** Add whole calendar days to a yyyy-mm-dd string (UTC date arithmetic, no TZ drift). */
+export function addCalendarDaysYmd(ymd: string, delta: number): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd.trim());
+  if (!m) return ymd;
+  const dt = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  dt.setUTCDate(dt.getUTCDate() + delta);
+  return dt.toISOString().slice(0, 10);
+}

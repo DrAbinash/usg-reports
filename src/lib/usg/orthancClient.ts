@@ -45,7 +45,25 @@ async function orthancFetch<T>(path: string, timeoutMs = TIMEOUT_MS): Promise<Or
 export type OrthancStudy = {
   ID: string;
   MainDicomTags: { StudyInstanceUID?: string; AccessionNumber?: string; StudyDate?: string; StudyTime?: string; StudyDescription?: string };
+  /** Orthanc REST spelling */
+  PatientMainDicomTags?: { PatientName?: string; PatientID?: string; PatientSex?: string };
+  /** Legacy alias kept for older callers/tests */
   PatientMainTags?: { PatientName?: string; PatientID?: string };
+};
+
+/** Normalised US study row from DICOMweb (ModalitiesInStudy-aware). */
+export type OrthancUsStudyRow = {
+  studyInstanceUid: string;
+  accessionNumber: string | null;
+  patientName: string;
+  patientSex: "F" | "M" | "";
+  patientAge: string;
+  referringDoctor: string;
+  testName: string;
+  /** YYYY-MM-DD when StudyDate present */
+  studyDate: string | null;
+  /** HHMMSS when StudyTime present */
+  studyTime: string | null;
 };
 
 /**
@@ -81,6 +99,99 @@ export async function listStudies(): Promise<OrthancResult<OrthancStudy[]>> {
 
 export function testOrthanc() {
   return orthancFetch<{ Name?: string; Version?: string; DatabaseVersion?: number; StorageAreaName?: string }>("/system");
+}
+
+const US_MODALITY_TOKENS = new Set(["US", "USG", "OB US", "OBUS", "DOPPLER"]);
+
+function dicomPn(pn: { Value?: unknown[] } | undefined): string {
+  const v = pn?.Value?.[0];
+  if (!v) return "";
+  if (typeof v === "string") return v.replace(/\^+/g, " ").trim();
+  const alphabetic = (v as { Alphabetic?: string }).Alphabetic;
+  return (alphabetic || "").replace(/\^+/g, " ").trim();
+}
+
+function isUsStudyDicomWeb(st: Record<string, { Value?: unknown[] }>): boolean {
+  const mods = (st["00080061"]?.Value ?? []).map((m) => String(m).toUpperCase());
+  if (mods.some((m) => US_MODALITY_TOKENS.has(m) || m.includes("US") || m.includes("DOPPLER"))) return true;
+  const desc = String(st["00081030"]?.Value?.[0] ?? "").toUpperCase();
+  return /USG|ULTRASOUND|SONOGRAPH|DOPPLER|OBSTETRIC|ANTENATAL|FETAL|GROWTH/.test(desc);
+}
+
+/**
+ * Recent ultrasound studies via DICOMweb (sees ModalitiesInStudy).
+ * Used to import Orthanc-only US rows into the Studio worklist when CARE
+ * has not (yet) billed/linked them — the ERP PACS Worklist shows these as
+ * "Unlinked / Study Received", but the reporting-studio bill-desk feed may
+ * omit or fail to surface them, leaving Sync as a no-op.
+ */
+export async function listRecentUltrasoundStudies(
+  daysBack = 14,
+  limit = 200,
+): Promise<OrthancResult<OrthancUsStudyRow[]>> {
+  const s = await getSettings();
+  if (!s.orthancUrl) return { ok: false, error: "Orthanc not configured (Settings → Integrations)" };
+
+  // Lazy import avoids a dates↔orthanc cycle at module init.
+  const { clinicTodayIST, addCalendarDaysYmd } = await import("./dates");
+  const fromYmd = addCalendarDaysYmd(clinicTodayIST(), -Math.max(0, daysBack));
+  const fromDicom = fromYmd.replace(/-/g, "");
+
+  const base = s.orthancUrl.trim().replace(/\/+$/, "");
+  const headers: Record<string, string> = { Accept: "application/dicom+json" };
+  if (s.orthancUsername) {
+    headers.Authorization = `Basic ${Buffer.from(`${s.orthancUsername}:${s.orthancPassword ?? ""}`).toString("base64")}`;
+  }
+
+  const url =
+    `${base}/dicom-web/studies?00080020=${fromDicom}-` +
+    `&includefield=00080061,00100010,00100020,00080050,00080090,00081030,0020000D,00100040,00101010,00080030` +
+    `&limit=${Math.min(500, Math.max(1, limit))}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS * 2);
+  try {
+    const res = await fetch(url, { headers, signal: controller.signal, cache: "no-store" });
+    if (!res.ok) return { ok: false, error: `Orthanc DICOMweb responded ${res.status}` };
+    const studies = (await res.json()) as Record<string, { Value?: unknown[] }>[];
+    if (!Array.isArray(studies)) {
+      return { ok: false, error: "Orthanc DICOMweb returned an unexpected response" };
+    }
+
+    const rows: OrthancUsStudyRow[] = [];
+    for (const st of studies) {
+      if (!isUsStudyDicomWeb(st)) continue;
+      const uid = String(st["0020000D"]?.Value?.[0] ?? "").trim();
+      if (!uid) continue;
+      const rawDate = String(st["00080020"]?.Value?.[0] ?? "").replace(/[^0-9]/g, "");
+      const rawTime = String(st["00080030"]?.Value?.[0] ?? "").replace(/[^0-9.]/g, "").split(".")[0] ?? "";
+      const accession = String(st["00080050"]?.Value?.[0] ?? "").trim();
+      const name = dicomPn(st["00100010"]) || "UNKNOWN";
+      const sexRaw = String(st["00100040"]?.Value?.[0] ?? "").toUpperCase();
+      rows.push({
+        studyInstanceUid: uid,
+        accessionNumber: accession || null,
+        patientName: name,
+        patientSex: sexRaw === "M" ? "M" : sexRaw === "F" ? "F" : "",
+        patientAge: String(st["00101010"]?.Value?.[0] ?? "").replace(/[^0-9]/g, ""),
+        referringDoctor: dicomPn(st["00080090"]),
+        testName: String(st["00081030"]?.Value?.[0] ?? "").trim() || "USG Study",
+        studyDate:
+          rawDate.length >= 8
+            ? `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`
+            : null,
+        studyTime: rawTime.length >= 4 ? rawTime.slice(0, 6) : null,
+      });
+    }
+    return { ok: true, data: rows };
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") {
+      return { ok: false, error: "Orthanc DICOMweb timed out" };
+    }
+    return { ok: false, error: "Orthanc unreachable" };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // ── DICOMweb (series/instance browsing + rendered JPEGs) ───────────────────

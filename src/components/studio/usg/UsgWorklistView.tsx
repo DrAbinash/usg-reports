@@ -20,7 +20,7 @@ import { UsgFormFDialog, type FormFDefaults, type FormFOrderLite } from "./UsgFo
 import { Search, RefreshCw, ChevronRight, Hourglass, CheckCircle2, EyeOff, ScanLine, FileCheck2, CloudOff, Link2, CalendarDays, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { toLocalDateString } from "@/lib/usg/dates";
+import { addCalendarDaysYmd } from "@/lib/usg/dates";
 import { guessStudyKey, isObStudyKey, testSuggestsChild } from "@/lib/usg/orderStudy";
 import {
   resolveBilledStudyType,
@@ -60,6 +60,8 @@ type SyncStats = {
   ambiguousMatches?: number;
   awaitingImages?: number;
   unmatchedOrthanc?: number;
+  importedFromOrthanc?: number;
+  orthancUsStudies?: number;
   skippedReasons?: string[];
 };
 
@@ -72,6 +74,10 @@ type WorklistResponse = {
   careConfigured: boolean;
   orthancConfigured: boolean;
   usgFormFEnabled?: boolean;
+  /** Server calendar day (Asia/Kolkata) — drives Today/Yesterday presets. */
+  clinicToday?: string;
+  pendingOpenTotal?: number;
+  pendingOutsideFilter?: number;
 };
 
 function stampIST(iso: string | null): string {
@@ -219,28 +225,35 @@ export function UsgWorklistView() {
   const [datePreset, setDatePreset] = useState<DatePreset>("today");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+  /** Server-provided clinic day (IST). Never trust the workstation clock for
+   *  "Today" — wrong PC years empty the worklist while Orthanc still has studies. */
+  const [clinicToday, setClinicToday] = useState<string | null>(null);
 
   /** Compute the from/to query params from the preset. */
   const dateRange = useCallback((): { from: string; to: string } => {
-    const now = new Date();
-    const today = toLocalDateString(now);
-    const yesterday = (() => { const d = new Date(now); d.setDate(d.getDate() - 1); return toLocalDateString(d); })();
-    const weekAgo = (() => { const d = new Date(now); d.setDate(d.getDate() - 7); return toLocalDateString(d); })();
+    const today = clinicToday;
+    // Until the server tells us clinicToday, do not apply a Today filter
+    // (workstation clock may be years off).
+    if (!today && (datePreset === "today" || datePreset === "yesterday" || datePreset === "week")) {
+      return { from: "", to: "" };
+    }
+    const yesterday = today ? addCalendarDaysYmd(today, -1) : "";
+    const weekAgo = today ? addCalendarDaysYmd(today, -7) : "";
 
     switch (datePreset) {
-      case "today": return { from: today, to: today };
+      case "today": return { from: today!, to: today! };
       case "yesterday": return { from: yesterday, to: yesterday };
-      case "week": return { from: weekAgo, to: today };
+      case "week": return { from: weekAgo, to: today! };
       case "custom":
         return { from: customFrom || "", to: customTo || "" };
       default: return { from: "", to: "" };
     }
-  }, [datePreset, customFrom, customTo]);
+  }, [datePreset, customFrom, customTo, clinicToday]);
 
   const range = dateRange();
 
   const worklistQ = useQuery({
-    queryKey: ["usg", "worklist", range.from, range.to],
+    queryKey: ["usg", "worklist", range.from, range.to, clinicToday ?? "pending-day"],
     queryFn: async (): Promise<WorklistResponse> => {
       const qs = new URLSearchParams();
       if (range.from) qs.set("from", range.from);
@@ -257,6 +270,11 @@ export function UsgWorklistView() {
   });
 
   const data = worklistQ.data ?? null;
+  useEffect(() => {
+    if (data?.clinicToday && data.clinicToday !== clinicToday) {
+      setClinicToday(data.clinicToday);
+    }
+  }, [data?.clinicToday, clinicToday]);
   const load = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["usg", "worklist"] });
   }, [queryClient]);
@@ -339,6 +357,7 @@ export function UsgWorklistView() {
           `CARE ${r.careOk ? "✓" : "✗"}`,
           `Orthanc ${r.orthancOk ? "✓" : "✗"}`,
           r.newOrders ? `${r.newOrders} new` : "",
+          st?.importedFromOrthanc ? `${st.importedFromOrthanc} from PACS` : "",
           st?.updatedExisting ? `${st.updatedExisting} refreshed` : "",
           st?.erpFinalizedNotLocal ? `${st.erpFinalizedNotLocal} ERP-finalized` : "",
           st?.matchedByStudyUid ? `${st.matchedByStudyUid} by UID` : "",
@@ -542,7 +561,12 @@ export function UsgWorklistView() {
         </Button>
       </div>
 
-      {data && !data.careOk && data.careConfigured ? <UsgPacsQueue /> : null}
+      {/* PACS fallback: CARE down, OR worklist truly empty (not just date-filtered)
+          while Orthanc is configured — safety net if orphan import missed a study. */}
+      {data && data.orthancConfigured && (
+        (!data.careOk && data.careConfigured) ||
+        (pending.length === 0 && (data.pendingOutsideFilter ?? 0) === 0)
+      ) ? <UsgPacsQueue /> : null}
 
       {/* v6.14: Date range filter — quick presets + custom from-to */}
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2">
@@ -607,8 +631,33 @@ export function UsgWorklistView() {
         </div>
         <div className="space-y-2">
           {pending.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border bg-card/50 px-3 py-6 text-center text-[12px] text-faint">
-              {data?.careConfigured ? "Nothing waiting — the list is clear." : "No orders yet. Sync after configuring the CARE ERP."}
+            <div className="rounded-lg border border-dashed border-border bg-card/50 px-3 py-6 text-center text-[12px] text-faint space-y-2">
+              {(data?.pendingOutsideFilter ?? 0) > 0 ? (
+                <>
+                  <p>
+                    No studies in this date range — but{" "}
+                    <span className="font-semibold text-foreground">{data?.pendingOutsideFilter}</span>{" "}
+                    still waiting on other dates
+                    {clinicToday ? (
+                      <>
+                        {" "}(clinic today is <span className="font-mono font-semibold text-foreground">{clinicToday}</span>)
+                      </>
+                    ) : null}
+                    .
+                  </p>
+                  <button
+                    type="button"
+                    className="text-[12px] font-bold text-primary underline-offset-2 hover:underline"
+                    onClick={() => setDatePreset("all")}
+                  >
+                    Show all dates
+                  </button>
+                </>
+              ) : data?.careConfigured ? (
+                "Nothing waiting — the list is clear. Sync pulls CARE bill-desk rows and unlinked Orthanc US studies."
+              ) : (
+                "No orders yet. Sync after configuring the CARE ERP."
+              )}
             </div>
           ) : (
             pending.map((o, idx) => (

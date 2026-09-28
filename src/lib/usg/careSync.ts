@@ -34,7 +34,7 @@ import {
   splitAgeSex,
   type CareWorklistItem,
 } from "./careClient";
-import type { OrthancStudy } from "./orthancClient";
+import type { OrthancStudy, OrthancUsStudyRow } from "./orthancClient";
 
 // ── pure row normalisation ──────────────────────────────────────────────────
 
@@ -199,6 +199,25 @@ export const emptyAttachStats = (): AttachStats => ({
   unmatchedOrthanc: 0,
 });
 
+/** Stats for importing Orthanc US studies that have no CARE order yet. */
+export type OrphanImportStats = {
+  orthancUsStudies: number;
+  importedFromOrthanc: number;
+  alreadyPresent: number;
+  skippedNoName: number;
+  skippedNoUid: number;
+  errors: number;
+};
+
+export const emptyOrphanImportStats = (): OrphanImportStats => ({
+  orthancUsStudies: 0,
+  importedFromOrthanc: 0,
+  alreadyPresent: 0,
+  skippedNoName: 0,
+  skippedNoUid: 0,
+  errors: 0,
+});
+
 // ── DB orchestration ────────────────────────────────────────────────────────
 
 type CareOrderRow = {
@@ -276,6 +295,13 @@ export async function importCareRows(rows: CareWorklistItem[], clinicId: string 
   for (const o of existingOrders) {
     if (o.accessionNumber && !byAcc.has(o.accessionNumber)) byAcc.set(o.accessionNumber, o);
   }
+  // StudyInstanceUID bridge: Orthanc-orphan imports land with a UID and no
+  // careWorklistId; when CARE later sends the billed row with the same UID,
+  // we must UPDATE that orphan — never create a duplicate.
+  const byUid = new Map<string, CareOrderRow>();
+  for (const o of existingOrders) {
+    if (o.studyInstanceUid && !byUid.has(o.studyInstanceUid)) byUid.set(o.studyInstanceUid, o);
+  }
 
   for (const w of usRows) {
     const n = normalizeCareRow(w);
@@ -293,7 +319,8 @@ export async function importCareRows(rows: CareWorklistItem[], clinicId: string 
 
     const existing = n.wlId ? byWlId.get(n.wlId) ?? null : null;
     const legacy = !existing && n.acc ? byAcc.get(n.acc) ?? null : null;
-    const target = existing ?? legacy;
+    const byStudy = !existing && !legacy && n.uid ? byUid.get(n.uid) ?? null : null;
+    const target = existing ?? legacy ?? byStudy;
     const { age, sex } = splitAgeSex(w.patientAge);
     // v6.15 — Age plausibility guard: reject garbage (e.g. 126) from ERP
     const plausibleAge = (age: string | null): string | null => {
@@ -390,6 +417,7 @@ export async function importCareRows(rows: CareWorklistItem[], clinicId: string 
         }
         if (created.careWorklistId) byWlId.set(created.careWorklistId, created);
         if (created.accessionNumber) byAcc.set(created.accessionNumber, created);
+        if (created.studyInstanceUid) byUid.set(created.studyInstanceUid, created);
       }
     } catch (e) {
       // e.g. an accession the ERP reassigned to a different row (unique
@@ -398,6 +426,98 @@ export async function importCareRows(rows: CareWorklistItem[], clinicId: string 
       stats.skippedReasons.push(
         `WL ${n.wlId ?? "?"}: database constraint (${e instanceof Error ? e.message.split("\n")[0].slice(0, 80) : "unknown"})`,
       );
+    }
+  }
+  return stats;
+}
+
+/**
+ * Import Orthanc ultrasound studies that are not yet linked to any CARE
+ * order. Identity = StudyInstanceUID only (never names). Creates PENDING
+ * UsgCareOrder rows so the radiologist can report walk-in / unlinked PACS
+ * studies without waiting for bill-desk linking.
+ *
+ * Idempotent: an existing order with the same UID is left alone (counted
+ * as alreadyPresent). Accession is stored when Orthanc has a single clear
+ * value; blank accessions stay null (never synthesized).
+ */
+export async function importOrthancOrphans(
+  studies: OrthancUsStudyRow[],
+  clinicId: string = "default",
+): Promise<OrphanImportStats> {
+  const stats = emptyOrphanImportStats();
+  stats.orthancUsStudies = studies.length;
+  if (!studies.length) return stats;
+
+  const existing = await db.usgCareOrder.findMany({
+    where: { clinicId, studyInstanceUid: { not: null } },
+    select: { studyInstanceUid: true },
+  });
+  const haveUid = new Set(
+    existing.map((o) => o.studyInstanceUid).filter((u): u is string => !!u),
+  );
+
+  // Also avoid unique-collision on accession when an order already holds it.
+  const existingAcc = await db.usgCareOrder.findMany({
+    where: { clinicId, accessionNumber: { not: null } },
+    select: { accessionNumber: true },
+  });
+  const haveAcc = new Set(
+    existingAcc.map((o) => o.accessionNumber).filter((a): a is string => !!a),
+  );
+
+  for (const st of studies) {
+    const uid = clean(st.studyInstanceUid);
+    if (!uid) {
+      stats.skippedNoUid++;
+      continue;
+    }
+    if (haveUid.has(uid)) {
+      stats.alreadyPresent++;
+      continue;
+    }
+    const name = (st.patientName ?? "").trim();
+    if (!name || name.toUpperCase() === "UNKNOWN") {
+      // UNKNOWN is the DICOMweb fallback when PatientName is blank — not safe
+      // to put on a reporting worklist without a human identity.
+      stats.skippedNoName++;
+      continue;
+    }
+
+    const acc = clean(st.accessionNumber);
+    // If another order already owns this accession, keep accession null on
+    // the orphan (UID is enough) rather than failing the unique constraint.
+    const safeAcc = acc && !haveAcc.has(acc) ? acc : null;
+
+    try {
+      await db.usgCareOrder.create({
+        data: {
+          clinicId,
+          accessionNumber: safeAcc,
+          careWorklistId: null,
+          patientName: name,
+          patientAge: (st.patientAge ?? "").replace(/[^0-9]/g, "").slice(0, 3),
+          patientSex: st.patientSex === "M" ? "M" : "F",
+          patientPhone: "",
+          patientAddress: "",
+          billNumber: "",
+          referringDoctor: (st.referringDoctor ?? "").trim(),
+          testName: (st.testName ?? "").trim() || "USG Study",
+          testCode: "",
+          modality: "USG",
+          studyInstanceUid: uid,
+          studyDate: parseStudyDateTime(st.studyDate, st.studyTime),
+          billingStatus: null,
+          status: "PENDING",
+        },
+      });
+      stats.importedFromOrthanc++;
+      haveUid.add(uid);
+      if (safeAcc) haveAcc.add(safeAcc);
+    } catch (e) {
+      stats.errors++;
+      // No patient data in diagnostics.
+      void e;
     }
   }
   return stats;

@@ -1,6 +1,7 @@
 import { requireSession, getActiveClinicId } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
+import { clinicTodayIST } from "@/lib/usg/dates";
 import type { Prisma } from "@prisma/client";
 
 export type WorklistOrderDto = {
@@ -52,10 +53,11 @@ export async function GET(req: Request) {
   // v6.14: date range filter — ?from=YYYY-MM-DD&to=YYYY-MM-DD
   const fromParam = url.searchParams.get("from");
   const toParam = url.searchParams.get("to");
+  const dateFiltered = !!(fromParam || toParam);
 
   const where: Prisma.UsgCareOrderWhereInput = { clinicId };
 
-  if (fromParam || toParam) {
+  if (dateFiltered) {
     const studyDateFilter: Prisma.DateTimeFilter = {};
     if (fromParam) {
       const from = parseDate(fromParam);
@@ -98,8 +100,27 @@ export async function GET(req: Request) {
     careSyncedAt: o.careSyncedAt ? o.careSyncedAt.toISOString() : null,
   }));
 
+  // When a date filter hides open work, tell the UI so "Today" with a wrong
+  // workstation clock (or studies dated yesterday) is not a silent empty list.
+  let pendingOpenTotal = 0;
+  let pendingOutsideFilter = 0;
+  if (dateFiltered) {
+    pendingOpenTotal = await db.usgCareOrder.count({
+      where: {
+        clinicId,
+        ignored: false,
+        status: { in: ["PENDING", "REPORTING"] },
+      },
+    });
+    const pendingInFilter = items.filter(
+      (o) => !o.ignored && (o.status === "PENDING" || o.status === "REPORTING"),
+    ).length;
+    pendingOutsideFilter = Math.max(0, pendingOpenTotal - pendingInFilter);
+  }
+
   const sync = await db.usgSyncState.findUnique({ where: { clinicId } });
   const s = await getSettings();
+  const clinicToday = clinicTodayIST();
 
   return Response.json({
     orders: items,
@@ -112,5 +133,9 @@ export async function GET(req: Request) {
     usgFormFEnabled: !!s.usgFormFEnabled,
     // v6.14: echo the applied date range so the UI can show it
     dateRange: { from: fromParam, to: toParam },
+    /** Server/clinic calendar day in Asia/Kolkata — use for Today/Yesterday presets. */
+    clinicToday,
+    pendingOpenTotal,
+    pendingOutsideFilter,
   });
 }

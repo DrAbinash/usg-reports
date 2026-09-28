@@ -23,12 +23,13 @@ import {
   attachOrthancStudies,
   decideImport,
   importCareRows,
+  importOrthancOrphans,
   indexOrthancStudies,
   matchOrthancStudy,
   normalizeCareRow,
 } from "@/lib/usg/careSync";
 import type { CareWorklistItem } from "@/lib/usg/careClient";
-import type { OrthancStudy } from "@/lib/usg/orthancClient";
+import type { OrthancStudy, OrthancUsStudyRow } from "@/lib/usg/orthancClient";
 
 // ── fixtures ────────────────────────────────────────────────────────────────
 
@@ -329,6 +330,76 @@ describe("J · REPORTED state is never reset by resync", () => {
     const still = await db.usgCareOrder.findFirstOrThrow({ where: { id: order.id } });
     expect(still.status).toBe("REPORTING");
     expect(still.patientAge).toBe("27");
+  });
+});
+
+// ── K · Orthanc orphans (unlinked PACS US → Studio worklist) ────────────────
+
+describe("K · Orthanc orphan import (unlinked PACS US)", () => {
+  const orphan = (uid: string, name = "Alfi Parween"): OrthancUsStudyRow => ({
+    studyInstanceUid: uid,
+    accessionNumber: null,
+    patientName: name,
+    patientSex: "F",
+    patientAge: "28",
+    referringDoctor: "",
+    testName: "USG Study",
+    studyDate: "2026-09-28",
+    studyTime: "090500",
+  });
+
+  test("unmatched Orthanc US becomes a PENDING worklist order", async () => {
+    const stats = await importOrthancOrphans([orphan("1.2.840.orphan.1")]);
+    expect(stats.importedFromOrthanc).toBe(1);
+    expect(stats.alreadyPresent).toBe(0);
+    const order = await db.usgCareOrder.findFirstOrThrow({
+      where: { studyInstanceUid: "1.2.840.orphan.1" },
+    });
+    expect(order.patientName).toBe("Alfi Parween");
+    expect(order.status).toBe("PENDING");
+    expect(order.careWorklistId).toBeNull();
+    expect(order.studyInstanceUid).toBe("1.2.840.orphan.1");
+    expect(order.studyDate).not.toBeNull();
+  });
+
+  test("repeated orphan import is idempotent (UID identity)", async () => {
+    await importOrthancOrphans([orphan("1.2.840.orphan.2")]);
+    const second = await importOrthancOrphans([orphan("1.2.840.orphan.2")]);
+    expect(second.importedFromOrthanc).toBe(0);
+    expect(second.alreadyPresent).toBe(1);
+    expect(await db.usgCareOrder.count({ where: { studyInstanceUid: "1.2.840.orphan.2" } })).toBe(1);
+  });
+
+  test("CARE row with same StudyInstanceUID updates the orphan (no duplicate)", async () => {
+    await importOrthancOrphans([orphan("1.2.840.orphan.3", "Naaz Afrin")]);
+    const stats = await importCareRows([
+      {
+        worklistId: "9901",
+        accessionNumber: "",
+        patientName: "Naaz Afrin",
+        modality: "US",
+        studyInstanceUid: "1.2.840.orphan.3",
+        patientAge: "30/F",
+        billNumber: "B-100",
+      },
+    ]);
+    expect(stats.imported).toBe(0);
+    expect(stats.updatedExisting).toBe(1);
+    expect(await db.usgCareOrder.count({ where: { studyInstanceUid: "1.2.840.orphan.3" } })).toBe(1);
+    const merged = await db.usgCareOrder.findFirstOrThrow({
+      where: { studyInstanceUid: "1.2.840.orphan.3" },
+    });
+    expect(merged.careWorklistId).toBe("9901");
+    expect(merged.billNumber).toBe("B-100");
+  });
+
+  test("UNKNOWN / blank names are skipped", async () => {
+    const stats = await importOrthancOrphans([
+      orphan("1.2.840.orphan.4", "UNKNOWN"),
+      orphan("1.2.840.orphan.5", ""),
+    ]);
+    expect(stats.skippedNoName).toBe(2);
+    expect(stats.importedFromOrthanc).toBe(0);
   });
 });
 

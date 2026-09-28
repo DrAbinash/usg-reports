@@ -3,24 +3,32 @@ import { requireSession, getActiveClinicId } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
 import { fetchBillingStatus, fetchWorklist, finalizeReport } from "@/lib/usg/careClient";
-import { listStudies } from "@/lib/usg/orthancClient";
-import { attachOrthancStudies, emptyAttachStats, emptySyncStats, importCareRows } from "@/lib/usg/careSync";
+import { listRecentUltrasoundStudies, listStudies } from "@/lib/usg/orthancClient";
+import {
+  attachOrthancStudies,
+  emptyAttachStats,
+  emptyOrphanImportStats,
+  emptySyncStats,
+  importCareRows,
+  importOrthancOrphans,
+} from "@/lib/usg/careSync";
 import { audit } from "@/lib/usg/audit";
 
 /** Subtract a small buffer so clock skew between studio and ERP never misses a row. */
 const SINCE_BUFFER_MS = 2 * 60 * 1000;
 
 /**
- * Worklist sync — three fail-soft steps (v6.1 identity model):
+ * Worklist sync — four fail-soft steps (v6.1 identity model + Orthanc orphans):
  *   1. CARE bill-desk rows → import ultrasound orders by identity
- *      (careWorklistId first, legacy accession second, never names)
+ *      (careWorklistId first, legacy accession second, StudyInstanceUID
+ *      bridge for prior Orthanc orphans, never names)
  *   2. Orthanc studies → attach by exact StudyInstanceUID, then exact
  *      single-hit AccessionNumber; orders without a study stay visible
  *      as "Awaiting images" — nothing disappears silently
- *   3. Billing badge refresh (accession-keyed, blank accessions simply
- *      can't refresh — the ERP skips them too) + retry pending finalizes
- *      (the ERP resolves those by worklistId, so blank-accession orders
- *      report back fine)
+ *   3. Orthanc US orphans (DICOMweb, last 14d) → import as PENDING orders
+ *      keyed by StudyInstanceUID so unlinked PACS studies still appear
+ *      (ERP PACS Worklist shows them; bill-desk feed alone does not)
+ *   4. Billing badge refresh + retry pending finalizes
  *
  * Every decision is counted in the response; skips carry a safe reason
  * (worklistId + reason — never patient data, never secrets).
@@ -44,6 +52,7 @@ export async function POST(req: NextRequest) {
 
   let importStats = emptySyncStats();
   let attachStats = emptyAttachStats();
+  let orphanStats = emptyOrphanImportStats();
 
   // 1. CARE worklist → import ultrasound orders by identity
   if (careConfigured) {
@@ -82,9 +91,32 @@ export async function POST(req: NextRequest) {
     } else {
       lastError = lastError ?? r.error;
     }
+
+    // 3. Orthanc US orphans → worklist rows (UID identity). Fail-soft: a
+    // DICOMweb outage must not undo a successful CARE import / attach.
+    const us = await listRecentUltrasoundStudies(14, 200);
+    if (us.ok) {
+      orthancOk = true;
+      try {
+        orphanStats = await importOrthancOrphans(us.data, clinicId);
+        console.log(
+          "[sync] orthanc orphans:",
+          `us=${orphanStats.orthancUsStudies}`,
+          `imported=${orphanStats.importedFromOrthanc}`,
+          `present=${orphanStats.alreadyPresent}`,
+        );
+      } catch (e: any) {
+        lastError = lastError ?? `orphan import failed: ${e?.message ?? String(e)}`;
+        console.error("[sync] importOrthancOrphans threw:", e);
+      }
+    } else if (!orthancOk) {
+      lastError = lastError ?? us.error;
+    } else {
+      console.warn("[sync] listRecentUltrasoundStudies:", us.error);
+    }
   }
 
-  // 3a. Billing badge refresh for open rows (accession-keyed — blank
+  // 4a. Billing badge refresh for open rows (accession-keyed — blank
   // accessions have no billing join on the ERP side either; fail-soft).
   if (careOk) {
     const open = await db.usgCareOrder.findMany({
@@ -193,16 +225,28 @@ export async function POST(req: NextRequest) {
 
   // Observability: counts (and safe skip reasons) in the audit trail and
   // the response. No patient data in the skip reasons, no secrets anywhere.
-  const stats = { ...importStats, ...attachStats };
-  const skippedTotal = stats.skippedNoName + stats.skippedMissingIdentity + stats.errors;
+  // Spread carefully — orphan stats reuse names like skippedNoName/errors.
+  const stats = {
+    ...importStats,
+    ...attachStats,
+    orthancUsStudies: orphanStats.orthancUsStudies,
+    importedFromOrthanc: orphanStats.importedFromOrthanc,
+    orphanAlreadyPresent: orphanStats.alreadyPresent,
+    orphanSkippedNoName: orphanStats.skippedNoName,
+    orphanSkippedNoUid: orphanStats.skippedNoUid,
+    orphanErrors: orphanStats.errors,
+  };
+  const skippedTotal = stats.skippedNoName + stats.skippedMissingIdentity + stats.errors + stats.orphanErrors;
+  const newOrders = stats.imported + stats.importedFromOrthanc;
   if (
-    stats.imported > 0 ||
+    newOrders > 0 ||
     skippedTotal > 0 ||
     stats.ambiguousMatches > 0 ||
     stats.erpFinalizedNotLocal > 0
   ) {
     const bits: string[] = [];
-    if (stats.imported) bits.push(`${stats.imported} new`);
+    if (stats.imported) bits.push(`${stats.imported} new from CARE`);
+    if (stats.importedFromOrthanc) bits.push(`${stats.importedFromOrthanc} new from Orthanc`);
     if (stats.updatedExisting) bits.push(`${stats.updatedExisting} refreshed`);
     if (stats.erpFinalizedNotLocal) bits.push(`${stats.erpFinalizedNotLocal} already finalized in ERP`);
     if (stats.matchedByStudyUid) bits.push(`${stats.matchedByStudyUid} linked by StudyInstanceUID`);
@@ -222,7 +266,7 @@ export async function POST(req: NextRequest) {
     orthancOk,
     careConfigured,
     orthancConfigured,
-    newOrders: stats.imported,
+    newOrders,
     // v6.14.1 — surfaced to the studio UI toast so the doctor sees how many
     // cases the ERP already considers finalized. The UI can render a banner
     // like "5 cases already finalized in ERP — review them" when > 0.

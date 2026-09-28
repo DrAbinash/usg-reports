@@ -1,5 +1,7 @@
 "use client";
-/** PACS-only fallback queue — fully self-contained; renders only when CARE is down. */
+/** PACS-only fallback queue — Orthanc US studies via DICOMweb.
+ *  Shown when CARE is down, or when the CARE worklist is empty so unlinked
+ *  PACS studies stay reachable for draft reporting. */
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -45,7 +47,7 @@ export function UsgPacsQueue() {
         <div className="flex items-center gap-2">
           <WifiOff className="h-5 w-5 text-orange-600" />
           <span className="font-bold text-orange-800 dark:text-orange-300">
-            CARE ERP unreachable — live PACS queue (unbilled drafts only)
+            Live PACS queue — Orthanc US studies (unbilled drafts OK)
           </span>
         </div>
         <Button size="sm" variant="outline" onClick={() => void load()} disabled={loading}>

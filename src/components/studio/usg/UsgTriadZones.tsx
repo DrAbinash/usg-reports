@@ -1,15 +1,14 @@
 "use client";
 /**
  * Triad zones — IMPRESSION + ADVICE badge rows with pencil/X ownership.
- * Replaces the legacy free-text impression textarea (legacy override still
- * renders as one editable "legacy" badge).
+ * Free-text add lines for both; clinic snippet chips (+ Custom) for reuse.
  */
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Pencil, RotateCcw, X, Plus } from "lucide-react";
-import type { UsgTriadLine } from "@/lib/usg/types";
+import type { UsgPathologyDef, UsgTriadLine } from "@/lib/usg/types";
 
 type ZoneProps = {
   title: string;
@@ -18,12 +17,8 @@ type ZoneProps = {
   onDismiss: (text: string) => void;
   onEdit: (pathologyKey: string, text: string) => void;
   onResetEdit: (pathologyKey: string) => void;
-  /** Clinic-wide "save as my default" — only when pathologyKey is set. */
   onSaveDefault?: (pathologyKey: string, text: string) => void;
   onResetDefault?: (pathologyKey: string) => void;
-  /** Impression-only: addendum append. */
-  addendum?: string;
-  onAddendum?: (text: string) => void;
   emptyHint?: string;
 };
 
@@ -54,7 +49,8 @@ function TriadBadge({
       setDraft(line.text);
       return;
     }
-    if (line.pathologyKey) onEdit(line.pathologyKey, next);
+    if (line.addendum) onEdit(`__addendum__:${line.text}`, next);
+    else if (line.pathologyKey) onEdit(line.pathologyKey, next);
     else if (line.legacy) onEdit("", next);
     setEditing(false);
   };
@@ -75,6 +71,11 @@ function TriadBadge({
       {line.legacy ? (
         <span className="shrink-0 rounded bg-amber-200/80 px-1 text-[8px] font-bold uppercase tracking-wide text-amber-800">
           legacy
+        </span>
+      ) : null}
+      {line.addendum ? (
+        <span className="shrink-0 rounded bg-sky-200/80 px-1 text-[8px] font-bold uppercase tracking-wide text-sky-800">
+          manual
         </span>
       ) : null}
       {line.legacy && !disabled && !editing ? (
@@ -113,7 +114,7 @@ function TriadBadge({
       )}
       {!disabled ? (
         <span className="ml-0.5 flex shrink-0 items-center gap-0.5 opacity-70 group-hover:opacity-100">
-          {line.pathologyKey || line.legacy ? (
+          {line.pathologyKey || line.legacy || line.addendum ? (
             <button
               type="button"
               className="rounded p-0.5 hover:bg-white/80"
@@ -170,11 +171,99 @@ function TriadBadge({
   );
 }
 
+function AddLineRow({
+  value,
+  onChange,
+  onAdd,
+  onSaveCustom,
+  placeholder,
+  disabled,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onAdd: () => void;
+  onSaveCustom?: () => void;
+  placeholder: string;
+  disabled?: boolean;
+}) {
+  if (disabled) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 px-0.5">
+      <Plus className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && value.trim()) {
+            e.preventDefault();
+            onAdd();
+          }
+        }}
+        placeholder={placeholder}
+        className="h-7 min-w-[12rem] flex-1 text-[11px]"
+      />
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="h-7 px-2 text-[10px] font-semibold"
+        disabled={!value.trim()}
+        onClick={onAdd}
+      >
+        Add
+      </Button>
+      {onSaveCustom ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-7 px-2 text-[10px] font-bold text-rose-700 hover:bg-rose-50"
+          disabled={!value.trim()}
+          title="Save this line to the clinic library for reuse"
+          onClick={onSaveCustom}
+        >
+          + Custom
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function SnippetChips({
+  snippets,
+  disabled,
+  onApply,
+}: {
+  snippets: UsgPathologyDef[];
+  disabled?: boolean;
+  onApply: (p: UsgPathologyDef) => void;
+}) {
+  if (!snippets.length || disabled) return null;
+  return (
+    <div className="flex flex-wrap gap-1 px-0.5">
+      {snippets.map((p) => (
+        <button
+          key={p.key}
+          type="button"
+          className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-700 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-800"
+          title="Apply saved line"
+          onClick={() => onApply(p)}
+        >
+          {p.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function UsgTriadZones({
   impressionLines,
   adviceLines,
   disabled,
   impressionAddendum,
+  adviceAddendum,
+  impressionSnippets,
+  adviceSnippets,
   onDismissImpression,
   onDismissAdvice,
   onEditImpression,
@@ -186,11 +275,19 @@ export function UsgTriadZones({
   onResetImpressionDefault,
   onResetAdviceDefault,
   onAddendum,
+  onAdviceAddendum,
+  onSaveImpressionCustom,
+  onSaveAdviceCustom,
+  onApplyImpressionSnippet,
+  onApplyAdviceSnippet,
 }: {
   impressionLines: UsgTriadLine[];
   adviceLines: UsgTriadLine[];
   disabled?: boolean;
   impressionAddendum?: string;
+  adviceAddendum?: string;
+  impressionSnippets?: UsgPathologyDef[];
+  adviceSnippets?: UsgPathologyDef[];
   onDismissImpression: (text: string) => void;
   onDismissAdvice: (text: string) => void;
   onEditImpression: (pathologyKey: string, text: string) => void;
@@ -202,8 +299,29 @@ export function UsgTriadZones({
   onResetImpressionDefault?: (pathologyKey: string) => void;
   onResetAdviceDefault?: (pathologyKey: string) => void;
   onAddendum: (text: string) => void;
+  onAdviceAddendum: (text: string) => void;
+  onSaveImpressionCustom?: (text: string) => void;
+  onSaveAdviceCustom?: (text: string) => void;
+  onApplyImpressionSnippet?: (p: UsgPathologyDef) => void;
+  onApplyAdviceSnippet?: (p: UsgPathologyDef) => void;
 }) {
   const [addDraft, setAddDraft] = useState("");
+  const [adviceDraft, setAdviceDraft] = useState("");
+
+  const commitImpression = () => {
+    const t = addDraft.trim();
+    if (!t) return;
+    const prev = impressionAddendum?.trim() ?? "";
+    onAddendum(prev ? `${prev}\n${t}` : t);
+    setAddDraft("");
+  };
+  const commitAdvice = () => {
+    const t = adviceDraft.trim();
+    if (!t) return;
+    const prev = adviceAddendum?.trim() ?? "";
+    onAdviceAddendum(prev ? `${prev}\n${t}` : t);
+    setAdviceDraft("");
+  };
 
   return (
     <div className="space-y-3">
@@ -216,50 +334,28 @@ export function UsgTriadZones({
         onResetEdit={onResetImpressionEdit}
         onSaveDefault={onSaveImpressionDefault}
         onResetDefault={onResetImpressionDefault}
-        addendum={impressionAddendum}
-        onAddendum={
-          disabled
-            ? undefined
-            : (text) => {
-                onAddendum(text);
-                setAddDraft("");
-              }
-        }
-        emptyHint="Select a finding chip — impression lines appear here"
+        emptyHint="Select a finding chip, or type a manual line below"
       />
-      {!disabled ? (
-        <div className="flex items-center gap-1.5 px-0.5">
-          <Plus className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <Input
-            value={addDraft}
-            onChange={(e) => setAddDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && addDraft.trim()) {
-                e.preventDefault();
-                const prev = impressionAddendum?.trim() ?? "";
-                onAddendum(prev ? `${prev}\n${addDraft.trim()}` : addDraft.trim());
-                setAddDraft("");
+      <SnippetChips
+        snippets={impressionSnippets ?? []}
+        disabled={disabled}
+        onApply={(p) => onApplyImpressionSnippet?.(p)}
+      />
+      <AddLineRow
+        value={addDraft}
+        onChange={setAddDraft}
+        onAdd={commitImpression}
+        onSaveCustom={
+          onSaveImpressionCustom
+            ? () => {
+                const t = addDraft.trim();
+                if (t) onSaveImpressionCustom(t);
               }
-            }}
-            placeholder="Add conclusion line…"
-            className="h-7 text-[11px]"
-          />
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-7 px-2 text-[10px]"
-            disabled={!addDraft.trim()}
-            onClick={() => {
-              const prev = impressionAddendum?.trim() ?? "";
-              onAddendum(prev ? `${prev}\n${addDraft.trim()}` : addDraft.trim());
-              setAddDraft("");
-            }}
-          >
-            Add
-          </Button>
-        </div>
-      ) : null}
+            : undefined
+        }
+        placeholder="Add manual impression line…"
+        disabled={disabled}
+      />
 
       <Zone
         title="ADVICE / SUGGESTED NEXT STEPS"
@@ -270,7 +366,27 @@ export function UsgTriadZones({
         onResetEdit={onResetAdviceEdit}
         onSaveDefault={onSaveAdviceDefault}
         onResetDefault={onResetAdviceDefault}
-        emptyHint="Advice appears when a finding carries a follow-up line"
+        emptyHint="Advice appears from findings — or type a manual line below"
+      />
+      <SnippetChips
+        snippets={adviceSnippets ?? []}
+        disabled={disabled}
+        onApply={(p) => onApplyAdviceSnippet?.(p)}
+      />
+      <AddLineRow
+        value={adviceDraft}
+        onChange={setAdviceDraft}
+        onAdd={commitAdvice}
+        onSaveCustom={
+          onSaveAdviceCustom
+            ? () => {
+                const t = adviceDraft.trim();
+                if (t) onSaveAdviceCustom(t);
+              }
+            : undefined
+        }
+        placeholder="Add manual advice line…"
+        disabled={disabled}
       />
     </div>
   );
@@ -292,7 +408,9 @@ function Zone({
       <div className="mb-2 flex items-center justify-between">
         <span className="text-[12px] font-bold tracking-wide">{title}</span>
         {lines.length ? (
-          <span className="text-[9px] font-semibold text-faint">{lines.length} line{lines.length === 1 ? "" : "s"}</span>
+          <span className="text-[9px] font-semibold text-faint">
+            {lines.length} line{lines.length === 1 ? "" : "s"}
+          </span>
         ) : null}
       </div>
       {lines.length ? (

@@ -150,7 +150,7 @@ export type ComposerToolbarProps = {
   fullscreen: boolean;
   setFullscreen: Dispatch<SetStateAction<boolean>>;
   persist: (status: "" | "finalize") => Promise<string | null>;
-  busy: "" | "save" | "finalize" | "print";
+  busy: "" | "save" | "finalize" | "print" | "reopen";
   finalizeFast: (alsoPrint?: boolean) => Promise<void>;
   print: () => Promise<void>;
   settings: UsgPrintSettings;

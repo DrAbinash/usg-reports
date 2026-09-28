@@ -38,6 +38,7 @@ export async function loadAllPathologies(): Promise<UsgPathologyDef[]> {
       label: r.label,
       text: r.findingText,
       impression: safeJsonArray(r.impressionLinesJson),
+      advice: safeJsonArray(r.adviceLinesJson ?? "[]"),
       titleFragment: r.titleFragment || undefined,
       builtin: false,
     }));
@@ -68,6 +69,7 @@ export async function lookupPathology(key: string): Promise<UsgPathologyDef | un
       label: row.label,
       text: row.findingText,
       impression: safeJsonArray(row.impressionLinesJson),
+      advice: safeJsonArray(row.adviceLinesJson ?? "[]"),
       titleFragment: row.titleFragment || undefined,
       builtin: false,
     };

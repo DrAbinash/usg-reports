@@ -21,6 +21,11 @@ export async function PUT(req: Request, ctx: Ctx) {
       body.impressionLines.filter((l: unknown): l is string => typeof l === "string" && !!l.trim()).map((l: string) => l.trim()),
     );
   }
+  if (Array.isArray(body.adviceLines)) {
+    data.adviceLinesJson = JSON.stringify(
+      body.adviceLines.filter((l: unknown): l is string => typeof l === "string" && !!l.trim()).map((l: string) => l.trim()),
+    );
+  }
   if (typeof body.titleFragment === "string") data.titleFragment = body.titleFragment.trim();
   if (Object.keys(data).length === 0) return Response.json({ error: "Nothing to update" }, { status: 400 });
 

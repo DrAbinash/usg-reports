@@ -5,12 +5,12 @@
  */
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FileCheck2, FileDown, Loader2, Printer, Save, ArrowRight, X } from "lucide-react";
+import { FileCheck2, FileDown, Loader2, Printer, Save, ArrowRight, X, Unlock } from "lucide-react";
 import { UsgTipsRibbon } from "../UsgTipsRibbon";
 
 export type StickyActionBarProps = {
   hidden?: boolean;
-  busy: "" | "save" | "finalize" | "print";
+  busy: "" | "save" | "finalize" | "print" | "reopen";
   isFinal: boolean;
   onSave: () => void;
   onFinalize: () => void;
@@ -18,6 +18,8 @@ export type StickyActionBarProps = {
   onNext: () => void;
   /** Shown after finalize — PDF download (moved here from the top toolbar). */
   onDownloadPdf?: () => void;
+  /** Reopen a finalized report for amendment (keeps serial). */
+  onReopen?: () => void;
 };
 
 export function StickyActionBar({
@@ -29,6 +31,7 @@ export function StickyActionBar({
   onPrint,
   onNext,
   onDownloadPdf,
+  onReopen,
 }: StickyActionBarProps) {
   const [printTipHidden, setPrintTipHidden] = useState(false);
 
@@ -65,19 +68,37 @@ export function StickyActionBar({
           {busy === "save" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1 h-3.5 w-3.5" />}
           Save
         </Button>
-        <Button
-          size="sm"
-          onClick={onFinalize}
-          disabled={busy !== "" || isFinal}
-          className="h-8 bg-emerald-600 px-3 text-[12px] font-bold text-white hover:bg-emerald-700"
-        >
-          {busy === "finalize" ? (
-            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <FileCheck2 className="mr-1 h-3.5 w-3.5" />
-          )}
-          Finalize
-        </Button>
+        {isFinal && onReopen ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onReopen}
+            disabled={busy !== ""}
+            className="h-8 border-2 border-amber-400 bg-amber-50 px-3 text-[12px] font-bold text-amber-950 hover:bg-amber-100"
+            title="Unlock this finalized report to edit — serial number is kept"
+          >
+            {busy === "reopen" ? (
+              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Unlock className="mr-1 h-3.5 w-3.5" />
+            )}
+            Reopen for edit
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            onClick={onFinalize}
+            disabled={busy !== "" || isFinal}
+            className="h-8 bg-emerald-600 px-3 text-[12px] font-bold text-white hover:bg-emerald-700"
+          >
+            {busy === "finalize" ? (
+              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <FileCheck2 className="mr-1 h-3.5 w-3.5" />
+            )}
+            Finalize
+          </Button>
+        )}
         <Button
           size="sm"
           variant="outline"

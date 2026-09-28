@@ -358,6 +358,8 @@ model UsgPathology {
   label         String
   findingText   String   // may contain {variable} tokens
   impressionLinesJson String @default("[]")
+  /** Optional advice / next-step lines (JSON string array) for custom findings. */
+  adviceLinesJson String @default("[]")
   titleFragment String   @default("")
   sortOrder     Int      @default(100)
   createdAt     DateTime @default(now())

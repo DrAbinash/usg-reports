@@ -63,6 +63,8 @@ const SIDE_SHARED: Record<string, string[]> = {
 
 /** True when a pathology (organ "x") may be applied to organKey. */
 function pathologyAppliesTo(pathologyOrgan: string, organKey: string): boolean {
+  // Clinic impression/advice snippets never attach to body organ cards.
+  if (pathologyOrgan === "_impression" || pathologyOrgan === "_advice") return false;
   if (pathologyOrgan === organKey) return true;
   return (SIDE_SHARED[pathologyOrgan] ?? []).includes(organKey);
 }
@@ -191,6 +193,8 @@ export function normaliseState(
     adviceEdits: strMap(obj.adviceEdits),
     impressionAddendum:
       typeof obj.impressionAddendum === "string" ? obj.impressionAddendum : undefined,
+    adviceAddendum:
+      typeof obj.adviceAddendum === "string" ? obj.adviceAddendum : undefined,
   };
 }
 
@@ -229,6 +233,7 @@ export function switchStudy(
     impressionEdits: state.impressionEdits,
     adviceEdits: state.adviceEdits,
     impressionAddendum: state.impressionAddendum,
+    adviceAddendum: state.adviceAddendum,
   };
 }
 
@@ -494,7 +499,7 @@ export function resolve(
         label: def.label,
         text,
         kind: def.kind === "grid" ? "rows" : def.kind,
-        abnormal: selectedPathologies(o).length > 0,
+        abnormal: selectedPathologies(o).length > 0 || !!o.custom,
         normalText: def.normal,
       });
     }

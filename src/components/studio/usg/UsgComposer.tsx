@@ -23,6 +23,7 @@ import {
   switchStudy,
 } from "@/lib/usg/composer";
 import { studyAllowsRushNormals } from "@/lib/usg/quickActions";
+import { promoteOrganTextToImpression } from "@/lib/usg/addendum";
 import { type PathologyWordingOverrides } from "@/lib/usg/triad";
 import { buildUsgReportHtml, formatUsgSerial, type UsgPrintSettings } from "@/lib/usg/print";
 import { lmpSummary, parseLmpInput } from "@/lib/usg/lmp";
@@ -211,12 +212,15 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const [lmp, setLmp] = useState("");
   const [impressionManual, setImpressionManual] = useState(!!initial?.impressionOverride);
   const [showTechnique, setShowTechnique] = useState(false);
-  const [busy, setBusy] = useState<"" | "save" | "finalize" | "print">("");
+  const [busy, setBusy] = useState<"" | "save" | "finalize" | "print" | "reopen">("");
   const savedIdRef = useRef<string | null>(report?.id ?? null);
   const [serial, setSerial] = useState<string | undefined>(
     report?.serialNo != null ? formatUsgSerial(report.serialNo) : undefined,
   );
   const [finalizedHere, setFinalizedHere] = useState(report?.status === "FINALIZED");
+  /** After reopen API succeeds, ignore stale report.status until parent refreshes. */
+  const [reopenedHere, setReopenedHere] = useState(false);
+  const queryClient = useQueryClient();
   const [qualityOpen, setQualityOpen] = useState(false);
   // Collapse demography whenever patient context already exists so OHIF +
   // composer keep ≥ half the viewport. Only a blank new report opens expanded.
@@ -278,7 +282,6 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const pullFromMachine = async () => {
     await pullMutation.mutateAsync();
   };
-  const queryClient = useQueryClient();
   const lookup = useMemo(() => makeLookup(pathologies), [pathologies]);
   const resolved = useMemo(() => {
     // Unmapped billed canvas — never let resolve() fall back to whole-abdomen.
@@ -378,7 +381,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   };
 
   const isPregnancyStudy = studyKey === "ob" || studyKey === "ep";
-  const isFinal = report?.status === "FINALIZED" || finalizedHere;
+  const isFinal = !reopenedHere && (report?.status === "FINALIZED" || finalizedHere);
 
   const initialSnap = useMemo(
     () => ({
@@ -597,10 +600,14 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     return d ? lmpSummary(d) : null;
   }, [lmp]);
 
+  const markFinalized = useCallback((v: boolean) => {
+    setFinalizedHere(v);
+    if (v) setReopenedHere(false);
+  }, []);
   const persistDeps = () => ({
     patientName, patientPhone, patientAge, patientSex, referredBy, studyKey, technique, state, scanDate,
     savedIdRef, frozenHtmlRef, dirtyRef, dKey, pendingImages, setPendingImages, setImages,
-    setBusy, setSerial, setFinalizedHere, onSaved,
+    setBusy, setSerial, setFinalizedHere: markFinalized, onSaved,
   });
   const persistMutation = useMutation({
     mutationFn: async (status: "" | "finalize") => persistReport(status, persistDeps()),
@@ -670,6 +677,41 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   );
   const onFocusOrgan = useCallback((idx: number) => setFocusedOrganIdx(idx), []);
   const onAddCustom = useCallback((organKey: string) => setDialogOrgan(organKey), []);
+  const onPromoteToImpression = useCallback((organKey: string, selection?: string) => {
+    setState((s) => promoteOrganTextToImpression(s, organKey, selection));
+    toast.success(
+      selection?.trim()
+        ? "Selected text added to IMPRESSION"
+        : "Finding text added to IMPRESSION — review triad",
+    );
+  }, []);
+  const onReopen = useCallback(async () => {
+    const id = savedIdRef.current ?? report?.id;
+    if (!id) {
+      toast.error("Save the report before reopening");
+      return;
+    }
+    setBusy("reopen");
+    try {
+      const res = await fetch(`/api/usg/reports/${id}/reopen`, { method: "POST" });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? "Reopen failed");
+      }
+      setFinalizedHere(false);
+      setReopenedHere(true);
+      frozenHtmlRef.current = null;
+      toast.success("Report reopened — edit freely, then Finalize again");
+      onSaved();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Reopen failed");
+    } finally {
+      setBusy("");
+    }
+  }, [report?.id, onSaved]);
+  const onPathologiesRefresh = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["usg", "pathologies"] });
+  }, [queryClient]);
   const lookupPathology = useCallback((key: string) => pathologies.find((p) => p.key === key), [pathologies]);
   const onEnlargePreview = useCallback(() => setFocusMode("preview"), []);
   const onResetFocus = useCallback(() => setFocusMode(null), []);
@@ -823,6 +865,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
                   onAddCustom={onAddCustom}
                   lookupPathology={lookupPathology}
                   triadAdviceTexts={resolved.advice}
+                  onPromoteToImpression={onPromoteToImpression}
                 />
               );
             })}
@@ -874,6 +917,8 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
             patientAge={patientAge}
             patientSex={patientSex === "F" || patientSex === "M" ? patientSex : undefined}
             lmp={lmp}
+            pathologies={pathologies}
+            onPathologiesRefresh={onPathologiesRefresh}
           />
         </div>
       </div>
@@ -887,7 +932,11 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
       <ComposerDialogs
         dicomOpen={dicomOpen} setDicomOpen={setDicomOpen}
         formFOpen={formFOpen} setFormFOpen={setFormFOpen}
-        formFDefaults={formFDefaults} order={order} report={report} onSaved={onSaved}
+        formFDefaults={formFDefaults} order={order} report={report}
+        onSaved={() => {
+          onSaved();
+          onPathologiesRefresh();
+        }}
         dialogOrgan={dialogOrgan} setDialogOrgan={setDialogOrgan} study={study}
         pickerOpen={pickerOpen} setPickerOpen={setPickerOpen} pickStudy={pickStudy} studyKey={studyKey}
         qualityOpen={qualityOpen} setQualityOpen={setQualityOpen} state={state} resolved={resolved} persist={persist}
@@ -910,6 +959,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         isFinal={isFinal}
         onSave={() => void persist("")}
         onFinalize={() => void finalizeFast(false)}
+        onReopen={() => void onReopen()}
         onPrint={() => void print()}
         onDownloadPdf={() => {
           void downloadReportPdf({

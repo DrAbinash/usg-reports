@@ -84,6 +84,7 @@ export type ComposerOrganCardProps = {
   onAddCustom: (organKey: string) => void;
   lookupPathology: (key: string) => UsgPathologyDef | undefined;
   triadAdviceTexts?: string[];
+  onPromoteToImpression?: (organKey: string, selection?: string) => void;
 };
 
 function organCardEqual(a: ComposerOrganCardProps, b: ComposerOrganCardProps): boolean {
@@ -103,7 +104,8 @@ function organCardEqual(a: ComposerOrganCardProps, b: ComposerOrganCardProps): b
     a.setState === b.setState &&
     a.onAddCustom === b.onAddCustom &&
     a.lookupPathology === b.lookupPathology &&
-    a.triadAdviceTexts === b.triadAdviceTexts
+    a.triadAdviceTexts === b.triadAdviceTexts &&
+    a.onPromoteToImpression === b.onPromoteToImpression
   );
 }
 
@@ -124,6 +126,7 @@ export const OrganCard = memo(function OrganCard({
   onAddCustom,
   lookupPathology,
   triadAdviceTexts,
+  onPromoteToImpression,
 }: ComposerOrganCardProps) {
   const onToggle = useCallback(
     (k: string | null) => onTogglePathology(def.key, k),
@@ -204,6 +207,11 @@ export const OrganCard = memo(function OrganCard({
           onAddCustom={onAddCustom}
           triadAdviceTexts={triadAdviceTexts}
           onApplySuggestion={onApplySuggestion}
+          onPromoteToImpression={
+            isFinal || !onPromoteToImpression
+              ? undefined
+              : (sel) => onPromoteToImpression(def.key, sel)
+          }
         />
       )}
     </div>

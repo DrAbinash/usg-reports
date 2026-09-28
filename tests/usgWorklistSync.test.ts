@@ -401,6 +401,51 @@ describe("K · Orthanc orphan import (unlinked PACS US)", () => {
     expect(stats.skippedNoName).toBe(2);
     expect(stats.importedFromOrthanc).toBe(0);
   });
+
+  // accessionNumber is @unique TABLE-WIDE (schema.prisma), not per-clinic —
+  // an accession owned by another clinic's order used to fail every orphan
+  // create with a swallowed P2002 (67 lost rows on the NAS).
+  test("accession owned by ANOTHER clinic's order → imports with null accession", async () => {
+    await db.usgCareOrder.create({
+      data: {
+        clinicId: "care-bangalore",
+        accessionNumber: "ACC-BLR-1",
+        patientName: "Other Clinic Row",
+        status: "PENDING",
+      },
+    });
+    const stats = await importOrthancOrphans(
+      [{ ...orphan("1.2.840.orphan.6", "Same Acc Patient"), accessionNumber: "ACC-BLR-1" }],
+      "default",
+    );
+    expect(stats.errors).toBe(0);
+    expect(stats.importedFromOrthanc).toBe(1);
+    const order = await db.usgCareOrder.findFirstOrThrow({
+      where: { studyInstanceUid: "1.2.840.orphan.6" },
+    });
+    expect(order.clinicId).toBe("default");
+    expect(order.accessionNumber).toBeNull(); // UID is the identity; the acc belongs to the other clinic
+  });
+
+  test("accession owned by the SAME clinic's order → imports with null accession", async () => {
+    await db.usgCareOrder.create({
+      data: {
+        clinicId: "default",
+        accessionNumber: "ACC-OWN-1",
+        patientName: "Own Acc Row",
+        status: "PENDING",
+      },
+    });
+    const stats = await importOrthancOrphans([
+      { ...orphan("1.2.840.orphan.7", "Second Patient"), accessionNumber: "ACC-OWN-1" },
+    ]);
+    expect(stats.errors).toBe(0);
+    expect(stats.importedFromOrthanc).toBe(1);
+    const order = await db.usgCareOrder.findFirstOrThrow({
+      where: { studyInstanceUid: "1.2.840.orphan.7" },
+    });
+    expect(order.accessionNumber).toBeNull();
+  });
 });
 
 // ── pure matching unit checks (the never-rules, isolated) ───────────────────

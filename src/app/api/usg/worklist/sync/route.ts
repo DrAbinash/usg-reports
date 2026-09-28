@@ -93,8 +93,9 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. Orthanc US orphans → worklist rows (UID identity). Fail-soft: a
-    // DICOMweb outage must not undo a successful CARE import / attach.
-    const us = await listRecentUltrasoundStudies(14, 200);
+    // DICOMweb outage must not undo a successful CARE import / attach —
+    // but it is never SILENT: it sets lastError so the banner shows amber.
+    const us = await listRecentUltrasoundStudies(14, 500);
     if (us.ok) {
       orthancOk = true;
       try {
@@ -104,14 +105,22 @@ export async function POST(req: NextRequest) {
           `us=${orphanStats.orthancUsStudies}`,
           `imported=${orphanStats.importedFromOrthanc}`,
           `present=${orphanStats.alreadyPresent}`,
+          `errors=${orphanStats.errors}`,
+          `noName=${orphanStats.skippedNoName}`,
+          `noUid=${orphanStats.skippedNoUid}`,
         );
+        if (orphanStats.errors > 0) {
+          console.warn(
+            "[sync] orphan create failures:",
+            orphanStats.skippedReasons.slice(0, 3).join(" | "),
+          );
+        }
       } catch (e: any) {
         lastError = lastError ?? `orphan import failed: ${e?.message ?? String(e)}`;
         console.error("[sync] importOrthancOrphans threw:", e);
       }
-    } else if (!orthancOk) {
-      lastError = lastError ?? us.error;
     } else {
+      lastError = lastError ?? us.error;
       console.warn("[sync] listRecentUltrasoundStudies:", us.error);
     }
   }
@@ -235,6 +244,9 @@ export async function POST(req: NextRequest) {
     orphanSkippedNoName: orphanStats.skippedNoName,
     orphanSkippedNoUid: orphanStats.skippedNoUid,
     orphanErrors: orphanStats.errors,
+    // Both reason lists, CARE first — the audit line and the UI toast read
+    // this one array.
+    skippedReasons: [...importStats.skippedReasons, ...orphanStats.skippedReasons],
   };
   const skippedTotal = stats.skippedNoName + stats.skippedMissingIdentity + stats.errors + stats.orphanErrors;
   const newOrders = stats.imported + stats.importedFromOrthanc;

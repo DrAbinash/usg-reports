@@ -124,18 +124,27 @@ function isUsStudyDicomWeb(st: Record<string, { Value?: unknown[] }>): boolean {
  * has not (yet) billed/linked them — the ERP PACS Worklist shows these as
  * "Unlinked / Study Received", but the reporting-studio bill-desk feed may
  * omit or fail to surface them, leaving Sync as a no-op.
+ *
+ * The window is queried in closed 3-day chunks with a server-side
+ * Modality=US filter. QIDO returns studies in unspecified order and
+ * truncates at `limit` — a single open-ended all-modality query let CT/MR
+ * studies (or merely older ones) consume the entire budget, so the newest
+ * US work never arrived (NAS-verified: 145 US of a 200-limit fetch while
+ * ≥200 US studies existed in the window, 123 dated the last two days).
+ * Chunks, not `offset` pagination: closed StudyDate ranges + Modality are
+ * the two query keys this Orthanc build is proven to accept.
  */
 export async function listRecentUltrasoundStudies(
   daysBack = 14,
-  limit = 200,
+  limit = 500,
 ): Promise<OrthancResult<OrthancUsStudyRow[]>> {
   const s = await getSettings();
   if (!s.orthancUrl) return { ok: false, error: "Orthanc not configured (Settings → Integrations)" };
 
   // Lazy import avoids a dates↔orthanc cycle at module init.
   const { clinicTodayIST, addCalendarDaysYmd } = await import("./dates");
-  const fromYmd = addCalendarDaysYmd(clinicTodayIST(), -Math.max(0, daysBack));
-  const fromDicom = fromYmd.replace(/-/g, "");
+  const todayYmd = clinicTodayIST();
+  const fromYmd = addCalendarDaysYmd(todayYmd, -Math.max(0, daysBack));
 
   const base = s.orthancUrl.trim().replace(/\/+$/, "");
   const headers: Record<string, string> = { Accept: "application/dicom+json" };
@@ -143,55 +152,77 @@ export async function listRecentUltrasoundStudies(
     headers.Authorization = `Basic ${Buffer.from(`${s.orthancUsername}:${s.orthancPassword ?? ""}`).toString("base64")}`;
   }
 
-  const url =
-    `${base}/dicom-web/studies?00080020=${fromDicom}-` +
-    `&includefield=00080061,00100010,00100020,00080050,00080090,00081030,0020000D,00100040,00101010,00080030` +
-    `&limit=${Math.min(500, Math.max(1, limit))}`;
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS * 2);
-  try {
-    const res = await fetch(url, { headers, signal: controller.signal, cache: "no-store" });
-    if (!res.ok) return { ok: false, error: `Orthanc DICOMweb responded ${res.status}` };
-    const studies = (await res.json()) as Record<string, { Value?: unknown[] }>[];
-    if (!Array.isArray(studies)) {
-      return { ok: false, error: "Orthanc DICOMweb returned an unexpected response" };
-    }
-
-    const rows: OrthancUsStudyRow[] = [];
-    for (const st of studies) {
-      if (!isUsStudyDicomWeb(st)) continue;
-      const uid = String(st["0020000D"]?.Value?.[0] ?? "").trim();
-      if (!uid) continue;
-      const rawDate = String(st["00080020"]?.Value?.[0] ?? "").replace(/[^0-9]/g, "");
-      const rawTime = String(st["00080030"]?.Value?.[0] ?? "").replace(/[^0-9.]/g, "").split(".")[0] ?? "";
-      const accession = String(st["00080050"]?.Value?.[0] ?? "").trim();
-      const name = dicomPn(st["00100010"]) || "UNKNOWN";
-      const sexRaw = String(st["00100040"]?.Value?.[0] ?? "").toUpperCase();
-      rows.push({
-        studyInstanceUid: uid,
-        accessionNumber: accession || null,
-        patientName: name,
-        patientSex: sexRaw === "M" ? "M" : sexRaw === "F" ? "F" : "",
-        patientAge: String(st["00101010"]?.Value?.[0] ?? "").replace(/[^0-9]/g, ""),
-        referringDoctor: dicomPn(st["00080090"]),
-        testName: String(st["00081030"]?.Value?.[0] ?? "").trim() || "USG Study",
-        studyDate:
-          rawDate.length >= 8
-            ? `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`
-            : null,
-        studyTime: rawTime.length >= 4 ? rawTime.slice(0, 6) : null,
-      });
-    }
-    return { ok: true, data: rows };
-  } catch (e) {
-    if (e instanceof Error && e.name === "AbortError") {
-      return { ok: false, error: "Orthanc DICOMweb timed out" };
-    }
-    return { ok: false, error: "Orthanc unreachable" };
-  } finally {
-    clearTimeout(timer);
+  const CHUNK_DAYS = 3;
+  const perChunk = Math.min(500, Math.max(1, limit));
+  const ranges: { from: string; to: string }[] = [];
+  for (let to = todayYmd; ; ) {
+    const from = addCalendarDaysYmd(to, -(CHUNK_DAYS - 1));
+    ranges.push({ from: from < fromYmd ? fromYmd : from, to });
+    if (from <= fromYmd) break;
+    to = addCalendarDaysYmd(from, -1);
   }
+
+  const chunks = await Promise.all(
+    ranges.map(async ({ from, to }) => {
+      const url =
+        `${base}/dicom-web/studies?StudyDate=${from.replace(/-/g, "")}-${to.replace(/-/g, "")}` +
+        `&Modality=US` +
+        `&includefield=00080061,00100010,00100020,00080050,00080090,00081030,0020000D,00100040,00101010,00080030` +
+        `&limit=${perChunk}`;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), TIMEOUT_MS * 2);
+      try {
+        const res = await fetch(url, { headers, signal: controller.signal, cache: "no-store" });
+        if (!res.ok) return { ok: false as const, error: `Orthanc DICOMweb responded ${res.status}` };
+        const studies = (await res.json()) as Record<string, { Value?: unknown[] }>[];
+        if (!Array.isArray(studies)) {
+          return { ok: false as const, error: "Orthanc DICOMweb returned an unexpected response" };
+        }
+        return { ok: true as const, data: studies };
+      } catch (e) {
+        if (e instanceof Error && e.name === "AbortError") {
+          return { ok: false as const, error: "Orthanc DICOMweb timed out" };
+        }
+        return { ok: false as const, error: "Orthanc unreachable" };
+      } finally {
+        clearTimeout(timer);
+      }
+    }),
+  );
+  const failed = chunks.find((r) => !r.ok);
+  if (failed && !failed.ok) return failed;
+  const studies = chunks.flatMap((r) => (r.ok ? r.data : []));
+
+  const rows: OrthancUsStudyRow[] = [];
+  const seenUid = new Set<string>();
+  for (const st of studies) {
+    // Server-side Modality=US protects the fetch budget; this client-side
+    // check stays the authority on what counts as ultrasound.
+    if (!isUsStudyDicomWeb(st)) continue;
+    const uid = String(st["0020000D"]?.Value?.[0] ?? "").trim();
+    if (!uid || seenUid.has(uid)) continue;
+    seenUid.add(uid);
+    const rawDate = String(st["00080020"]?.Value?.[0] ?? "").replace(/[^0-9]/g, "");
+    const rawTime = String(st["00080030"]?.Value?.[0] ?? "").replace(/[^0-9.]/g, "").split(".")[0] ?? "";
+    const accession = String(st["00080050"]?.Value?.[0] ?? "").trim();
+    const name = dicomPn(st["00100010"]) || "UNKNOWN";
+    const sexRaw = String(st["00100040"]?.Value?.[0] ?? "").toUpperCase();
+    rows.push({
+      studyInstanceUid: uid,
+      accessionNumber: accession || null,
+      patientName: name,
+      patientSex: sexRaw === "M" ? "M" : sexRaw === "F" ? "F" : "",
+      patientAge: String(st["00101010"]?.Value?.[0] ?? "").replace(/[^0-9]/g, ""),
+      referringDoctor: dicomPn(st["00080090"]),
+      testName: String(st["00081030"]?.Value?.[0] ?? "").trim() || "USG Study",
+      studyDate:
+        rawDate.length >= 8
+          ? `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`
+          : null,
+      studyTime: rawTime.length >= 4 ? rawTime.slice(0, 6) : null,
+    });
+  }
+  return { ok: true, data: rows };
 }
 
 // ── DICOMweb (series/instance browsing + rendered JPEGs) ───────────────────

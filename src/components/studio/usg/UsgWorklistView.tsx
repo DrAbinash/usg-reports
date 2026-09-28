@@ -62,6 +62,7 @@ type SyncStats = {
   unmatchedOrthanc?: number;
   importedFromOrthanc?: number;
   orthancUsStudies?: number;
+  orphanErrors?: number;
   skippedReasons?: string[];
 };
 
@@ -352,7 +353,11 @@ export function UsgWorklistView() {
       const hasNews = (r.newOrders ?? 0) > 0 || (st?.erpFinalizedNotLocal ?? 0) > 0;
       if (r.lastError) toast.warning(r.lastError);
       else if (!silent && (r.careConfigured || r.orthancConfigured)) {
-        const skipped = (st?.skippedNoName ?? 0) + (st?.skippedMissingIdentity ?? 0) + (st?.errors ?? 0);
+        const skipped =
+          (st?.skippedNoName ?? 0) +
+          (st?.skippedMissingIdentity ?? 0) +
+          (st?.errors ?? 0) +
+          (st?.orphanErrors ?? 0);
         const bits = [
           `CARE ${r.careOk ? "✓" : "✗"}`,
           `Orthanc ${r.orthancOk ? "✓" : "✗"}`,

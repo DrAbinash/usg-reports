@@ -207,6 +207,8 @@ export type OrphanImportStats = {
   skippedNoName: number;
   skippedNoUid: number;
   errors: number;
+  /** Safe per-row diagnostics — study UID tail + reason, never patient data. */
+  skippedReasons: string[];
 };
 
 export const emptyOrphanImportStats = (): OrphanImportStats => ({
@@ -216,7 +218,12 @@ export const emptyOrphanImportStats = (): OrphanImportStats => ({
   skippedNoName: 0,
   skippedNoUid: 0,
   errors: 0,
+  skippedReasons: [],
 });
+
+const isUniqueViolation = (e: unknown): boolean =>
+  e instanceof Error &&
+  ((e as { code?: string }).code === "P2002" || /unique constraint/i.test(e.message));
 
 // ── DB orchestration ────────────────────────────────────────────────────────
 
@@ -458,8 +465,12 @@ export async function importOrthancOrphans(
   );
 
   // Also avoid unique-collision on accession when an order already holds it.
+  // The unique constraint is TABLE-WIDE (accessionNumber @unique), so this
+  // lookup must be too — a clinic-scoped version let an accession owned by
+  // another clinic's order fail every create with a swallowed error
+  // (NAS-verified: 67 of 145 fetched US studies lost this way).
   const existingAcc = await db.usgCareOrder.findMany({
-    where: { clinicId, accessionNumber: { not: null } },
+    where: { accessionNumber: { not: null } },
     select: { accessionNumber: true },
   });
   const haveAcc = new Set(
@@ -489,35 +500,55 @@ export async function importOrthancOrphans(
     // the orphan (UID is enough) rather than failing the unique constraint.
     const safeAcc = acc && !haveAcc.has(acc) ? acc : null;
 
+    const data = {
+      clinicId,
+      accessionNumber: safeAcc,
+      careWorklistId: null,
+      patientName: name,
+      patientAge: (st.patientAge ?? "").replace(/[^0-9]/g, "").slice(0, 3),
+      patientSex: st.patientSex === "M" ? "M" : "F",
+      patientPhone: "",
+      patientAddress: "",
+      billNumber: "",
+      referringDoctor: (st.referringDoctor ?? "").trim(),
+      testName: (st.testName ?? "").trim() || "USG Study",
+      testCode: "",
+      modality: "USG",
+      studyInstanceUid: uid,
+      studyDate: parseStudyDateTime(st.studyDate, st.studyTime),
+      billingStatus: null,
+      status: "PENDING",
+    };
+
     try {
-      await db.usgCareOrder.create({
-        data: {
-          clinicId,
-          accessionNumber: safeAcc,
-          careWorklistId: null,
-          patientName: name,
-          patientAge: (st.patientAge ?? "").replace(/[^0-9]/g, "").slice(0, 3),
-          patientSex: st.patientSex === "M" ? "M" : "F",
-          patientPhone: "",
-          patientAddress: "",
-          billNumber: "",
-          referringDoctor: (st.referringDoctor ?? "").trim(),
-          testName: (st.testName ?? "").trim() || "USG Study",
-          testCode: "",
-          modality: "USG",
-          studyInstanceUid: uid,
-          studyDate: parseStudyDateTime(st.studyDate, st.studyTime),
-          billingStatus: null,
-          status: "PENDING",
-        },
-      });
+      await db.usgCareOrder.create({ data });
       stats.importedFromOrthanc++;
       haveUid.add(uid);
       if (safeAcc) haveAcc.add(safeAcc);
     } catch (e) {
-      stats.errors++;
-      // No patient data in diagnostics.
-      void e;
+      // After the table-wide guard, what's left is a race with a concurrent
+      // sync claiming the accession between our lookup and this insert.
+      // Retry once with the accession dropped — the UID is the orphan's
+      // real identity — before counting the failure.
+      let saved = false;
+      if (safeAcc && isUniqueViolation(e)) {
+        try {
+          await db.usgCareOrder.create({ data: { ...data, accessionNumber: null } });
+          saved = true;
+        } catch {
+          // fall through — the original failure is what gets counted
+        }
+      }
+      if (saved) {
+        stats.importedFromOrthanc++;
+        haveUid.add(uid);
+      } else {
+        stats.errors++;
+        // Safe diagnostics: study UID tail + error class, never patient data.
+        stats.skippedReasons.push(
+          `UID ..${uid.slice(-8)}: create failed (${e instanceof Error ? e.message.split("\n")[0].slice(0, 60) : "unknown"})`,
+        );
+      }
     }
   }
   return stats;

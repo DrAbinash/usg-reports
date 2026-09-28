@@ -216,6 +216,12 @@ export function deriveAdvice(
     }
   }
 
+  for (const raw of (state.adviceAddendum ?? "").split(/\n+/)) {
+    const text = raw.trim();
+    if (!text) continue;
+    dedupePush(out, { text, pathologyKey: "", edited: false, addendum: true }, dismissed);
+  }
+
   return out;
 }
 

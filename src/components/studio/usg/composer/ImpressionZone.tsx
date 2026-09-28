@@ -19,14 +19,20 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { Sparkles } from "lucide-react";
-import type { UsgComposerState, UsgResolved, UsgTriadLine } from "@/lib/usg/types";
+import type { UsgComposerState, UsgPathologyDef, UsgResolved, UsgTriadLine } from "@/lib/usg/types";
 import { selectedPathologies } from "@/lib/usg/composer";
+import {
+  appendAddendumLines,
+  SNIPPET_ORGAN_ADVICE,
+  SNIPPET_ORGAN_IMPRESSION,
+} from "@/lib/usg/addendum";
 import { pathologyOverrideKey, type PathologyWordingOverrides } from "@/lib/usg/triad";
 import { copyForwardFindings } from "@/lib/usg/quickActions";
 import { biradsImpressionLine, biradsFollowUpDays, type BiradsCategory } from "@/lib/usg/birads";
 import { composeImpression } from "@/lib/usg/autoCompose";
 import { UsgTriadZones } from "../UsgTriadZones";
 import { UsgBiradsPicker } from "../UsgBiradsPicker";
+import { UsgPathologyDialog } from "../UsgPathologyDialog";
 
 export type PriorFinalizedRow = {
   id: string;
@@ -54,6 +60,9 @@ export type ImpressionZoneProps = {
   patientAge?: string;
   patientSex?: string;
   lmp?: string;
+  /** Clinic library — includes _impression / _advice snippets. */
+  pathologies?: UsgPathologyDef[];
+  onPathologiesRefresh?: () => void;
 };
 
 function impressionEqual(a: ImpressionZoneProps, b: ImpressionZoneProps): boolean {
@@ -75,8 +84,20 @@ function impressionEqual(a: ImpressionZoneProps, b: ImpressionZoneProps): boolea
     a.savedId === b.savedId &&
     a.patientAge === b.patientAge &&
     a.patientSex === b.patientSex &&
-    a.lmp === b.lmp
+    a.lmp === b.lmp &&
+    a.pathologies === b.pathologies &&
+    a.onPathologiesRefresh === b.onPathologiesRefresh
   );
+}
+
+function replaceAddendumLine(prev: string | undefined, oldText: string, nextText: string): string {
+  const lines = (prev ?? "")
+    .split(/\n+/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => (l === oldText ? nextText.trim() : l))
+    .filter(Boolean);
+  return [...new Set(lines)].join("\n");
 }
 
 export const ImpressionZone = memo(function ImpressionZone({
@@ -98,9 +119,16 @@ export const ImpressionZone = memo(function ImpressionZone({
   patientAge,
   patientSex,
   lmp,
+  pathologies = [],
+  onPathologiesRefresh,
 }: ImpressionZoneProps) {
   const queryClient = useQueryClient();
   const [confirmAutoFill, setConfirmAutoFill] = useState(false);
+  const [snippetKind, setSnippetKind] = useState<"impression" | "advice" | null>(null);
+  const [snippetSeed, setSnippetSeed] = useState<string>("");
+
+  const impressionSnippets = pathologies.filter((p) => p.organ === SNIPPET_ORGAN_IMPRESSION);
+  const adviceSnippets = pathologies.filter((p) => p.organ === SNIPPET_ORGAN_ADVICE);
 
   const saveWordingMut = useMutation({
     mutationFn: async (body: {
@@ -379,6 +407,9 @@ export const ImpressionZone = memo(function ImpressionZone({
         adviceLines={adviceLines}
         disabled={isFinal}
         impressionAddendum={state.impressionAddendum}
+        adviceAddendum={state.adviceAddendum}
+        impressionSnippets={impressionSnippets}
+        adviceSnippets={adviceSnippets}
         onDismissImpression={(text) =>
           setState((s) => ({
             ...s,
@@ -392,6 +423,14 @@ export const ImpressionZone = memo(function ImpressionZone({
           }))
         }
         onEditImpression={(pk, text) => {
+          if (pk.startsWith("__addendum__:")) {
+            const old = pk.slice("__addendum__:".length);
+            setState((s) => ({
+              ...s,
+              impressionAddendum: replaceAddendumLine(s.impressionAddendum, old, text),
+            }));
+            return;
+          }
           if (!pk) {
             setImpressionManual(true);
             setState((s) => ({ ...s, impressionOverride: text }));
@@ -403,6 +442,14 @@ export const ImpressionZone = memo(function ImpressionZone({
           }));
         }}
         onEditAdvice={(pk, text) => {
+          if (pk.startsWith("__addendum__:")) {
+            const old = pk.slice("__addendum__:".length);
+            setState((s) => ({
+              ...s,
+              adviceAddendum: replaceAddendumLine(s.adviceAddendum, old, text),
+            }));
+            return;
+          }
           if (!pk) return;
           setState((s) => ({
             ...s,
@@ -424,6 +471,31 @@ export const ImpressionZone = memo(function ImpressionZone({
           })
         }
         onAddendum={(text) => setState((s) => ({ ...s, impressionAddendum: text }))}
+        onAdviceAddendum={(text) => setState((s) => ({ ...s, adviceAddendum: text }))}
+        onSaveImpressionCustom={(text) => {
+          setSnippetSeed(text);
+          setSnippetKind("impression");
+        }}
+        onSaveAdviceCustom={(text) => {
+          setSnippetSeed(text);
+          setSnippetKind("advice");
+        }}
+        onApplyImpressionSnippet={(p) => {
+          const lines = p.impression?.length ? p.impression : [p.text || p.label];
+          setState((s) => ({
+            ...s,
+            impressionAddendum: appendAddendumLines(s.impressionAddendum, lines),
+          }));
+          toast.success(`Added “${p.label}” to impression`);
+        }}
+        onApplyAdviceSnippet={(p) => {
+          const lines = p.advice?.length ? p.advice : p.suggestions?.length ? p.suggestions : [p.text || p.label];
+          setState((s) => ({
+            ...s,
+            adviceAddendum: appendAddendumLines(s.adviceAddendum, lines),
+          }));
+          toast.success(`Added “${p.label}” to advice`);
+        }}
         onSaveImpressionDefault={async (pk, text) => {
           const organ = state.organs.find((o) => selectedPathologies(o).includes(pk))?.organ;
           if (!organ) return;
@@ -465,6 +537,38 @@ export const ImpressionZone = memo(function ImpressionZone({
             pathologyKey: pk,
             kind: "advice",
           });
+        }}
+      />
+
+      <UsgPathologyDialog
+        open={snippetKind !== null}
+        organKey={snippetKind === "advice" ? SNIPPET_ORGAN_ADVICE : SNIPPET_ORGAN_IMPRESSION}
+        organLabel={snippetKind === "advice" ? "Advice library" : "Impression library"}
+        editing={null}
+        seed={
+          snippetKind === "advice"
+            ? { label: snippetSeed.slice(0, 48), advice: snippetSeed }
+            : { label: snippetSeed.slice(0, 48), impression: snippetSeed }
+        }
+        onClose={() => {
+          setSnippetKind(null);
+          setSnippetSeed("");
+        }}
+        onSaved={(created) => {
+          onPathologiesRefresh?.();
+          if (created && snippetKind === "impression") {
+            const lines = created.impression?.length ? created.impression : [created.text || created.label];
+            setState((s) => ({
+              ...s,
+              impressionAddendum: appendAddendumLines(s.impressionAddendum, lines),
+            }));
+          } else if (created && snippetKind === "advice") {
+            const lines = created.advice?.length ? created.advice : [created.text || created.label];
+            setState((s) => ({
+              ...s,
+              adviceAddendum: appendAddendumLines(s.adviceAddendum, lines),
+            }));
+          }
         }}
       />
 

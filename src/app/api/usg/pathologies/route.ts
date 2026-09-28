@@ -3,6 +3,11 @@ import { db } from "@/lib/db";
 import { audit } from "@/lib/usg/audit";
 import { loadAllPathologies } from "@/lib/usg/server";
 import { USG_PATHOLOGIES } from "@/lib/usg/pathologies";
+import {
+  isSnippetOrgan,
+  SNIPPET_ORGAN_ADVICE,
+  SNIPPET_ORGAN_IMPRESSION,
+} from "@/lib/usg/addendum";
 
 export async function GET() {
   const guard = await requireSession();
@@ -21,10 +26,13 @@ export async function POST(req: Request) {
   const impressionLines = Array.isArray(body.impressionLines)
     ? body.impressionLines.filter((l: unknown): l is string => typeof l === "string" && !!l.trim()).map((l: string) => l.trim())
     : [];
+  const adviceLines = Array.isArray(body.adviceLines)
+    ? body.adviceLines.filter((l: unknown): l is string => typeof l === "string" && !!l.trim()).map((l: string) => l.trim())
+    : [];
   const titleFragment = String(body.titleFragment ?? "").trim();
   const sortOrder = Number.isFinite(Number(body.sortOrder)) ? Number(body.sortOrder) : 100;
 
-  const validOrgans = new Set<string>();
+  const validOrgans = new Set<string>([SNIPPET_ORGAN_IMPRESSION, SNIPPET_ORGAN_ADVICE]);
   for (const study of (await import("@/lib/usg/studies")).USG_STUDIES) {
     study.organs.forEach((o) => {
       validOrgans.add(o.key);
@@ -34,13 +42,44 @@ export async function POST(req: Request) {
   if (!organKey || !validOrgans.has(organKey)) {
     return Response.json({ error: "Invalid organ" }, { status: 400 });
   }
-  if (!label || !findingText) {
+
+  // Clinic impression/advice snippets: finding text may mirror the line.
+  const isSnippet = isSnippetOrgan(organKey);
+  if (!label) {
+    return Response.json({ error: "Label is required" }, { status: 400 });
+  }
+  if (!isSnippet && !findingText) {
     return Response.json({ error: "Label and finding text are required" }, { status: 400 });
   }
+  if (isSnippet && organKey === SNIPPET_ORGAN_IMPRESSION && !impressionLines.length && !findingText) {
+    return Response.json({ error: "Impression text is required" }, { status: 400 });
+  }
+  if (isSnippet && organKey === SNIPPET_ORGAN_ADVICE && !adviceLines.length && !findingText) {
+    return Response.json({ error: "Advice text is required" }, { status: 400 });
+  }
+
+  const resolvedFinding =
+    findingText ||
+    (organKey === SNIPPET_ORGAN_IMPRESSION
+      ? impressionLines[0] ?? label
+      : organKey === SNIPPET_ORGAN_ADVICE
+        ? adviceLines[0] ?? label
+        : "");
+  const resolvedImpression =
+    impressionLines.length > 0
+      ? impressionLines
+      : organKey === SNIPPET_ORGAN_IMPRESSION && resolvedFinding
+        ? [resolvedFinding]
+        : [];
+  const resolvedAdvice =
+    adviceLines.length > 0
+      ? adviceLines
+      : organKey === SNIPPET_ORGAN_ADVICE && resolvedFinding
+        ? [resolvedFinding]
+        : [];
 
   // Duplicate guard against builtins with the same label on the same organ.
-  const organForCheck = organKey === "kidney" ? organKey : organKey;
-  if (USG_PATHOLOGIES.some((p) => p.organ === organForCheck && p.label.toLowerCase() === label.toLowerCase())) {
+  if (!isSnippet && USG_PATHOLOGIES.some((p) => p.organ === organKey && p.label.toLowerCase() === label.toLowerCase())) {
     return Response.json({ error: "A builtin pathology with this label already exists" }, { status: 409 });
   }
 
@@ -56,20 +95,25 @@ export async function POST(req: Request) {
       clinicId,
       organKey,
       label,
-      findingText,
-      impressionLinesJson: JSON.stringify(impressionLines),
+      findingText: resolvedFinding,
+      impressionLinesJson: JSON.stringify(resolvedImpression),
+      adviceLinesJson: JSON.stringify(resolvedAdvice),
       titleFragment,
       sortOrder,
     },
   });
-  await audit({ action: "pathology.add", detail: `custom finding added: ${row.label}` });
+  await audit({
+    action: isSnippet ? "snippet.add" : "pathology.add",
+    detail: `custom ${isSnippet ? organKey.slice(1) : "finding"} added: ${row.label}`,
+  });
   return Response.json({
     pathology: {
       key: "custom:" + row.id,
       organ: row.organKey,
       label: row.label,
       text: row.findingText,
-      impression: impressionLines,
+      impression: resolvedImpression,
+      advice: resolvedAdvice,
       titleFragment: titleFragment || undefined,
       builtin: false,
     },

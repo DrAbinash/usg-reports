@@ -182,6 +182,8 @@ export type UsgComposerState = {
   adviceEdits?: Record<string, string>;
   /** Free-form conclusion lines appended under derived impressions. */
   impressionAddendum?: string;
+  /** Free-form advice lines appended under derived advice badges. */
+  adviceAddendum?: string;
 };
 
 /** One derived triad line (impression or advice) with ownership metadata. */
@@ -194,7 +196,7 @@ export type UsgTriadLine = {
   edited: boolean;
   /** True when this is the legacy impressionOverride blob. */
   legacy?: boolean;
-  /** True for impressionAddendum lines. */
+  /** True for impressionAddendum / adviceAddendum lines. */
   addendum?: boolean;
 };
 

@@ -18,9 +18,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { Check, Pencil, RotateCcw, Stethoscope, Type } from "lucide-react";
+import { Check, ListPlus, Pencil, RotateCcw, Stethoscope, Type } from "lucide-react";
 import type { UsgOrganDef, UsgOrganState, UsgPathologyDef, UsgVarDef } from "@/lib/usg/types";
 import { extractTokens, ORGAN_SIDE, selectedPathologies, sortPathologiesForChips, substitute } from "@/lib/usg/composer";
+import { organHasManualFinding } from "@/lib/usg/addendum";
 import { isSelectToken, getTokenOptions } from "@/lib/usg/tokenTypes";
 import { organNormalHasMeasurements } from "@/lib/usg/quickActions";
 import { matchSnippetExact } from "@/lib/usg/textExpansion";
@@ -58,6 +59,8 @@ export type OrganCardProps = {
   onApplySuggestion?: (pathologyKey: string, text: string) => void;
   /** Finalized — chips and text locked to the printed snapshot. */
   readOnly?: boolean;
+  /** Send current (or selected) finding text into IMPRESSION addendum. */
+  onPromoteToImpression?: (selection?: string) => void;
 };
 
 function varLabel(defs: UsgVarDef[] | undefined, token: string): { label: string; unit?: string } {
@@ -66,7 +69,7 @@ function varLabel(defs: UsgVarDef[] | undefined, token: string): { label: string
   return { label: token.replace(/_/g, " ") };
 }
 
-export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, normalOverride, onSaveNormal, onResetNormal, onToggle, onQuickNormal, onVar, onText, onAddCustom, triadAdviceTexts, onApplySuggestion, readOnly }: OrganCardProps) {
+export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, normalOverride, onSaveNormal, onResetNormal, onToggle, onQuickNormal, onVar, onText, onAddCustom, triadAdviceTexts, onApplySuggestion, readOnly, onPromoteToImpression }: OrganCardProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(state.text);
   const [showAll, setShowAll] = useState(false);
@@ -368,6 +371,35 @@ export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, norma
               className="mt-0.5"
             />
           </div>
+          {!readOnly && onPromoteToImpression ? (
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 border-rose-300 bg-rose-50 px-2 text-[10px] font-bold text-rose-800 hover:bg-rose-100"
+                title="Send selected text (or the whole finding) to IMPRESSION — also bolds hand-edited body on print"
+                onMouseDown={(e) => {
+                  // Preserve textarea selection before blur clears it.
+                  e.preventDefault();
+                  const el = document.activeElement as HTMLTextAreaElement | null;
+                  const sel =
+                    el && el.tagName === "TEXTAREA" && el.selectionStart !== el.selectionEnd
+                      ? el.value.slice(el.selectionStart, el.selectionEnd)
+                      : "";
+                  if (draft !== state.text) onText(draft);
+                  onPromoteToImpression(sel || undefined);
+                  setEditing(false);
+                }}
+              >
+                <ListPlus className="mr-1 h-3 w-3" />
+                → Impression
+              </Button>
+              <span className="text-[10px] text-muted-foreground">
+                Select words first to send only that sentence
+              </span>
+            </div>
+          ) : null}
         </div>
       ) : (
         <div className="flex items-start gap-1.5">
@@ -377,6 +409,7 @@ export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, norma
               anySelected || state.custom ? "text-foreground" : "",
             )}
             onClick={() => {
+              if (readOnly) return;
               setDraft(state.text);
               setEditing(true);
             }}
@@ -399,6 +432,22 @@ export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, norma
           />
         </div>
       )}
+
+      {!readOnly && !editing && onPromoteToImpression && (organHasManualFinding(state) || anySelected) ? (
+        <div className="mt-1.5">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 border-rose-300 bg-rose-50 px-2 text-[10px] font-bold text-rose-800 hover:bg-rose-100"
+            title="Send this finding text to IMPRESSION so it prints under Impression too"
+            onClick={() => onPromoteToImpression()}
+          >
+            <ListPlus className="mr-1 h-3 w-3" />
+            → Impression
+          </Button>
+        </div>
+      ) : null}
 
       {/* Impression preview — every selected pathology's lines */}
       {selected.some((p) => p.impression?.length) ? (

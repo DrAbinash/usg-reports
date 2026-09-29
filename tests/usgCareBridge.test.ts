@@ -52,7 +52,8 @@ describe("guessStudyKey — bill-desk test names route to the right study", () =
     expect(guessStudyKey({ testCode: "ECHO", testName: "ECHO" }, "M")).toBe("echo");
     expect(guessStudyKey({ testCode: "ECHO", testName: "" }, "F")).toBe("echo");
     expect(guessStudyKey({ testCode: "USG W", testName: "USG WHOLE ABDOMEN" }, "F")).toBe("wa-female");
-    expect(guessStudyKey({ testCode: "USGFE", testName: "USG FETAL ECHO" }, "F")).toBe("ob");
+    // Fetal echo now has its own dedicated format (owner decision 2026-09-29).
+    expect(guessStudyKey({ testCode: "USGFE", testName: "USG FETAL ECHO" }, "F")).toBe("fetal-echo");
   });
 
   test("child routing; unknown / blank never silent-fallback to WA when billed", () => {

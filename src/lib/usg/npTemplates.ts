@@ -76,6 +76,14 @@ export const BUILTIN_NP_TEMPLATES: BuiltinNpTemplate[] = [
     sortOrder: 9,
     searchAliases: ["cardiac", "echo", "2d echo", "echocardiography", "heart", "cardio"],
   },
+  {
+    // Dedicated Fetal Echo format (studyKey "fetal-echo") — seeded exactly
+    // like the adult Echo entry above; normals are verbatim repo strings.
+    name: "USG Fetal Echocardiography",
+    studyKey: "fetal-echo",
+    sortOrder: 10,
+    searchAliases: ["fetal echo", "fetal echocardiography", "usg fetal echo", "echo fetal", "fetal cardiac"],
+  },
 ];
 
 /** Alias lookup by exact template name (seed source of truth). */

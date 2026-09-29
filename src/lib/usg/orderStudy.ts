@@ -18,8 +18,10 @@ export const STUDY_KEYS = USG_STUDIES.map((s) => s.key) as string[];
 
 /** Obstetric families — these carry the statutory PC-PNDT Form F duty.
  *  v6.13: includes combined studies (wa-ob, tvs-ob) and also matches
- *  any key starting with "ob-" (for future study types like ob-anomaly). */
-export const OB_STUDY_KEYS = new Set(["ob", "ep", "wa-ob", "tvs-ob"]);
+ *  any key starting with "ob-" (for future study types like ob-anomaly).
+ *  "fetal-echo" is scanned on the pregnant patient, so it keeps the Form F
+ *  duty it had when billed USGFE resolved to "ob". */
+export const OB_STUDY_KEYS = new Set(["ob", "ep", "wa-ob", "tvs-ob", "fetal-echo"]);
 
 export function isObStudyKey(key: string): boolean {
   return OB_STUDY_KEYS.has(key) || key.startsWith("ob-");

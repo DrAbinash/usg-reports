@@ -41,6 +41,7 @@ export type StudyTypeKey =
   | "doppler-upper"
   | "doppler-lower"
   | "echo"
+  | "fetal-echo"
   | "ob-bpp"
   | "ob-bpp-twin"
   | "ob-tiffa-4d"
@@ -96,9 +97,13 @@ export const DEFAULT_BILLING_PROCEDURE_MAP: Record<string, StudyTypeKey | "unmap
   "USG FETAL DOPPLER": "ob",
   UFETALDT: "ob",
   "USG FETAL DOPPLER (TWIN)": "ob",
-  // Fetal echo is obstetric (not adult Echo format).
-  USGFE: "ob",
-  "USG FETAL ECHO": "ob",
+  // Fetal echo has its OWN Fetal Echo format (owner decision 2026-09-29) —
+  // never the adult 2D-Echo format, no longer the generic antenatal scaffold.
+  // All fetal DOPPLER rows above stay "ob".
+  USGFE: "fetal-echo",
+  "USG FETAL ECHO": "fetal-echo",
+  "ECHO FETAL": "fetal-echo",
+  "FETAL ECHO": "fetal-echo",
   NTSCAN: "ep",
   "USG NT SCAN": "ep",
   USG011: "ob-tiffa-4d",
@@ -190,6 +195,7 @@ const STUDY_TYPE_KEYS = new Set<string>([
   "doppler-upper",
   "doppler-lower",
   "echo",
+  "fetal-echo",
   "ob-bpp",
   "ob-bpp-twin",
   "ob-tiffa-4d",
@@ -234,6 +240,13 @@ function heuristicStudyType(normalizedLower: string): StudyTypeKey | "unmapped" 
   // Matches /(^|[^a-z])(2d\s*)?echo|echocardi(o|ography)|cardiac/i (non-fetal).
   if (/(^|[^a-z])(2d\s*)?echo\b|\bechocardi(o|ography)\b|\bcardiac\b/.test(t) && !/fetal/.test(t)) {
     return "echo";
+  }
+
+  // Fetal echo family — dedicated "fetal-echo" format (owner decision).
+  // Runs AFTER the echo-family !/fetal/ guard, BEFORE the bare fetal/ob
+  // fallback below. Fetal echo never resolves to adult "echo" or "ob".
+  if (/fetal/.test(t) && /(echo|echocardio|cardiac|cardio)/.test(t)) {
+    return "fetal-echo";
   }
 
   // Obstetrics — match the historic Form F routing (growth before BPP;
@@ -382,6 +395,8 @@ export function studyKeyForStudyType(
       return "doppler-lower";
     case "echo":
       return "echo";
+    case "fetal-echo":
+      return "fetal-echo";
     case "ob-bpp":
       return "ob-bpp";
     case "ob-bpp-twin":
@@ -469,6 +484,8 @@ function npTemplateNameForStudyKey(studyKey: string): string | null {
       return "NP Lower Abdomen — Male";
     case "echo":
       return "Echo (2D Echocardiography)";
+    case "fetal-echo":
+      return "USG Fetal Echocardiography";
     default:
       return null;
   }

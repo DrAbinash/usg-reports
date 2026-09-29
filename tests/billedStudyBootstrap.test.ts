@@ -76,6 +76,45 @@ describe("billed study bootstrap integration", () => {
     }
   });
 
+  test("billed ECHO FETAL / USGFE + empty editor → Fetal Echo format applied", () => {
+    for (const ctx of [
+      { billedProcedure: "ECHO FETAL", patientSex: "F" },
+      { testCode: "USGFE", testName: "USG FETAL ECHO", patientSex: "F" },
+      { billedProcedure: "FETAL ECHO", patientSex: "" },
+    ]) {
+      const proc = ctx.billedProcedure ?? `${ctx.testCode} ${ctx.testName}`;
+      const r = bootstrapComposerState(ctx);
+      expect(r.formatApplied, proc).toBe(true);
+      expect(r.banner, proc).toBeNull();
+      expect(r.boot.kind, proc).toBe("mapped");
+      if (r.boot.kind === "mapped") {
+        expect(r.boot.studyType, proc).toBe("fetal-echo");
+        expect(r.boot.studyKey, proc).toBe("fetal-echo");
+        expect(r.boot.npTemplateName, proc).toBe("USG Fetal Echocardiography");
+      }
+      expect(r.state.studyKey, proc).toBe("fetal-echo");
+      expect(r.state.studyKey, proc).not.toBe("echo");
+      expect(r.state.studyKey, proc).not.toBe("ob");
+      expect(r.state.organs.length, proc).toBeGreaterThan(0);
+      expect(
+        r.state.organs.some((o) => o.organ === "fetal-echo-situs" || o.organ === "fetal-echo-four-chamber"),
+        proc,
+      ).toBe(true);
+      expect(getStudy(r.state.studyKey)?.title, proc).toMatch(/FETAL ECHOCARDIOGRAPHY/i);
+    }
+  });
+
+  test("billed ECHO → adult Echo format (not fetal-echo); billed growth → ob format", () => {
+    const adult = bootstrapComposerState({ billedProcedure: "ECHO", patientSex: "M" });
+    expect(adult.state.studyKey).toBe("echo");
+    const growth = bootstrapComposerState({ billedProcedure: "USG GROWTH SCAN", patientSex: "F" });
+    expect(growth.boot.kind).toBe("mapped");
+    if (growth.boot.kind === "mapped") expect(growth.boot.studyKey).toBe("ob");
+    const doppler = bootstrapComposerState({ testCode: "UFETALDT", testName: "USG FETAL DOPPLER (TWIN)", patientSex: "F" });
+    expect(doppler.boot.kind).toBe("mapped");
+    if (doppler.boot.kind === "mapped") expect(doppler.boot.studyKey).toBe("ob");
+  });
+
   test("billed USG WHOLE ABDOMEN + female → NP Whole Abdomen — Female applied", () => {
     const r = bootstrapComposerState({
       billedProcedure: "USG WHOLE ABDOMEN",

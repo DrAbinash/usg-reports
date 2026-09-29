@@ -75,9 +75,12 @@ describe("resolveBilledStudyType", () => {
       "whole-abdomen",
     );
     expect(resolveBilledStudyType({ testCode: "USG W", testName: null })).toBe("whole-abdomen");
-    // Fetal echo stays obstetric — not adult Echo format.
-    expect(resolveBilledStudyType({ testCode: "USGFE", testName: "USG FETAL ECHO" })).toBe("ob");
-    expect(resolveBilledStudyType("USG FETAL ECHO")).toBe("ob");
+    // Fetal echo has its OWN Fetal Echo format (owner decision 2026-09-29).
+    expect(resolveBilledStudyType({ testCode: "USGFE", testName: "USG FETAL ECHO" })).toBe("fetal-echo");
+    expect(resolveBilledStudyType("USG FETAL ECHO")).toBe("fetal-echo");
+    // Fetal DOPPLER rows still resolve obstetric — unchanged path.
+    expect(resolveBilledStudyType({ testCode: "FETALDOPPLER", testName: null })).toBe("ob");
+    expect(resolveBilledStudyType("USG FETAL DOPPLER")).toBe("ob");
     // Code wins over a misleading/blank name path.
     expect(resolveBilledStudyType({ testCode: "ECHO", testName: "USG" })).toBe("echo");
   });
@@ -89,6 +92,53 @@ describe("resolveBilledStudyType", () => {
     expect(careTestCode({ billedTestCode: "USG W" })).toBe("USG W");
     expect(careTestName({ testName: "", billedTestName: "ECHO" })).toBe("ECHO");
     expect(careTestName({ testName: "ECHO", billedTestName: "ignored" })).toBe("ECHO");
+  });
+});
+
+describe("fetal-echo study type (owner decision 2026-09-29)", () => {
+  test("billed fetal-echo rows → fetal-echo, never echo / ob", () => {
+    expect(resolveBilledStudyType("ECHO FETAL")).toBe("fetal-echo");
+    expect(resolveBilledStudyType("FETAL ECHO")).toBe("fetal-echo");
+    expect(resolveBilledStudyType("USG FETAL ECHO")).toBe("fetal-echo");
+    expect(resolveBilledStudyType("USGFE")).toBe("fetal-echo");
+    expect(resolveBilledStudyType({ testCode: "USGFE", testName: null })).toBe("fetal-echo");
+    // Heuristic path (fuzzy, not exact dictionary key).
+    expect(resolveBilledStudyType("Fetal Echocardiography")).toBe("fetal-echo");
+    expect(resolveBilledStudyType({ testCode: "TRIAL2", testName: "ECHO FETAL" })).toBe("fetal-echo");
+  });
+
+  test("adult echo rows unchanged → echo", () => {
+    expect(resolveBilledStudyType("ECHO")).toBe("echo");
+    expect(resolveBilledStudyType("2D ECHO")).toBe("echo");
+    expect(resolveBilledStudyType("CARDIAC")).toBe("echo");
+  });
+
+  test("ALL fetal DOPPLER keys stay ob", () => {
+    expect(resolveBilledStudyType("FETALDOPPLER")).toBe("ob");
+    expect(resolveBilledStudyType("USG FETAL DOPPLER")).toBe("ob");
+    expect(resolveBilledStudyType("UFETALDT")).toBe("ob");
+    expect(resolveBilledStudyType("USG FETAL DOPPLER (TWIN)")).toBe("ob");
+    expect(resolveBilledStudyType({ testCode: "UFETALDT", testName: "USG FETAL DOPPLER (TWIN)" })).toBe("ob");
+  });
+
+  test("regression: whole abdomen untouched", () => {
+    expect(resolveBilledStudyType("USG WHOLE ABDOMEN")).toBe("whole-abdomen");
+    expect(resolveBilledStudyType("USG W")).toBe("whole-abdomen");
+  });
+
+  test("default map entries", () => {
+    expect(DEFAULT_BILLING_PROCEDURE_MAP.USGFE).toBe("fetal-echo");
+    expect(DEFAULT_BILLING_PROCEDURE_MAP["USG FETAL ECHO"]).toBe("fetal-echo");
+    expect(DEFAULT_BILLING_PROCEDURE_MAP["ECHO FETAL"]).toBe("fetal-echo");
+    expect(DEFAULT_BILLING_PROCEDURE_MAP["FETAL ECHO"]).toBe("fetal-echo");
+    expect(DEFAULT_BILLING_PROCEDURE_MAP["USG FETAL DOPPLER"]).toBe("ob");
+  });
+
+  test("studyKeyForStudyType('fetal-echo') === 'fetal-echo' (sex-independent)", () => {
+    expect(studyKeyForStudyType("fetal-echo")).toBe("fetal-echo");
+    expect(studyKeyForStudyType("fetal-echo", "F")).toBe("fetal-echo");
+    expect(studyKeyForStudyType("fetal-echo", "M")).toBe("fetal-echo");
+    expect(studyKeyForStudyType("fetal-echo", "", true)).toBe("fetal-echo");
   });
 });
 

@@ -1130,6 +1130,26 @@ USG_STUDIES.push(
     ]
   },
   {
+    // Dedicated Fetal Echo format (owner decision 2026-09-29): billed
+    // USGFE / "ECHO FETAL" / "FETAL ECHO" / "USG FETAL ECHO" open THIS —
+    // never the adult 2D-Echo format, no longer the ob-fetal-echo scaffold.
+    // Normal prose is verbatim from audited repo sources; sections without a
+    // verbatim fetal source are OWNER-REVIEW stubs.
+    key: 'fetal-echo', label: 'USG Fetal Echocardiography', title: 'FETAL ECHOCARDIOGRAPHY', sex: 'F', group: 'cardiac',
+    technique: 'Transabdominal fetal echocardiography performed.',
+    allNormalImpression: ['Single live intrauterine fetus.', 'No significant cardiac abnormality detected.'],
+    defaultSuggestions: ['Advice: Post-natal echocardiography.'],
+    organs: [
+      { key: 'fetal-echo-situs', label: 'SITUS & CARDIAC AXIS', normal: 'Viscero-atrial situs solitus. Cardiac apex towards left at approximately [ ] degree axis. Levocardia.' },
+      { key: 'fetal-echo-four-chamber', label: 'FOUR-CHAMBER VIEW', normal: 'Heart is 4 chambered with apex towards left. No large VSD seen. However small ASD, VSD & Coarctation are well known to be missed. A reevaluation is recommended.' },
+      { key: 'fetal-echo-lvot', label: 'LVOT / AORTIC OUTFLOW', normal: '[OWNER-REVIEW]' },
+      { key: 'fetal-echo-rvot', label: 'RVOT / DUCTAL ARCH & THREE-VESSEL VIEW', normal: '[OWNER-REVIEW]' },
+      { key: 'fetal-echo-arch', label: 'AORTIC ARCH & DUCTUS ARTERIOSUS', normal: 'Aortic arch, head and neck vessels were seen and they appear to be within normal limits.\nDuctus arteriosus is patent with normal waveform.' },
+      { key: 'fetal-echo-rate', label: 'RATE & RHYTHM', normal: 'Fetal heart beat is seen in real time and corroborated in M-mode study. Fetal heart rate: [ ] B/Min & Regular.' },
+      { key: 'fetal-echo-pericardium', label: 'PERICARDIUM', normal: '[OWNER-REVIEW]' },
+    ],
+  },
+  {
     key: 'ob-bpp', label: 'Biophysical Profile', title: 'FETAL BPP SCAN', sex: 'F', group: 'ob',
     technique: 'Transabdominal sonography performed.',
     allNormalImpression: ['Single live intrauterine pregnancy.', 'Normal biophysical profile score (10/10).'],

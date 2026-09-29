@@ -16,7 +16,7 @@ import {
 import { matchSnippet, getAllSnippets } from "@/lib/usg/textExpansion";
 
 describe("NP template seeds", () => {
-  it("ships WA / Upper / KUB / TVS / LA / Echo definitions", () => {
+  it("ships WA / Upper / KUB / TVS / LA / Echo / Fetal Echo definitions", () => {
     expect(BUILTIN_NP_TEMPLATES.map((t) => t.studyKey)).toEqual([
       "wa-female",
       "wa-male",
@@ -27,7 +27,17 @@ describe("NP template seeds", () => {
       "la-female",
       "la-male",
       "echo",
+      "fetal-echo",
     ]);
+  });
+
+  it("Fetal Echo seed keeps verbatim fetal-cardiac normal strings", () => {
+    const fetal = buildNpTemplateState("fetal-echo");
+    expect(fetal.studyKey).toBe("fetal-echo");
+    const situs = fetal.organs.find((o) => o.organ === "fetal-echo-situs")?.text ?? "";
+    expect(situs).toContain("Viscero-atrial situs solitus");
+    const four = fetal.organs.find((o) => o.organ === "fetal-echo-four-chamber")?.text ?? "";
+    expect(four).toContain("Heart is 4 chambered with apex towards left");
   });
 
   it("Echo seed keeps verbatim echocardiography normal strings", () => {

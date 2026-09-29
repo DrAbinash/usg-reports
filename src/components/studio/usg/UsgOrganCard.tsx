@@ -63,9 +63,14 @@ export type OrganCardProps = {
   onPromoteToImpression?: (selection?: string) => void;
 };
 
-function varLabel(defs: UsgVarDef[] | undefined, token: string): { label: string; unit?: string } {
-  const v = defs?.find((d) => d.key === token);
-  if (v) return { label: v.label, unit: v.unit };
+function varLabel(
+  defs: UsgVarDef[] | undefined,
+  token: string,
+  fallback?: UsgVarDef[],
+): { label: string; unit?: string; range?: UsgVarDef["range"] } {
+  const fb = fallback?.find((d) => d.key === token);
+  const v = defs?.find((d) => d.key === token) ?? fb;
+  if (v) return { label: v.label, unit: v.unit, range: v.range ?? fb?.range };
   return { label: token.replace(/_/g, " ") };
 }
 
@@ -276,9 +281,24 @@ export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, norma
       {inputTokens.length > 0 ? (
         <div className="mb-1 flex flex-wrap gap-1">
           {inputTokens.map((t) => {
-            const { label, unit } = varLabel(varDefs, t);
+            const { label, unit, range } = varLabel(varDefs, t, def.vars);
             const isSelect = isSelectToken(t);
             const options = getTokenOptions(t);
+            // Advisory only: a typed value outside the printed normal range
+            // shows an amber hint. It never edits the text and never blocks.
+            const raw = (state.vars[t] ?? "").trim();
+            const num = raw === "" ? NaN : Number(raw);
+            const outOfRange =
+              Number.isFinite(num) &&
+              (range?.min !== undefined && num < range.min
+                ? true
+                : range?.max !== undefined && num > range.max);
+            const rangeHint =
+              range?.min !== undefined && range?.max !== undefined
+                ? `${range.min}–${range.max}`
+                : range?.min !== undefined
+                  ? `≥ ${range.min}`
+                  : `≤ ${range?.max}`;
 
             if (isSelect && options) {
               // Render a dropdown for select tokens (e.g. calyx location)
@@ -315,6 +335,11 @@ export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, norma
                   inputMode="decimal"
                 />
                 {unit ? <span className="text-[10px] text-faint">{unit}</span> : null}
+                {outOfRange ? (
+                  <span className="text-[10px] font-semibold text-amber-600" title={`Outside printed normal range (${rangeHint})`}>
+                    ! {rangeHint}
+                  </span>
+                ) : null}
               </label>
             );
           })}

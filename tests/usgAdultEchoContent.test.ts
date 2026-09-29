@@ -36,14 +36,18 @@ describe("Adult echo normal baseline (verbatim from clinic reports)", () => {
     expect(ECHO_OTHERS_N).toContain("Normal pulmonary trunk & its branches.");
   });
 
-  test("M-mode card carries the 13 report parameters incl. AoEx, IVS(s), PW(s) with normal ranges", () => {
+  // Superseded by the echo content engine (PR #50): the clinic M-Mode table
+  // is the 14-line verbatim baseline (13 measured params + RV wall row) with
+  // typed {LA_mm}-style tokens declared on the echo-mmode card.
+  test("M-mode card carries the 14-line verbatim baseline incl. AoEx, IVS(s), PW(s) with normal ranges", () => {
     const lines = ECHO_MMODE_N.split("\n");
-    expect(lines.length).toBe(13);
+    expect(lines.length).toBe(14);
     for (const frag of [
-      "AoEx ( Mean Aortic Cusps Diameter ) : {aoex} mm ( Normal 15 - 25 mm )",
-      "IVS (s) ( Interventricular Septum in Systole ) : {ivss} mm ( Normal 6 - 14 mm )",
-      "PW (s) ( Posterior Wall in Systole ) : {pws} mm ( Normal 6 - 14 mm )",
-      "LVEF ( LV Ejection Fraction ) : {lvef} %",
+      "AoEx ( Mean Aortic Cusps Diameter ) : {AoEx_mm} mm ( Normal 15 - 25 mm )",
+      "IVS (s) ( Interventricular Septum in Systole ) : {IVSs_mm} mm ( Normal 6 - 14 mm )",
+      "PW (s) ( Posterior Wall in Systole ) : {PWs_mm} mm ( Normal 6 - 14 mm )",
+      "LVEF ( LV Ejection Fraction ) : {LVEF_pct} %",
+      "RV Anterior wall thickness : Normal",
     ]) {
       expect(ECHO_MMODE_N).toContain(frag);
     }
@@ -59,7 +63,7 @@ describe("Adult echo normal baseline (verbatim from clinic reports)", () => {
 describe("M-Mode measurement typing updates the prose", () => {
   test("typing 54 into LVEF renders 'LVEF ( LV Ejection Fraction ) : 54 %'", () => {
     let state = initialState("echo");
-    state = setOrganVar(state, "echo-mmode", "lvef", "54");
+    state = setOrganVar(state, "echo-mmode", "LVEF_pct", "54");
     const r = resolve(state, lookupAll, "t");
     expect(r.sections.find((s) => s.organ === "echo-mmode")!.text).toContain(
       "LVEF ( LV Ejection Fraction ) : 54 %",
@@ -68,16 +72,16 @@ describe("M-Mode measurement typing updates the prose", () => {
 
   test("AoEx / IVS(s) / PW(s) fields substitute like the rest of the table", () => {
     let state = initialState("echo");
-    state = setOrganVar(state, "echo-mmode", "aoex", "17");
-    state = setOrganVar(state, "echo-mmode", "ivss", "12");
-    state = setOrganVar(state, "echo-mmode", "pws", "14");
+    state = setOrganVar(state, "echo-mmode", "AoEx_mm", "17");
+    state = setOrganVar(state, "echo-mmode", "IVSs_mm", "12");
+    state = setOrganVar(state, "echo-mmode", "PWs_mm", "14");
     const text = resolve(state, lookupAll, "t").sections.find((s) => s.organ === "echo-mmode")!.text;
     expect(text).toContain("AoEx ( Mean Aortic Cusps Diameter ) : 17 mm ( Normal 15 - 25 mm )");
     expect(text).toContain("IVS (s) ( Interventricular Septum in Systole ) : 12 mm");
     expect(text).toContain("PW (s) ( Posterior Wall in Systole ) : 14 mm");
     // Untyped rows stay fill-in blanks — no stray tokens survive.
     expect(text).toContain("LA ( Left Atrial Diameter ) : ___ mm");
-    expect(text).not.toMatch(/\{[a-z]+\}/);
+    expect(text).not.toMatch(/\{[a-zA-Z0-9_]+\}/);
   });
 });
 

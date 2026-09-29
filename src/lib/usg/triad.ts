@@ -38,7 +38,7 @@ function dedupePush(out: UsgTriadLine[], line: UsgTriadLine, dismissed: Set<stri
 }
 
 function isCosmetic(p: UsgPathologyDef): boolean {
-  return (p.impression?.length ?? 0) === 0 && !p.titleFragment;
+  return ((p.impressionText ?? p.impression)?.length ?? 0) === 0 && !p.titleFragment;
 }
 
 /**
@@ -97,7 +97,7 @@ export function deriveImpressions(
           ? [editedText]
           : clinicText
             ? [clinicText]
-            : (p.impression ?? []).map((l) =>
+            : (p.impressionText ?? p.impression ?? []).map((l) =>
                 substitute(l, { ...mergedVars, ...o.vars }, o.organ),
               );
         for (const text of baseLines) {

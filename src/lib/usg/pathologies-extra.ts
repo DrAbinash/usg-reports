@@ -19,6 +19,16 @@ const VS = (label = "Side (right/left)"): UsgVarDef => ({ key: "side", label, un
 
 const P = (p: Omit<UsgPathologyDef, "builtin">): UsgPathologyDef => ({ ...p, builtin: true });
 
+/**
+ * Echo-content-engine slot chip: `findingsText` replaces only the matching
+ * conflictGroup block in the scaffold (composer ECHO_SLOT_STARTS), and
+ * `impressionText` feeds the triad. `text`/`impression` mirror them so
+ * every existing consumer (integrity tests, legacy previews) keeps working.
+ */
+const PS = (
+  p: Omit<UsgPathologyDef, "builtin" | "text" | "impression"> & { findingsText: string; impressionText: string[] },
+): UsgPathologyDef => ({ ...p, text: p.findingsText, impression: p.impressionText, builtin: true });
+
 export const USG_PATHOLOGIES_EXTRA: UsgPathologyDef[] = [
   // ── THYROID — lobe-level (shared organ "thyroid-lobe", {side}/{Side}) ──────
   P({
@@ -595,6 +605,194 @@ export const USG_PATHOLOGIES_EXTRA: UsgPathologyDef[] = [
     impression: ["Pulmonary arterial hypertension."],
   }),
 
+  // ── ECHO CONTENT ENGINE (echx-*) — slot chips, verbatim from the 15 signed
+  //    echo reports (see PR provenance table). Severity words are ALWAYS a
+  //    radiologist-typed {sev} parameter, never inferred. No chip carries
+  //    advice — recommendation lines live in ECHO_RECOMMENDATIONS below.
+  // ───────────────────────────────────────────────────────────────────────────
+  PS({
+    // "Subaortic perimembranous VSD measuring 5.2 mm …" + "Peak Systolic
+    // gradient across VSD is 55.0 mm of Hg." (DEXTROCARDIA WTIH VSD; also
+    // ASD osteum & VSD perimembranous). Impression: DEXTROCARDIA conclusion.
+    key: "echx-vsd-perimembranous", organ: "echo-valves", conflictGroup: "ivs",
+    label: "VSD — Subaortic Perimembranous", category: "Echo Engine",
+    findingsText: "Subaortic perimembranous VSD measuring {defect_mm} mm in diameter with left to right shunt on Color Doppler.\nPeak Systolic gradient across VSD is {gradient_mmHg} mm of Hg.",
+    impressionText: ["Subaortic perimembranous VSD."],
+    vars: [V("defect_mm", "VSD diameter", "mm"), V("gradient_mmHg", "Peak systolic gradient", "mm of Hg")],
+  }),
+  PS({
+    // "Ostium secondum ASD measuring 10.0 mm in diameter …" (ASD osteum &
+    // VSD perimembranous); impression "Ostium Secondum ASD (4.4 mm) with
+    // left to right shunt." (ASD ECHO ADULT).
+    key: "echx-asd-ostium-secundum", organ: "echo-valves", conflictGroup: "ias",
+    label: "ASD — Ostium Secundum", category: "Echo Engine",
+    findingsText: "Ostium secondum ASD measuring {defect_mm} mm in diameter with left to right shunt on Color Doppler.",
+    impressionText: ["Ostium Secondum ASD ({defect_mm} mm) with left to right shunt."],
+    vars: [V("defect_mm", "ASD diameter", "mm")],
+  }),
+  PS({
+    // "A small ostium primum ASD measuring 1.7 cm in diameter with Left to
+    // right shunt on Color Doppler." + "Peak Systolic gradient across ASD is
+    // 4.4 mm of Hg." (ASD right atrium). Impression line from its CONCLUSION.
+    // {sev} covers "small"/"large" — doctor-selected, never inferred.
+    key: "echx-asd-ostium-primum", organ: "echo-valves", conflictGroup: "ias",
+    label: "ASD — Ostium Primum", category: "Echo Engine",
+    findingsText: "A {sev} ostium primum ASD measuring {defect_mm} mm in diameter with Left to right shunt on Color Doppler.\nPeak Systolic gradient across ASD is {gradient_mmHg} mm of Hg.",
+    impressionText: ["Atrial septal defect with left to right shunt."],
+    vars: [V("sev", "Size (small / large)", ""), V("defect_mm", "ASD diameter", "mm"), V("gradient_mmHg", "Peak systolic gradient", "mm of Hg")],
+  }),
+  PS({
+    // "Patent ductus arteriosus." (ASD CHILD). Replaces the inline "No PDA."
+    // in the pediatric arch line; on the adult OTHERS card the combined
+    // "No PDA / ASD / VSD." sentence is reconciled by the composer.
+    key: "echx-pda", organ: "echo-others", conflictGroup: "ductus",
+    label: "PDA — Patent Ductus Arteriosus", category: "Echo Engine",
+    findingsText: "Patent ductus arteriosus.",
+    impressionText: ["Patent ductus arteriosus."],
+  }),
+  PS({
+    // "Mild to moderate tricuspid regurgitation." (ASD CHILD) / "Mild
+    // tricuspid regurgitation." (ASD ECHO ADULT) — {sev} typed by doctor.
+    key: "echx-tricuspid-regurgitation", organ: "echo-valves", conflictGroup: "tv",
+    label: "Tricuspid Regurgitation", category: "Echo Engine",
+    findingsText: "{sev} tricuspid regurgitation.",
+    impressionText: ["{sev} tricuspid regurgitation."],
+    vars: [V("sev", "Severity (Mild / Mild to moderate / Severe)", "")],
+  }),
+  PS({
+    // "Moderate pulmonary regurgitation." (ASD CHILD) — {sev} typed.
+    key: "echx-pulmonary-regurgitation", organ: "echo-valves", conflictGroup: "pv",
+    label: "Pulmonary Regurgitation", category: "Echo Engine",
+    findingsText: "{sev} pulmonary regurgitation.",
+    impressionText: ["{sev} pulmonary regurgitation."],
+    vars: [V("sev", "Severity (Mild / Moderate / Severe)", "")],
+  }),
+  PS({
+    // "The AML show moderate to severely thickened cusps, no calcification,
+    // no doming, no SAM AM OF AML. MVA-2.5cm3." (AS WITH MS MILD; the unit
+    // is normalised to cm² — owner flag in PR). Impression "Moderate to
+    // severe mitral stenosis …" + "Rheumatic heart disease." from same doc.
+    key: "echx-ms-rheumatic", organ: "echo-valves", conflictGroup: "mv",
+    label: "Mitral Stenosis — Rheumatic", category: "Echo Engine",
+    findingsText: "The AML show {sev} thickened cusps, no calcification, no doming, no SAM AM OF AML. MVA - {MVA_cm2} cm².",
+    impressionText: ["{sev} mitral stenosis.", "Rheumatic heart disease."],
+    vars: [V("sev", "Severity (Mild / Moderate / Moderate to severe)", ""), V("MVA_cm2", "Mitral valve area", "cm²")],
+  }),
+  PS({
+    // "Mildly thickened with early sclerotic changes & reduced excursions."
+    // + "Mild aortic stenosis." (AS WITH MS MILD) — {sev} typed.
+    key: "echx-as-rheumatic", organ: "echo-valves", conflictGroup: "av",
+    label: "Aortic Stenosis — Rheumatic", category: "Echo Engine",
+    findingsText: "Mildly thickened with early sclerotic changes & reduced excursions.",
+    impressionText: ["{sev} aortic stenosis."],
+    vars: [V("sev", "Severity (Mild / Moderate / Severe)", "")],
+  }),
+  PS({
+    // "Pulmonary Stenosis." (finding) / "Pulmonary stenosis." (impression)
+    // — ASD osteum & VSD perimembranous.
+    key: "echx-pulmonary-stenosis", organ: "echo-valves", conflictGroup: "pv",
+    label: "Pulmonary Stenosis", category: "Echo Engine",
+    findingsText: "Pulmonary Stenosis.",
+    impressionText: ["Pulmonary stenosis."],
+  }),
+  PS({
+    // "Pulmonary arterial hypertension." (ASD CHILD). Replaces "Normal
+    // pulmonary trunk & its branches." / "No evidence of Pulmonary
+    // Hypertension." slots on every echo format's others card.
+    key: "echx-pah", organ: "echo-pulmonary", conflictGroup: "pulmonary-pressure",
+    label: "Pulmonary Arterial Hypertension", category: "Echo Engine",
+    findingsText: "Pulmonary arterial hypertension.",
+    impressionText: ["Pulmonary arterial hypertension."],
+  }),
+  PS({
+    // "Dilated RA (~43.8 mm) and RV (~37.1 mm) cavities." (ASD CHILD) —
+    // tildes and all, verbatim. Also replaces "Dilated right atrium and
+    // right ventricle." (ASD right atrium) and removes the standalone
+    // "No chamber dilatation." line cross-organ via the composer.
+    key: "echx-ra-rv-dilatation", organ: "echo-valves", conflictGroup: "chambers",
+    label: "Dilated RA & RV Cavities", category: "Echo Engine",
+    findingsText: "Dilated RA (~{RA_cav_mm} mm) and RV (~{RV_cav_mm} mm) cavities.",
+    impressionText: ["Dilated RA (~{RA_cav_mm} mm) and RV (~{RV_cav_mm} mm) cavities."],
+    vars: [V("RA_cav_mm", "RA cavity", "mm"), V("RV_cav_mm", "RV cavity", "mm")],
+  }),
+  PS({
+    // "Hypertrophied LV wall." (EARLY LV & HYPERTROPHIED LV WALL). Replaces
+    // "Wall thickness – Normal." in the streamlined LV block.
+    key: "echx-lv-hypertrophy", organ: "echo-chambers", conflictGroup: "lv-wall",
+    label: "LV Hypertrophy", category: "Echo Engine",
+    findingsText: "Hypertrophied LV wall.",
+    impressionText: ["Hypertrophied LV wall."],
+  }),
+  PS({
+    // "Early LV diastolic dysfunction– LVEF – 69.8%" (EARLY LV DIASTOLIC
+    // DYSFUNCTION NEW FORMAT) — dash spacing verbatim.
+    key: "echx-early-lv-diastolic-dysfunction", organ: "echo-chambers", conflictGroup: "lv-function",
+    label: "Early LV Diastolic Dysfunction", category: "Echo Engine",
+    findingsText: "Early LV diastolic dysfunction– LVEF – {LVEF_pct}%",
+    impressionText: ["Early LV diastolic dysfunction."],
+    vars: [V("LVEF_pct", "LVEF", "%")],
+  }),
+  PS({
+    // "Sinus tachycardia ( HR -188 BPM )." (ASD right atrium) — spacing
+    // verbatim, HR parameterised.
+    key: "echx-sinus-tachycardia", organ: "echo-others", conflictGroup: "rhythm",
+    label: "Sinus Tachycardia", category: "Echo Engine",
+    findingsText: "Sinus tachycardia ( HR -{HR_bpm} BPM ).",
+    impressionText: ["Sinus tachycardia ( HR -{HR_bpm} BPM )."],
+    vars: [V("HR_bpm", "Heart rate", "BPM")],
+  }),
+  PS({
+    // "Dextrocardia with cardiac apex towards right." (DEXTROCARDIA WTIH
+    // VSD). Replaces the situs/levo-position preamble block.
+    key: "echx-dextrocardia", organ: "echo-others", conflictGroup: "situs",
+    label: "Dextrocardia", category: "Echo Engine",
+    findingsText: "Dextrocardia with cardiac apex towards right.",
+    impressionText: ["Dextrocardia with cardiac apex towards right."],
+  }),
+  PS({
+    // "A tiny foci of intracardiac calcification in left ventricle in
+    // relation to chordae tendineae." + rewritten conclusion
+    // (FETAL ECHO chordae tendineae doc).
+    key: "echx-fetal-echogenic-focus-chordae", organ: "fetal-echo-conclusion", conflictGroup: "fetal-focus",
+    label: "Fetal — Echogenic Focus in Chordae Tendineae", category: "Echo Engine",
+    findingsText: "A single live intrauterine fetus at {weeks} weeks {days} days of average gestational age in {presentation} presentation with a tiny foci of intracardiac calcification in left ventricle in relation to chordae tendineae.",
+    impressionText: ["A tiny foci of intracardiac calcification in left ventricle in relation to chordae tendineae."],
+  }),
+
+  // [OWNER-REVIEW] stubs — the 15 signed reports contain NO verbatim source
+  // for these; left blank on purpose so no invented clinical prose is ever
+  // seeded. Doctor supplies wording, then findingsText turns them into PS chips.
+  P({
+    key: "echx-vsd-muscular", organ: "echo-valves", conflictGroup: "ivs",
+    label: "[OWNER-REVIEW] VSD — Muscular", category: "Echo Engine",
+    text: "", findingsText: "", impression: [], impressionText: [],
+  }),
+  P({
+    key: "echx-mitral-regurgitation", organ: "echo-valves", conflictGroup: "mv",
+    label: "[OWNER-REVIEW] Mitral Regurgitation", category: "Echo Engine",
+    text: "", findingsText: "", impression: [], impressionText: [],
+  }),
+  P({
+    key: "echx-la-dilatation", organ: "echo-chambers", conflictGroup: "chambers",
+    label: "[OWNER-REVIEW] LA Dilatation", category: "Echo Engine",
+    text: "", findingsText: "", impression: [], impressionText: [],
+  }),
+  P({
+    key: "echx-pericardial-effusion", organ: "echo-valves", conflictGroup: "pericardium",
+    label: "[OWNER-REVIEW] Pericardial Effusion", category: "Echo Engine",
+    text: "", findingsText: "", impression: [], impressionText: [],
+  }),
+  P({
+    key: "echx-clot-vegetation", organ: "echo-valves", conflictGroup: "clot",
+    label: "[OWNER-REVIEW] Intracardiac Clot / Vegetation", category: "Echo Engine",
+    text: "", findingsText: "", impression: [], impressionText: [],
+  }),
+  P({
+    key: "echx-rwma", organ: "echo-chambers", conflictGroup: "rwma",
+    label: "[OWNER-REVIEW] Regional Wall Motion Abnormality", category: "Echo Engine",
+    text: "", findingsText: "", impression: [], impressionText: [],
+  }),
+
   // ── FETAL ECHOCARDIOGRAPHY (ob-fetal-echo organs) — clinic normal pack ─────
   // Organ keys are unique to ob-fetal-echo (avoid `situs`, shared with pediatric echo).
   P({
@@ -958,4 +1156,18 @@ export const USG_PATHOLOGIES_EXTRA: UsgPathologyDef[] = [
     impression: ["Bulky muscle at the {site} S/O muscle strain / myositis changes."],
     vars: [{ key: "site", label: "Site (e.g. medial right thigh)", unit: "" }],
   }),
+];
+
+/**
+ * Echo recommendation options — lines the doctor may ADD at her discretion.
+ * Per policy they are NEVER auto-applied by any chip (no `advice` on any
+ * echx-* entry, none in PATHOLOGY_ADVICE) and never printed by default.
+ * Corpus sources in parentheses; "Follow up scan." has none in the audited
+ * 15 reports and is owner-flagged.
+ */
+export const ECHO_RECOMMENDATIONS: string[] = [
+  "Advice- Post Natal echocardiography.", // FETAL ECHO (chordae tendineae)
+  "Second opinion.", // ASD CHILD ("Advice- Second opinion.")
+  "Kindly take an expert echocardiologist's opinion.", // ASD right atrium / VSD-family docs
+  "Follow up scan.", // [OWNER-REVIEW] no verbatim corpus source
 ];

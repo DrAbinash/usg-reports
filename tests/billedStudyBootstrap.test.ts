@@ -51,7 +51,7 @@ describe("billed study bootstrap integration", () => {
     if (r.boot.kind === "mapped") {
       expect(r.boot.studyType).toBe("echo");
       expect(r.boot.studyKey).toBe("echo");
-      expect(r.boot.npTemplateName).toBe("Echo (2D Echocardiography)");
+      expect(r.boot.npTemplateName).toBe("Echo — Adult M-Mode");
     }
     expect(r.state.studyKey).toBe("echo");
     expect(r.state.organs.length).toBeGreaterThan(0);

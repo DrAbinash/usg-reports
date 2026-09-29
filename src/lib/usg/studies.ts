@@ -172,7 +172,7 @@ export const SEMINAL_N =
 
 // ── Echocardiography (her JUN_086 report — M-mode table + 2D profiles) ─────────
 export const ECHO_MMODE_N =
-  "LA ( Left Atrial Diameter ) : {la} mm ( Normal 20 - 40 mm )\nAO ( Aortic Root Diameter ) : {ao} mm ( Normal 20 - 40 mm )\nLVID (d) ( LV Internal Diameter in Diastole ) : {lvidd} mm ( Normal 35 - 45 mm )\nLVID (s) ( LV Internal Diameter in Systole ) : {lvids} mm ( Normal 24 - 42 mm )\nLVEF ( LV Ejection Fraction ) : {lvef} %\nFractional Shortening : {fs} %\nIVS (d) ( Interventricular Septum in Diastole ) : {ivsd} mm ( Normal 6 - 11 mm )\nPW (d) ( Posterior Wall in Diastole ) : {pwd} mm ( Normal 6 - 11 mm )\nRV Dimension : {rvd} mm ( Normal 7 - 23 mm )\nRA Dimension : {rad} mm ( Normal 6 - 24 mm )";
+  "LA ( Left Atrial Diameter ) : {la} mm ( Normal 20 - 40 mm )\nAO ( Aortic Root Diameter ) : {ao} mm ( Normal 20 - 40 mm )\nAoEx ( Mean Aortic Cusps Diameter ) : {aoex} mm ( Normal 15 - 25 mm )\nLVID (d) ( LV Internal Diameter in Diastole ) : {lvidd} mm ( Normal 35 - 45 mm )\nLVID (s) ( LV Internal Diameter in Systole ) : {lvids} mm ( Normal 24 - 42 mm )\nLVEF ( LV Ejection Fraction ) : {lvef} %\nFractional Shortening : {fs} %\nRV Dimension : {rvd} mm ( Normal 7 - 23 mm )\nRA Dimension : {rad} mm ( Normal 6 - 24 mm )\nIVS (d) ( Interventricular Septum in Diastole ) : {ivsd} mm ( Normal 6 - 11 mm )\nIVS (s) ( Interventricular Septum in Systole ) : {ivss} mm ( Normal 6 - 14 mm )\nPW (d) ( Posterior Wall in Diastole ) : {pwd} mm ( Normal 6 - 11 mm )\nPW (s) ( Posterior Wall in Systole ) : {pws} mm ( Normal 6 - 14 mm )";
 export const ECHO_VALVES_N =
   "Mitral Valve ( MV ) : The AML show normal cusps thickness and excursion, no calcification, no doming.\nAortic Valve ( AoV ) : Normal thickness & excursions.\nTricuspid Valve ( TV ) : Normal cusps.\nPulmonary Valve ( PV ) : Pulmonary annulus & its branches are normal.\nIAS ( Interatrial Septum ) : Intact.\nIVS ( Interventricular Septum ) : Intact.\nPericardium : No effusion.\nLA / LVA Clot : None.";
 export const ECHO_OTHERS_N =
@@ -587,10 +587,11 @@ export const USG_STUDIES: UsgStudyDef[] = [
         kind: "table",
         normal: ECHO_MMODE_N,
         vars: [
-          V("la", "LA", "mm"), V("ao", "Aortic root", "mm"),
+          V("la", "LA", "mm"), V("ao", "Aortic root", "mm"), V("aoex", "AoEx (mean aortic cusps)", "mm"),
           V("lvidd", "LVID (d)", "mm"), V("lvids", "LVID (s)", "mm"),
           V("lvef", "LVEF", "%"), V("fs", "Fractional shortening", "%"),
-          V("ivsd", "IVS (d)", "mm"), V("pwd", "PW (d)", "mm"),
+          V("ivsd", "IVS (d)", "mm"), V("ivss", "IVS (s)", "mm"),
+          V("pwd", "PW (d)", "mm"), V("pws", "PW (s)", "mm"),
           V("rvd", "RV dimension", "mm"), V("rad", "RA dimension", "mm"),
         ],
       },

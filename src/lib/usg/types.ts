@@ -11,6 +11,8 @@ export type UsgVarDef = {
   key: string; // token name used in text: {key}
   label: string; // human label shown above the input
   unit?: string; // cm / mm / cc / gms — displayed as suffix
+  /** Printed normal range (echo M-mode) — UI shows a warning only, never blocks. */
+  range?: { min?: number; max?: number };
 };
 
 /** A quick-select pathology that replaces ONE organ's finding. */
@@ -31,6 +33,17 @@ export type UsgPathologyDef = {
   advice?: string[];
   /** Optional fragment for the composed study title ("grade i fatty changes"). */
   titleFragment?: string;
+  /**
+   * Echo content engine: shared conflict-group slot this chip owns (situs, ivs,
+   * mv, …). When any slot chip is selected on an organ, its `findingsText`
+   * replaces the normal lines of that slot instead of the whole organ text,
+   * and selecting another chip of the SAME group replaces it (same-slot).
+   */
+  conflictGroup?: string;
+  /** Slot-scoped finding lines (verbatim; replaces the matched normal block). */
+  findingsText?: string;
+  /** Slot-scoped impression lines; falls back to `impression` when absent. */
+  impressionText?: string[];
   /** @deprecated Prefer `advice` — kept for older catalog entries. */
   suggestions?: string[];
   vars?: UsgVarDef[];

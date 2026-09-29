@@ -69,12 +69,12 @@ export const BUILTIN_NP_TEMPLATES: BuiltinNpTemplate[] = [
     searchAliases: ["lower", "abdomen", "pelvis", "whole lower abdomen"],
   },
   {
-    // Catalog label matches STUDY_GROUPS cardiac → Echo (2D Echocardiography).
-    // Normals are the study's own ECHO_* strings (verbatim via initialState).
-    name: "Echo (2D Echocardiography)",
+    // Adult M-Mode format (default bootstrap for billed "ECHO"). Normals are
+    // the study's own ECHO_* strings (verbatim via initialState).
+    name: "Echo — Adult M-Mode",
     studyKey: "echo",
     sortOrder: 9,
-    searchAliases: ["cardiac", "echo", "2d echo", "echocardiography", "heart", "cardio"],
+    searchAliases: ["cardiac", "echo", "2d echo", "echocardiography", "heart", "cardio", "m-mode", "adult echo"],
   },
   {
     // Dedicated Fetal Echo format (studyKey "fetal-echo") — seeded exactly
@@ -83,6 +83,21 @@ export const BUILTIN_NP_TEMPLATES: BuiltinNpTemplate[] = [
     studyKey: "fetal-echo",
     sortOrder: 10,
     searchAliases: ["fetal echo", "fetal echocardiography", "usg fetal echo", "echo fetal", "fetal cardiac"],
+  },
+  {
+    // Streamlined chambers/valves block format — signed NEW-FORMAT report
+    // style (Left Ventricle / Left Atrium / … / FINAL CONCLUSION).
+    name: "Echo — Streamlined",
+    studyKey: "echo-streamlined",
+    sortOrder: 11,
+    searchAliases: ["echo", "streamlined echo", "echo study", "short echo", "doppler echo"],
+  },
+  {
+    // Pediatric colour-Doppler format — situs preamble + defect sentences.
+    name: "Echo — Pediatric Colour Doppler",
+    studyKey: "echo-peds",
+    sortOrder: 12,
+    searchAliases: ["echo", "pediatric echo", "paediatric echo", "child echo", "colour doppler echo", "peds echo"],
   },
 ];
 

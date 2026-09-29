@@ -53,7 +53,7 @@ export const USG_BILLING_PROCEDURE_MAP_KEY = "usg_billing_procedure_map";
 /**
  * Default procedure → study-type table (uppercase keys).
  * Includes bill-desk catalog **codes** (ECHO, USG W, …) and display names.
- * "echo" matches the seeded Echo (2D Echocardiography) template's studyKey.
+ * "echo" matches the seeded Echo — Adult M-Mode template's studyKey.
  */
 export const DEFAULT_BILLING_PROCEDURE_MAP: Record<string, StudyTypeKey | "unmapped"> = {
   // ── Whole / upper / lower abdomen ──────────────────────────────────────
@@ -236,7 +236,7 @@ export function mergeBillingProcedureMap(
 function heuristicStudyType(normalizedLower: string): StudyTypeKey | "unmapped" {
   const t = normalizedLower;
 
-  // Echo family — same studyKey as seeded "Echo (2D Echocardiography)" template.
+  // Echo family — same studyKey as seeded "Echo — Adult M-Mode" template.
   // Matches /(^|[^a-z])(2d\s*)?echo|echocardi(o|ography)|cardiac/i (non-fetal).
   if (/(^|[^a-z])(2d\s*)?echo\b|\bechocardi(o|ography)\b|\bcardiac\b/.test(t) && !/fetal/.test(t)) {
     return "echo";
@@ -483,7 +483,7 @@ function npTemplateNameForStudyKey(studyKey: string): string | null {
     case "la-male":
       return "NP Lower Abdomen — Male";
     case "echo":
-      return "Echo (2D Echocardiography)";
+      return "Echo — Adult M-Mode";
     case "fetal-echo":
       return "USG Fetal Echocardiography";
     default:

@@ -14,6 +14,8 @@ import { BPP_GRID_SCHEMA, initialGridRows } from "./gridOrgans";
 import { resolveNormalBootstrapFormat } from "./billedStudyType";
 
 const V = (key: string, label: string, unit = "cm"): UsgVarDef => ({ key, label, unit });
+const VR = (key: string, label: string, unit: string, min: number, max: number): UsgVarDef =>
+  ({ key, label, unit, range: { min, max } });
 
 const T_WA =
   "Ultrasonography of the whole abdomen was performed in supine position using a curvilinear 3.5 MHz transducer.";
@@ -172,7 +174,22 @@ export const SEMINAL_N =
 
 // ── Echocardiography (her JUN_086 report — M-mode table + 2D profiles) ─────────
 export const ECHO_MMODE_N =
-  "LA ( Left Atrial Diameter ) : {la} mm ( Normal 20 - 40 mm )\nAO ( Aortic Root Diameter ) : {ao} mm ( Normal 20 - 40 mm )\nLVID (d) ( LV Internal Diameter in Diastole ) : {lvidd} mm ( Normal 35 - 45 mm )\nLVID (s) ( LV Internal Diameter in Systole ) : {lvids} mm ( Normal 24 - 42 mm )\nLVEF ( LV Ejection Fraction ) : {lvef} %\nFractional Shortening : {fs} %\nIVS (d) ( Interventricular Septum in Diastole ) : {ivsd} mm ( Normal 6 - 11 mm )\nPW (d) ( Posterior Wall in Diastole ) : {pwd} mm ( Normal 6 - 11 mm )\nRV Dimension : {rvd} mm ( Normal 7 - 23 mm )\nRA Dimension : {rad} mm ( Normal 6 - 24 mm )";
+  "LA ( Left Atrial Diameter ) : {LA_mm} mm ( Normal 20 - 40 mm )\nAO ( Aortic Root Diameter ) : {AO_mm} mm ( Normal 20 - 40 mm )\nAoEx ( Mean Aortic Cusps Diameter ) : {AoEx_mm} mm ( Normal 15 - 25 mm )\nLVID (d) ( LV Internal Diameter in Diastole ) : {LVIDd_mm} mm ( Normal 35 - 45 mm )\nLVID (s) ( LV Internal Diameter in Systole ) : {LVIDs_mm} mm ( Normal 24 - 42 mm )\nLVEF ( LV Ejection Fraction ) : {LVEF_pct} %\nFractional Shortening : {FS_pct} %\nRV Dimension : {RV_mm} mm ( Normal 7 - 23 mm )\nRA Dimension : {RA_mm} mm ( Normal 6 - 24 mm )\nRV Anterior wall thickness : Normal\nIVS (d) ( Interventricular Septum in Diastole ) : {IVSd_mm} mm ( Normal 6 - 11 mm )\nIVS (s) ( Interventricular Septum in Systole ) : {IVSs_mm} mm ( Normal 6 - 14 mm )\nPW (d) ( Posterior Wall in Diastole ) : {PWd_mm} mm ( Normal 6 - 11 mm )\nPW (s) ( Posterior Wall in Systole ) : {PWs_mm} mm ( Normal 6 - 14 mm )";
+// ── Streamlined adult format (EARLY LV DIASTOLIC DYSFUNCTION NEW FORMAT.doc) ──
+export const ECHO_STREAM_CHAMBERS_N =
+  "Left Ventricle :-\nCavity size – Normal.\nWall thickness – Normal.\nWall motion abnormality – None.\nLeft Ventricle Ejection Fraction – {LVEF_pct}%.\n\nLeft Atrium :- Normal in size.\n\nRight Ventricle :- Normal in size.\n\nRight Atrium :- Normal in size.";
+export const ECHO_STREAM_VALVES_N =
+  "Mitral Valve :- Morphology – Normal.\nNo sub-valvular deformity.\nDoppler flow – Normal.\n\nAortic Valve :- Morphology – Normal.\nDoppler flow – Normal.\n\nTricuspid Valve :- Morphology – Normal.\nDoppler flow – Normal.\n\nPulmonary Valve :- Morphology – Normal.\nDoppler flow – Normal.\n\nIAS & IVS :-\nIAS- Intact.\nIVS- Intact.\n\nPericardium :- Normal.\n\nOthers :- No obvious intra-cardiac clot / mass seen.";
+// ── Pediatric colour-Doppler format (CHILD ASD 1 ECHO / ASD right atrium /
+//    ASD osteum & VSD perimembranous docs) ────────────────────────────────────
+export const ECHO_PEDS_SITUS_N =
+  "Levo Cardiac Position of Heart.\nViscero-Arterial Situs Solitus.\nD-Looped Ventricles.\nNormally related Great Vessels.\nNormally preserved Veno-Arterial, Atrio-Ventricular & Ventriculo-Great Vessels Concordence.\nSystemic Veins drains into RA & Pulmonary Veins opens into LA.";
+export const ECHO_PEDS_VALVES_N =
+  "No chamber dilatation.\nNormal Mitral, Tricuspid, Pulmonary & Aortic annulus with Structurally and Functionally Normal MV, TV, PV & AOV.";
+export const ECHO_PEDS_OTHERS_N =
+  "Normally related Great Vessels with Confluent Pulmonary anatomy with normal MPA, RPA and LPA.\nLeft sided aortic arch with Normally functioning Ascending Aorta, Aortic Arch & Descending Thoracic Aorta. No PDA. No Coarctation of aorta.\nNormal Origin & Course of Right and Left Coronary Arteries.";
+export const ECHO_PEDS_FUNC_N =
+  "No intracardiac Clot, Calcification or Vegitation.\nNo evidence of Pericardial thickening, Constriction or Effusion.\nNo evidence of Pulmonary Hypertension.\nGood LV & RV Systolic Functions. LVEF= {LVEF_pct} % on B-mode.";
 export const ECHO_VALVES_N =
   "Mitral Valve ( MV ) : The AML show normal cusps thickness and excursion, no calcification, no doming.\nAortic Valve ( AoV ) : Normal thickness & excursions.\nTricuspid Valve ( TV ) : Normal cusps.\nPulmonary Valve ( PV ) : Pulmonary annulus & its branches are normal.\nIAS ( Interatrial Septum ) : Intact.\nIVS ( Interventricular Septum ) : Intact.\nPericardium : No effusion.\nLA / LVA Clot : None.";
 export const ECHO_OTHERS_N =
@@ -587,15 +604,67 @@ export const USG_STUDIES: UsgStudyDef[] = [
         kind: "table",
         normal: ECHO_MMODE_N,
         vars: [
-          V("la", "LA", "mm"), V("ao", "Aortic root", "mm"),
-          V("lvidd", "LVID (d)", "mm"), V("lvids", "LVID (s)", "mm"),
-          V("lvef", "LVEF", "%"), V("fs", "Fractional shortening", "%"),
-          V("ivsd", "IVS (d)", "mm"), V("pwd", "PW (d)", "mm"),
-          V("rvd", "RV dimension", "mm"), V("rad", "RA dimension", "mm"),
+          VR("LA_mm", "LA", "mm", 20, 40), VR("AO_mm", "Aortic root", "mm", 20, 40),
+          VR("AoEx_mm", "AoEx (mean aortic cusps)", "mm", 15, 25),
+          VR("LVIDd_mm", "LVID (d)", "mm", 35, 45), VR("LVIDs_mm", "LVID (s)", "mm", 24, 42),
+          V("LVEF_pct", "LVEF", "%"), V("FS_pct", "Fractional shortening", "%"),
+          VR("RV_mm", "RV dimension", "mm", 7, 23), VR("RA_mm", "RA dimension", "mm", 6, 24),
+          VR("IVSd_mm", "IVS (d)", "mm", 6, 11), VR("IVSs_mm", "IVS (s)", "mm", 6, 14),
+          VR("PWd_mm", "PW (d)", "mm", 6, 11), VR("PWs_mm", "PW (s)", "mm", 6, 14),
         ],
       },
       { key: "echo-valves", label: "2D ECHO PROFILES", normal: ECHO_VALVES_N },
       { key: "echo-others", label: "OTHERS FINDINGS", normal: ECHO_OTHERS_N },
+    ],
+  },
+  {
+    // Streamlined adult format — chambers/valves blocks with slot chips
+    // (conflictGroup) replacing individual lines. Verbatim from the signed
+    // "EARLY LV DIASTOLIC DYSFUNCTION NEW FORMAT" report.
+    key: "echo-streamlined",
+    label: "Echo — Streamlined",
+    title: "ECHOCARDIOGRAPHY STUDY",
+    group: "cardiac",
+    technique: T_ECHO,
+    allNormalImpression: ["Normal 2D echocardiography study."],
+    organs: [
+      {
+        key: "echo-chambers",
+        label: "CHAMBERS",
+        normal: ECHO_STREAM_CHAMBERS_N,
+        vars: [V("LVEF_pct", "LVEF", "%")],
+      },
+      { key: "echo-valves", label: "VALVES & SEPTA", normal: ECHO_STREAM_VALVES_N },
+    ],
+  },
+  {
+    // Pediatric colour-Doppler format — situs preamble, annulus/great-vessel
+    // blocks, function & pericardium. Verbatim from the signed pediatric
+    // colour-Doppler echo reports (CHILD ASD 1 ECHO / ASD right atrium).
+    key: "echo-peds",
+    label: "Echo — Pediatric Colour Doppler",
+    title: "REPORT OF COLOR DOPPLER ECHOCARDIOGRAPHY",
+    group: "cardiac",
+    technique: T_ECHO,
+    allNormalImpression: ["Normal 2D echocardiography study."],
+    organs: [
+      { key: "echo-others", label: "POSITION, SITUS & CONNECTIONS", normal: ECHO_PEDS_SITUS_N },
+      {
+        key: "echo-valves",
+        label: "CHAMBERS & VALVES",
+        normal: ECHO_PEDS_VALVES_N,
+      },
+      {
+        key: "echo-great-vessels",
+        label: "GREAT VESSELS & ARCH",
+        normal: ECHO_PEDS_OTHERS_N,
+      },
+      {
+        key: "echo-func",
+        label: "FUNCTION, PERICARDIUM & PULMONARY PRESSURE",
+        normal: ECHO_PEDS_FUNC_N,
+        vars: [V("LVEF_pct", "LVEF", "%")],
+      },
     ],
   },
   {
@@ -1138,15 +1207,29 @@ USG_STUDIES.push(
     key: 'fetal-echo', label: 'USG Fetal Echocardiography', title: 'FETAL ECHOCARDIOGRAPHY', sex: 'F', group: 'cardiac',
     technique: 'Transabdominal fetal echocardiography performed.',
     allNormalImpression: ['Single live intrauterine fetus.', 'No significant cardiac abnormality detected.'],
-    defaultSuggestions: ['Advice: Post-natal echocardiography.'],
     organs: [
-      { key: 'fetal-echo-situs', label: 'SITUS & CARDIAC AXIS', normal: 'Viscero-atrial situs solitus. Cardiac apex towards left at approximately [ ] degree axis. Levocardia.' },
-      { key: 'fetal-echo-four-chamber', label: 'FOUR-CHAMBER VIEW', normal: 'Heart is 4 chambered with apex towards left. No large VSD seen. However small ASD, VSD & Coarctation are well known to be missed. A reevaluation is recommended.' },
-      { key: 'fetal-echo-lvot', label: 'LVOT / AORTIC OUTFLOW', normal: '[OWNER-REVIEW]' },
-      { key: 'fetal-echo-rvot', label: 'RVOT / DUCTAL ARCH & THREE-VESSEL VIEW', normal: '[OWNER-REVIEW]' },
-      { key: 'fetal-echo-arch', label: 'AORTIC ARCH & DUCTUS ARTERIOSUS', normal: 'Aortic arch, head and neck vessels were seen and they appear to be within normal limits.\nDuctus arteriosus is patent with normal waveform.' },
-      { key: 'fetal-echo-rate', label: 'RATE & RHYTHM', normal: 'Fetal heart beat is seen in real time and corroborated in M-mode study. Fetal heart rate: [ ] B/Min & Regular.' },
-      { key: 'fetal-echo-pericardium', label: 'PERICARDIUM', normal: '[OWNER-REVIEW]' },
+      {
+        key: 'fetal-echo-situs', label: 'SITUS & CARDIAC POSITION',
+        normal: 'Viscero-Atrial Situs Solitus.\nThe cardiac apex is towards left at approximately {axis_deg} degree axis.\nLevo cardiac position of heart.',
+        vars: [V('axis_deg', 'Cardiac axis', 'degree')],
+      },
+      {
+        key: 'fetal-echo-connections', label: 'CONNECTIONS',
+        normal: 'D- looped ventricles.\nNormally related great vessels.\nNormally preserved veno-Atrial, Atrio-ventricular and Ventriculo-Great vessels Concordence.',
+      },
+      {
+        key: 'fetal-echo-chambers', label: 'CHAMBERS, FORAMEN OVALE & SEPTUM',
+        normal: 'Chamber dimensions are within normal limits.\nForamen Ovale is visualized with flap opening into the left atrium.\nThe IVS appears to be intact.',
+      },
+      {
+        key: 'fetal-echo-ductus', label: 'DUCTUS ARTERIOSUS',
+        normal: 'Ductus arteriosus is patent with normal waveform.',
+      },
+      {
+        key: 'fetal-echo-conclusion', label: 'CONCLUSION',
+        normal: 'A single live intrauterine fetus at {weeks} weeks {days} days of average gestational age in {presentation} presentation with no significant cardiac abnormality.',
+        vars: [V('weeks', 'Gestational age (weeks)', ''), V('days', 'Gestational age (days)', ''), V('presentation', 'Presentation', '')],
+      },
     ],
   },
   {

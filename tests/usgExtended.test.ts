@@ -85,6 +85,9 @@ describe("Extended pathology catalog integrity", () => {
       globe: ["globe_rt", "globe_lt"],
       carotid: ["carotid_rt", "carotid_lt"],
       pleura: ["pleura_rt", "pleura_lt"],
+      // Echo content engine: pulmonary-pressure chips land on every card
+      // that states pulmonary findings (adult OTHERS / pediatric FUNCTION).
+      "echo-pulmonary": ["echo-others", "echo-func"],
     };
     for (const p of USG_PATHOLOGIES_EXTRA) {
       const targets = shared[p.organ] ?? [p.organ];

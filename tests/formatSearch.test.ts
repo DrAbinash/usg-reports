@@ -32,7 +32,7 @@ describe("matchFormatQuery", () => {
   const byName = (re: RegExp) => formats.filter((f) => re.test(f.name));
 
   test("aliases seeded on Whole / Lower / Echo (not UI-hardcoded)", () => {
-    expect(searchAliasesForTemplateName("Echo (2D Echocardiography)")).toEqual(
+    expect(searchAliasesForTemplateName("Echo — Adult M-Mode")).toEqual(
       expect.arrayContaining(["cardiac", "echo", "2d echo", "echocardiography", "heart", "cardio"]),
     );
     expect(searchAliasesForTemplateName("NP Whole Abdomen — Female")).toEqual(
@@ -43,13 +43,13 @@ describe("matchFormatQuery", () => {
     );
   });
 
-  test('"cardiac" → Echo (2D Echocardiography) format(s), non-empty', () => {
+  test('"cardiac" → Echo — Adult M-Mode format(s), non-empty', () => {
     const hits = filterFormatsByQuery(formats, "cardiac");
     expect(hits.length).toBeGreaterThan(0);
     // Adult Echo must still hit; the Fetal Echo format may also match on
     // "cardiac" via its seeded "fetal cardiac" alias (by design).
     expect(hits.some((f) => f.studyKey === "echo")).toBe(true);
-    expect(hits.some((f) => /Echo \(2D Echocardiography\)/i.test(f.name))).toBe(true);
+    expect(hits.some((f) => /Echo — Adult M-Mode/.test(f.name))).toBe(true);
   });
 
   test('"fetal echo" → USG Fetal Echocardiography format; "cardiac" keeps adult echo', () => {
@@ -66,7 +66,7 @@ describe("matchFormatQuery", () => {
     expect(hits.some((f) => f.name === "USG Fetal Echocardiography")).toBe(true);
     expect(hits.some((f) => f.studyKey === "fetal-echo")).toBe(true);
     // The dedicated format must not be the adult echo or the ob scaffold.
-    expect(hits.every((f) => f.name !== "Echo (2D Echocardiography)")).toBe(true);
+    expect(hits.every((f) => f.name !== "Echo — Adult M-Mode")).toBe(true);
     const echo = filterFormatsByQuery(formats, "cardiac");
     expect(echo.some((f) => f.studyKey === "echo")).toBe(true);
   });

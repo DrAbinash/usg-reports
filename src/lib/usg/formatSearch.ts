@@ -42,7 +42,6 @@ export function matchFormatQuery(format: SearchableFormat, query: string): boole
       format.name,
       format.studyType,
       format.studyKey,
-      format.category,
       ...(format.searchAliases ?? []),
       ...(format.organKeywords ?? []),
     ].join(" "),
@@ -104,8 +103,20 @@ export function formatMetaForStudyKey(studyKey: string): {
   organKeywords: string[];
 } {
   const k = studyKey || "";
-  if (k === "echo" || k.startsWith("echo-")) {
-    return { studyType: "echo", category: "cardiac", organKeywords: ["heart", "cardiac", "valve", "lvef"] };
+  if (k === "echo") {
+    return { studyType: "echo", category: "cardiac", organKeywords: ["heart", "cardiac", "valve", "lvef", "m-mode"] };
+  }
+  if (k.startsWith("echo-")) {
+    // "cardiac" stays exclusive to the Adult M-Mode template; the streamlined
+    // and paediatric formats match their own vocabulary instead.
+    return {
+      studyType: "echo",
+      category: "cardiac",
+      organKeywords:
+        k === "echo-peds"
+          ? ["heart", "paediatric", "pediatric", "child", "septal", "shunt", "colour doppler"]
+          : ["heart", "valve", "lvef", "quick", "streamlined"],
+    };
   }
   if (k === "fetal-echo") {
     return { studyType: "fetal-echo", category: "cardiac", organKeywords: ["fetal", "heart", "four chamber", "ductus", "situs"] };

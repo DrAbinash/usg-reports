@@ -41,7 +41,7 @@ describe("guessStudyKey — bill-desk test names route to the right study", () =
     expect(guessStudyKey("Sonomammography both breasts", "F")).toBe("breast");
     expect(guessStudyKey("USG Scrotum", "M")).toBe("scrotum");
     expect(guessStudyKey("TRUS Prostate", "M")).toBe("trus");
-    // ECHO maps to the seeded Echo (2D Echocardiography) studyKey.
+    // ECHO maps to the seeded Echo — Adult M-Mode studyKey.
     expect(guessStudyKey("2D Echo", "M")).toBe("echo");
     expect(guessStudyKey("ECHO", "F")).toBe("echo");
     expect(guessStudyKey("Doppler both lower limbs", "M")).toBe("doppler-lower");

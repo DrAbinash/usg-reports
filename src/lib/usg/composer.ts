@@ -61,11 +61,23 @@ const SIDE_SHARED: Record<string, string[]> = {
   pleura: ["pleura_rt", "pleura_lt"],
 };
 
+/** Echo content engine: a chip authored on one echo card also offers on the
+ *  equivalent card of the other adult echo formats (streamlined / peds). */
+const ECHO_ORGAN_ALIASES: Record<string, string[]> = {
+  "echo-chambers": ["echo-chambers", "echo-func"],
+  "echo-others": ["echo-others", "echo-great-vessels"],
+  // Pulmonary-pressure chips live wherever a format states pulmonary findings:
+  // the adult OTHERS card and the pediatric FUNCTION card.
+  "echo-pulmonary": ["echo-others", "echo-func"],
+};
+
 /** True when a pathology (organ "x") may be applied to organKey. */
 function pathologyAppliesTo(pathologyOrgan: string, organKey: string): boolean {
   // Clinic impression/advice snippets never attach to body organ cards.
   if (pathologyOrgan === "_impression" || pathologyOrgan === "_advice") return false;
   if (pathologyOrgan === organKey) return true;
+  if ((ECHO_ORGAN_ALIASES[pathologyOrgan] ?? []).includes(organKey)) return true;
+  if ((ECHO_ORGAN_ALIASES[organKey] ?? []).includes(pathologyOrgan)) return true;
   return (SIDE_SHARED[pathologyOrgan] ?? []).includes(organKey);
 }
 
@@ -251,6 +263,201 @@ export function applyPathology(
 }
 
 /**
+ * Echo content engine — shared conflict-group vocabulary.
+ *
+ * A pathology chip that declares `conflictGroup` + `findingsText` replaces
+ * only the normal LINES of that slot (a slot "block" starts at a line whose
+ * prefix matches below and runs until the next slot-start line), instead of
+ * the whole organ. Two selected chips of the same group: the later click
+ * wins (same-slot replacement). A group with no start line in the scaffold
+ * is first tried as an inline phrase (ductus "No PDA.") and otherwise
+ * appended. Removing the chip re-derives from `def.normal`, so undo always
+ * restores the verbatim baseline.
+ */
+export const ECHO_SLOT_STARTS: Record<string, RegExp> = {
+  situs: /^(Levo Cardiac Position|Viscero-[Aa]rterial Situs|Viscero-[Aa]trial Situs|Viscero atrial situs|Situs solitus, normal)/i,
+  axis: /^The cardiac apex is towards/i,
+  mv: /^(Mitral Valve|The AML show)/i,
+  av: /^Aortic Valves?\b/i,
+  tv: /^Tricuspid Valve\b/i,
+  pv: /^Pulmonary Valve\b/i,
+  ias: /^IAS\b/i,
+  ivs: /^(IVS \( Interventricular Septum|IVS \( Internal septum|IVS-|The IVS appears to be intact)/i,
+  pericardium: /^(Pericardium|No evidence of Pericardial)/i,
+  clot: /^(LA \/ LVA Clot|No intracardiac Clot|No chamber clot|No obvious intra-cardiac clot|No vegetation or Effusion)/i,
+  chambers: /^(No chamber dilatation|Chamber dimensions|Dilated (right atrium|RA)|Left Atrium|Right Atrium|Right Ventricle\b)/i,
+  rwma: /^(Regional wall motion|No regional wall motion|Wall motion abnormality)/i,
+  "pulmonary-pressure": /^(Normal pulmonary trunk|No evidence of Pulmonary Hypertension|Pulmonary arterial hypertension|Dilated pulmonary trunk)/i,
+  rhythm: /^Sinus tachycardia/i,
+  "lv-function": /^(Good LV & RV Systolic|Left Ventricle Ejection|LVEF|Normal LV|LV systolic function|Normal functioning cardiac valves)/i,
+  "lv-wall": /^(Wall thickness|LV WALL DIMENSION|Hypertrophied LV wall|Mildly hypertrophied LV wall)/i,
+  ductus: /^Ductus arteriosus is patent/i,
+  "foramen-ovale": /^Foramen Ovale is visualized/i,
+  "fetal-focus": /^A single live intrauterine fetus/i,
+};
+
+/** Phrases replaced inside a line when their slot group is selected. */
+const ECHO_SLOT_INLINE: Record<string, RegExp> = {
+  ductus: /No PDA\./,
+};
+
+function slotAwareOrganText(normal: string, defs: UsgPathologyDef[]): string {
+  const slotDefs = defs.filter((p) => p.conflictGroup && p.findingsText?.trim());
+  const wholeDefs = defs.filter((p) => !p.conflictGroup);
+  if (!slotDefs.length) {
+    return wholeDefs.length ? wholeDefs.map((p) => p.text).join("\n\n") : normal;
+  }
+  // Later click wins within one conflict group.
+  const byGroup = new Map<string, UsgPathologyDef>();
+  for (const p of slotDefs) byGroup.set(p.conflictGroup as string, p);
+
+  const startOf = (line: string): string | null => {
+    for (const [group, re] of Object.entries(ECHO_SLOT_STARTS)) {
+      if (re.test(line)) return group;
+    }
+    return null;
+  };
+
+  const emitted = new Set<string>();
+  const out: string[] = [];
+  let dropBlock = false;
+  for (const line of normal.split("\n")) {
+    const group = startOf(line);
+    if (group) {
+      dropBlock = false;
+      const chip = byGroup.get(group);
+      if (chip) {
+        if (!emitted.has(group)) {
+          out.push(chip.findingsText as string);
+          emitted.add(group);
+        }
+        dropBlock = true;
+        continue;
+      }
+    } else if (dropBlock) {
+      if (!line.trim() || SEPTA_ABBREV_RE.test(line.trim())) {
+        // Blank lines end a block; the combined septa sentence is a
+        // stand-alone finding and must never be swallowed as a sub-line.
+        dropBlock = false;
+        out.push(line);
+      }
+      continue; // block sub-line of a replaced slot
+    }
+    if (!dropBlock) out.push(line);
+  }
+
+  // Groups not present in the scaffold: inline phrase first, else append.
+  const appended: string[] = [];
+  for (const [group, chip] of byGroup) {
+    if (emitted.has(group)) continue;
+    const inline = ECHO_SLOT_INLINE[group];
+    if (inline) {
+      const joined = out.join("\n");
+      if (inline.test(joined)) {
+        const replaced = joined.replace(inline, chip.findingsText!.trim());
+        return finishSlotText(replaced, wholeDefs);
+      }
+    }
+    appended.push(chip.findingsText as string);
+    emitted.add(group);
+  }
+  if (appended.length) out.push(...appended);
+  return finishSlotText(out.join("\n"), wholeDefs);
+}
+
+function finishSlotText(text: string, wholeDefs: UsgPathologyDef[]): string {
+  return wholeDefs.length ? `${text}\n\n${wholeDefs.map((p) => p.text).join("\n\n")}` : text;
+}
+
+/**
+ * "No PDA / ASD / VSD." is a combined sentence the doctor edits by hand in
+ * her signed reports. When a ductus/ias/ivs slot chip is selected anywhere
+ * in the study, the abbreviation for that defect is removed from the line
+ * (whole line dropped when nothing remains) — on every echo-format organ.
+ *
+ * Same cross-organ principle for chamber dilatation: a `chambers` chip is
+ * seeded on ONE card per format, but the normal lines "No chamber
+ * dilatation." / "<Chamber> :- Normal in size." never survive on the other
+ * cards of the same report.
+ */
+const SEPTA_ABBREV_RE = /^No ((?:PDA|ASD|VSD)(?: \/ (?:PDA|ASD|VSD))*)\.$/;
+const DILATATION_NORMAL_LINE_RE = /^(No chamber dilatation\.?|(Left Atrium|Right Atrium|Right Ventricle) :- Normal in size\.?)$/;
+/** Only echo-format body cards carry this contradiction vocabulary. */
+const ECHO_RECONCILE_CARDS = new Set([
+  "echo-mmode",
+  "echo-valves",
+  "echo-others",
+  "echo-chambers",
+  "echo-func",
+  "echo-great-vessels",
+]);
+function reconcileEchoCrossOrgan(organs: UsgComposerState["organs"], studyOrgans: { key: string; normal: string }[], lookup: PathologyLookup): UsgComposerState["organs"] {
+  if (!organs.some((o) => ECHO_RECONCILE_CARDS.has(o.organ))) return organs;
+  const groups = new Set<string>();
+  for (const o of organs) {
+    if (o.custom) continue;
+    for (const k of selectedPathologies(o)) {
+      const g = lookup(k)?.conflictGroup;
+      if (g === "ductus" || g === "ias" || g === "ivs" || g === "chambers") groups.add(g);
+    }
+  }
+  const wordGroup = (w: string) => (w === "PDA" ? "ductus" : w === "ASD" ? "ias" : "ivs");
+  const dilated = groups.has("chambers");
+  return organs.map((o) => {
+    const def = studyOrgans.find((d) => d.key === o.organ);
+    if (!def || o.custom || !ECHO_RECONCILE_CARDS.has(o.organ)) return o;
+    // Deterministic rebuild: every card's text is re-derived from the study
+    // normal + its own selected chips, so removing a chip on one card also
+    // restores the contradiction lines it caused on the other cards.
+    const ownDefs = selectedPathologies(o)
+      .map((k) => lookup(k))
+      .filter((p): p is NonNullable<typeof p> => !!p && pathologyAppliesTo(p.organ, o.organ));
+    const base = ownDefs.length ? slotAwareOrganText(def.normal, ownDefs) : def.normal;
+    const chipOnThisCard = ownDefs.some((k) => k.conflictGroup === "chambers");
+    const nextLines: string[] = [];
+    for (const l of base.split("\n")) {
+      const t = l.trim();
+      const septa = SEPTA_ABBREV_RE.exec(t);
+      if (septa) {
+        // Rebuild idempotently: keep only the defect words whose slot chip
+        // is NOT selected anywhere (drop the line when none remain).
+        const keep = septa[1].split(" / ").filter((w) => !groups.has(wordGroup(w)));
+        if (keep.length) nextLines.push(`No ${keep.join(" / ")}.`);
+        continue;
+      }
+      if (dilated && !chipOnThisCard && DILATATION_NORMAL_LINE_RE.test(t)) continue;
+      nextLines.push(l);
+    }
+    const nextText = nextLines.join("\n");
+    return nextText === o.text ? o : { ...o, text: nextText };
+  });
+}
+
+/**
+ * Echo content engine — apply a bundle of echo chips to one organ with
+ * same-slot (conflictGroup) semantics. Keys already selected are dropped
+ * (undo restores the verbatim baseline); new keys replace earlier keys of
+ * the same slot group.
+ */
+export function applyMacroBundle(
+  state: UsgComposerState,
+  organKey: string,
+  macroKeys: string[],
+  lookup: PathologyLookup,
+  overrides?: NormalOverrides | null,
+): UsgComposerState {
+  const study = getStudyWithOverrides(state.studyKey, overrides);
+  if (!study) return state;
+  const organ = state.organs.find((o) => o.organ === organKey);
+  const current = organ ? selectedPathologies(organ) : [];
+  const adding = macroKeys.filter((k) => !current.includes(k));
+  const removing = new Set(macroKeys.filter((k) => current.includes(k)));
+  const groupOf = (k: string) => lookup(k)?.conflictGroup;
+  const next = current.filter((k) => !removing.has(k) && !(groupOf(k) && adding.some((a) => groupOf(a) === groupOf(k))));
+  return applyPathologies(state, organKey, [...next, ...adding], lookup, overrides);
+}
+
+/**
  * Combined findings — set the FULL pathology selection for one organ.
  *
  * One organ can carry several pathologies at once (fatty liver + haemangioma +
@@ -278,7 +485,7 @@ export function applyPathologies(
       .map((k) => lookup(k))
       .filter((p): p is UsgPathologyDef => !!p && pathologyAppliesTo(p.organ, organKey));
     const nextKeys = [...new Set(defs.map((p) => p.key))];
-    const nextText = nextKeys.length ? defs.map((p) => p.text).join("\n\n") : def.normal;
+    const nextText = nextKeys.length ? slotAwareOrganText(def.normal, defs) : def.normal;
     const kept: Record<string, string> = {};
     for (const t of extractTokens(nextText)) if (o.vars[t]?.trim()) kept[t] = o.vars[t];
     return {
@@ -291,7 +498,7 @@ export function applyPathologies(
       ...(o.rows ? { rows: o.rows } : {}),
     };
   });
-  return { ...state, organs };
+  return { ...state, organs: reconcileEchoCrossOrgan(organs, study.organs, lookup) };
 }
 
 /** Hand-edit an organ's text (locks it — chips show as "customised"). */

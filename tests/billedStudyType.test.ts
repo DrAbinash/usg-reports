@@ -153,7 +153,7 @@ describe("studyKeyForStudyType + resolveNormalBootstrapFormat", () => {
   test("billed ECHO / 2D ECHO / ECHOCARDIOGRAPHY → Echo template, no banner", () => {
     const echoSeeds = BUILTIN_NP_TEMPLATES.filter((t) => t.studyKey === "echo");
     expect(echoSeeds).toHaveLength(1);
-    expect(echoSeeds[0]!.name).toBe("Echo (2D Echocardiography)");
+    expect(echoSeeds[0]!.name).toBe("Echo — Adult M-Mode");
 
     for (const proc of ["ECHO", "2D ECHO", "ECHOCARDIOGRAPHY"]) {
       const boot = resolveNormalBootstrapFormat({
@@ -210,7 +210,7 @@ describe("studyKeyForStudyType + resolveNormalBootstrapFormat", () => {
       kind: "mapped",
       studyType: "echo",
       studyKey: "echo",
-      npTemplateName: "Echo (2D Echocardiography)",
+      npTemplateName: "Echo — Adult M-Mode",
     });
   });
 });

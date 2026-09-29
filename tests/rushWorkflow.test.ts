@@ -16,7 +16,7 @@ import {
 import { matchSnippet, getAllSnippets } from "@/lib/usg/textExpansion";
 
 describe("NP template seeds", () => {
-  it("ships WA / Upper / KUB / TVS / LA / Echo / Fetal Echo definitions", () => {
+  it("ships WA / Upper / KUB / TVS / LA / Echo formats / Fetal Echo definitions", () => {
     expect(BUILTIN_NP_TEMPLATES.map((t) => t.studyKey)).toEqual([
       "wa-female",
       "wa-male",
@@ -28,16 +28,21 @@ describe("NP template seeds", () => {
       "la-male",
       "echo",
       "fetal-echo",
+      "echo-streamlined",
+      "echo-peds",
     ]);
   });
 
-  it("Fetal Echo seed keeps verbatim fetal-cardiac normal strings", () => {
+  it("Fetal Echo seed keeps verbatim corpus fetal strings", () => {
     const fetal = buildNpTemplateState("fetal-echo");
     expect(fetal.studyKey).toBe("fetal-echo");
     const situs = fetal.organs.find((o) => o.organ === "fetal-echo-situs")?.text ?? "";
-    expect(situs).toContain("Viscero-atrial situs solitus");
-    const four = fetal.organs.find((o) => o.organ === "fetal-echo-four-chamber")?.text ?? "";
-    expect(four).toContain("Heart is 4 chambered with apex towards left");
+    expect(situs).toContain("Viscero-Atrial Situs Solitus.");
+    const chambers = fetal.organs.find((o) => o.organ === "fetal-echo-chambers")?.text ?? "";
+    expect(chambers).toContain("Foramen Ovale is visualized with flap opening into the left atrium.");
+    expect(chambers).toContain("The IVS appears to be intact.");
+    const ductus = fetal.organs.find((o) => o.organ === "fetal-echo-ductus")?.text ?? "";
+    expect(ductus).toContain("Ductus arteriosus is patent with normal waveform.");
   });
 
   it("Echo seed keeps verbatim echocardiography normal strings", () => {

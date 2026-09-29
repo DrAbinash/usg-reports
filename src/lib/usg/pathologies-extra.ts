@@ -433,6 +433,45 @@ export const USG_PATHOLOGIES_EXTRA: UsgPathologyDef[] = [
     text: "Mitral Valve ( MV ) : The AML show normal cusps thickness and excursion, no calcification, no doming.\nAortic Valve ( AoV ) : Normal thickness & excursions.\nTricuspid Valve ( TV ) : Normal cusps.\nPulmonary Valve ( PV ) : Pulmonary annulus & its branches are normal.\nIAS ( Interatrial Septum ) : Intact.\nIVS ( Interventricular Septum ) : Intact.\nPericardium : Mild pericardial effusion.\nLA / LVA Clot : None.",
     impression: ["Mild pericardial effusion."],
   }),
+  // ── Adult septal-defect / RHD chips (organ "echo-valves") ────────────────
+  // Verbatim from signed adult echo reports; selecting one replaces the whole
+  // 8-line valve scaffold, so the normal "IVS … Intact" / "IAS … Intact" /
+  // "AoV … Normal thickness & excursions" line is dropped automatically.
+  P({
+    // VSD ADULT.doc — IVS line: "Defect (0.33cm ). Pg-54.6 mmHg"; impression
+    // "A small perimembranous ventricular septal defect."
+    key: "echo-vsd-valves", organ: "echo-valves", label: "VSD — Perimembranous", category: "Findings",
+    text: "Mitral Valve ( MV ) : The AML show normal cusps thickness and excursion, no calcification, no doming.\nAortic Valve ( AoV ) : Normal thickness & excursions.\nTricuspid Valve ( TV ) : Normal cusps.\nPulmonary Valve ( PV ) : Pulmonary annulus & its branches are normal.\nIAS ( Interatrial Septum ) : Intact.\nIVS ( Interventricular Septum ) : Defect ({vsd} cm ). Pg-{pg} mmHg.\nPericardium : No effusion.\nLA / LVA Clot : None.",
+    impression: [
+      "A {size} perimembranous ventricular septal defect.",
+      "No chamber dilatation.",
+    ],
+    advice: ["Kindly co-relate with clinico-pathological findings."],
+    vars: [V("vsd", "VSD size"), V("pg", "Peak gradient (Pg)", "mmHg"), V("size", "Defect size (small/moderate/large)", "")],
+  }),
+  P({
+    // ASD right atrium.doc — ostium primum ASD + L→R shunt + dilated RA/RV.
+    key: "echo-asd-valves", organ: "echo-valves", label: "ASD — Primum + Dilated RA/RV", category: "Findings",
+    text: "Mitral Valve ( MV ) : The AML show normal cusps thickness and excursion, no calcification, no doming.\nAortic Valve ( AoV ) : Normal thickness & excursions.\nTricuspid Valve ( TV ) : Normal cusps.\nPulmonary Valve ( PV ) : Pulmonary annulus & its branches are normal.\nIAS ( Interatrial Septum ) : A {size} ostium primum ASD measuring {asd} cm in diameter with left to right shunt on Colour Doppler. Peak systolic gradient across ASD is {pg} mm of Hg.\nIVS ( Interventricular Septum ) : Intact.\nDilated right atrium and right ventricle.\nPericardium : No effusion.\nLA / LVA Clot : None.",
+    impression: [
+      "Atrial septal defect with left to right shunt.",
+      "Dilated right atrium and right ventricle.",
+    ],
+    suggestions: ["Kindly take an expert echocardiologist opinion."],
+    vars: [V("asd", "ASD size"), V("pg", "ASD peak PG", "mm of Hg"), V("size", "ASD size (small/moderate/large)", "")],
+  }),
+  P({
+    // AS WITH MS MILD.doc — RHD: moderate/severe MS + mild AS (AoV line no
+    // longer "Normal thickness & excursions").
+    key: "echo-rhd-ms-as", organ: "echo-valves", label: "RHD — MS + AS", category: "Valves",
+    text: "Mitral Valve ( MV ) : The AML show moderate to severely thickened cusps, no calcification, no doming. MV area {mva} cm². Colour Doppler shows mitral stenosis with dilated left atrium cavity.\nAortic Valve ( AoV ) : Mildly thickened with early sclerotic changes & reduced excursions. Colour Doppler shows mild aortic stenosis.\nTricuspid Valve ( TV ) : Normal cusps.\nPulmonary Valve ( PV ) : Pulmonary annulus & its branches are normal.\nIAS ( Interatrial Septum ) : Intact.\nIVS ( Interventricular Septum ) : Intact.\nPericardium : No effusion.\nLA / LVA Clot : None.",
+    impression: [
+      "Rheumatic heart disease.",
+      "Mild aortic stenosis. Moderate to severe mitral stenosis with dilated left atrium.",
+    ],
+    suggestions: ["Kindly take an expert echocardiologist opinion."],
+    vars: [V("mva", "MV area", "cm²")],
+  }),
 
   // ── ECHOCARDIOGRAPHY — other findings (organ "echo-others") ─────────────────
   // Clinic corpus: ASD variants, PDA+ASD, RWMA/hypokinesia (COLOUR ECHO NOR).
@@ -557,6 +596,13 @@ export const USG_PATHOLOGIES_EXTRA: UsgPathologyDef[] = [
       "Congested hepatic veins with mild to moderate ascites.",
     ],
     suggestions: ["Kindly take an expert echocardiologist opinion."],
+  }),
+  P({
+    // Pulmonary arterial hypertension — replaces the "Normal pulmonary trunk
+    // & its branches" baseline line in the echo-others scaffold.
+    key: "echo-pah", organ: "echo-others", label: "Pulmonary Arterial Hypertension", category: "Findings",
+    text: "Situs solitus, normal atrioventricular & ventriculo-arterial drainage with left sided aortic arch.\nNo PDA / ASD / VSD.\nPulmonary arterial hypertension.\nNo chamber clot / valvular vegetations.\nNormal LV & RV function.",
+    impression: ["Pulmonary arterial hypertension."],
   }),
 
   // ── ECHO CONTENT ENGINE (echx-*) — slot chips, verbatim from the 15 signed

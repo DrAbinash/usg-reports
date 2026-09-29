@@ -121,6 +121,9 @@ export function formatMetaForStudyKey(studyKey: string): {
   if (k === "fetal-echo") {
     return { studyType: "fetal-echo", category: "cardiac", organKeywords: ["fetal", "heart", "four chamber", "ductus", "situs"] };
   }
+  if (k === "fetal-echo") {
+    return { studyType: "fetal-echo", category: "cardiac", organKeywords: ["fetal", "heart", "four chamber", "ductus", "situs"] };
+  }
   if (k.startsWith("doppler") || k === "carotid") {
     return { studyType: k, category: "doppler", organKeywords: ["arterial", "venous", "vessel"] };
   }

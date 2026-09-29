@@ -71,6 +71,25 @@ describe("matchFormatQuery", () => {
     expect(echo.some((f) => f.studyKey === "echo")).toBe(true);
   });
 
+  test('"fetal echo" → USG Fetal Echocardiography format; "cardiac" keeps adult echo', () => {
+    expect(searchAliasesForTemplateName("USG Fetal Echocardiography")).toEqual(
+      expect.arrayContaining([
+        "fetal echo",
+        "fetal echocardiography",
+        "usg fetal echo",
+        "echo fetal",
+        "fetal cardiac",
+      ]),
+    );
+    const hits = filterFormatsByQuery(formats, "fetal echo");
+    expect(hits.some((f) => f.name === "USG Fetal Echocardiography")).toBe(true);
+    expect(hits.some((f) => f.studyKey === "fetal-echo")).toBe(true);
+    // The dedicated format must not be the adult echo or the ob scaffold.
+    expect(hits.every((f) => f.name !== "Echo (2D Echocardiography)")).toBe(true);
+    const echo = filterFormatsByQuery(formats, "cardiac");
+    expect(echo.some((f) => f.studyKey === "echo")).toBe(true);
+  });
+
   test('"who" → Whole Abdomen AND Lower Abdomen (via whole lower abdomen alias)', () => {
     const hits = filterFormatsByQuery(formats, "who");
     expect(hits.some((f) => /Whole Abdomen/i.test(f.name))).toBe(true);

@@ -106,6 +106,7 @@ const CLINIC_LAN_HOST = (() => {
 const LAN_DEFAULTS = {
   careApiBase: `http://${CLINIC_LAN_HOST}:8888`, // CARE ERP  (care-api container)
   orthancUrl: `http://${CLINIC_LAN_HOST}:8042`,  // Orthanc   (care-pacs compose)
+  ohifLanUrl: `http://${CLINIC_LAN_HOST}:3010`,  // OHIF      (care-pacs compose)
 } as const;
 
 /** Bare LAN addresses like 172.16.1.139:8888 are how humans type — make
@@ -115,6 +116,36 @@ export function normalizeUrl(v: string): string {
   const t = v.trim();
   if (!t) return "";
   return /^https?:\/\//i.test(t) ? t : `http://${t}`;
+}
+
+// ── OHIF viewer endpoints ─────────────────────────────────────────────
+// The OHIF resolver is the only thing in the app that decides where a study
+// is opened, so these fields accept more than normalizeUrl() does:
+// a SAME-ORIGIN path ("/ohif") is a legitimate endpoint — it is how an https
+// studio reaches an http-only LAN viewer without the browser blocking the
+// iframe as mixed active content. normalizeUrl() would mangle that into
+// "http:///ohif", so OHIF gets its own normaliser.
+
+export const OHIF_MODES = ["auto", "lan", "tailscale", "custom"] as const;
+export type OhifMode = (typeof OHIF_MODES)[number];
+
+/** auto | lan | tailscale | custom — anything unexpected falls back to auto. */
+export function normalizeOhifMode(v: string): OhifMode {
+  const t = v.trim().toLowerCase();
+  return (OHIF_MODES as readonly string[]).includes(t) ? (t as OhifMode) : "auto";
+}
+
+/** Absolute http(s) URL kept; "/ohif" kept as a same-origin path; a bare
+ * host[:port] healed to http://; protocol-relative "//host" refused (it
+ * inherits whatever scheme the page happens to use, so it is never a safe
+ * default) and blanked so the candidate is simply skipped. */
+export function normalizeOhifEndpoint(v: string): string {
+  const t = v.trim();
+  if (!t) return "";
+  if (/^https?:\/\//i.test(t)) return t;
+  if (t.startsWith("//")) return "";
+  if (t.startsWith("/")) return t;
+  return `http://${t}`;
 }
 
 function envOverride(name: string): string {
@@ -137,6 +168,22 @@ function effective(saved: string, envName: string, fallback = "", isUrl = false)
   if (saved.trim()) return fix(saved);
   if (defaultsOff()) return saved;
   return fix(envOverride(envName) || fallback);
+}
+
+/** Same precedence as effective() (saved → env → built-in default) but with
+ * the OHIF normaliser, which — unlike normalizeUrl() — accepts a same-origin
+ * path like "/ohif" instead of mangling it into "http:///ohif". */
+function effectiveOhif(saved: string, envName: string, fallback = ""): string {
+  const fix = normalizeOhifEndpoint;
+  if (saved.trim()) return fix(saved);
+  if (defaultsOff()) return "";
+  return fix(envOverride(envName) || fallback);
+}
+
+/** Settings for the OHIF launch resolver. ohifMode: saved → OHIF_MODE → auto. */
+function effectiveOhifMode(saved: string): OhifMode {
+  const v = saved.trim() || envOverride("OHIF_MODE") || (defaultsOff() ? "" : "auto");
+  return normalizeOhifMode(v || "auto");
 }
 
 /** Get (or lazily create) the singleton settings row, defaults applied.
@@ -179,6 +226,14 @@ export async function getSettings() {
     orthancUsername: effective(row.orthancUsername, "ORTHANC_USERNAME"),
     // Passwords decrypt on read; legacy plaintext falls through transparently.
     orthancPassword: decryptSecret(row.orthancPassword) || (defaultsOff() ? "" : envOverride("ORTHANC_PASSWORD")) || null,
+    // OHIF viewer — the single configuration source for every viewer launch
+    // (see src/lib/usg/ohifResolver.ts). LAN ships a default so the studio
+    // works on a fresh DB; Tailscale/custom are NEVER guessed (custom may be
+    // a same-origin path such as "/ohif").
+    ohifMode: effectiveOhifMode(row.ohifMode ?? ""),
+    ohifLanUrl: effectiveOhif(row.ohifLanUrl ?? "", "OHIF_LAN_URL", LAN_DEFAULTS.ohifLanUrl),
+    ohifTailscaleUrl: effectiveOhif(row.ohifTailscaleUrl ?? "", "OHIF_TAILSCALE_URL"),
+    ohifCustomUrl: effectiveOhif(row.ohifCustomUrl ?? "", "OHIF_CUSTOM_URL"),
     geminiApiKey: decryptSecret(row.geminiApiKey) || (defaultsOff() ? "" : envOverride("GEMINI_API_KEY")) || null,
     ...readSettingsMaps(row as {
       studyTechniqueDefaultsJson?: string | null;
@@ -238,6 +293,8 @@ export async function updateSettings(patch: SettingsUpdate) {
     "usgSidebarPosition", "usgLogoPosition", "usgAddressPosition", "usgPrintFontFamily",
     // v6 integrations (URLs only — keys go through SECRET_FIELDS below)
     "careApiBase", "orthancUrl", "orthancUsername",
+    // OHIF viewer integration (routing mode + endpoints; no secrets)
+    "ohifMode", "ohifLanUrl", "ohifTailscaleUrl", "ohifCustomUrl",
     // v6 PC-PNDT Form F fixed details
     "pcpndtCentreName", "pcpndtRegistrationNo", "pcpndtPlace",
     "usgFormFEnabled",
@@ -249,6 +306,10 @@ export async function updateSettings(patch: SettingsUpdate) {
   // URL-valued integration fields are normalized on save so "172.16.1.139:8888"
   // is stored as "http://172.16.1.139:8888" (the doctor never types a scheme).
   const URL_FIELDS = new Set(["careApiBase", "orthancUrl"]);
+  // OHIF endpoint fields heal a bare "host:port" the same way, but a
+  // same-origin path ("/ohif") must be stored verbatim — normalizeUrl() would
+  // turn it into the unusable "http:///ohif".
+  const OHIF_ENDPOINT_FIELDS = new Set(["ohifLanUrl", "ohifTailscaleUrl", "ohifCustomUrl"]);
   // v6.1 — the birthday is canonicalised at write time: "7/9", "07-09" and
   // "07.09" all store as "09-01"-style "MM-DD"; anything unparseable stores
   // as "" (greeting off) instead of a value that silently never matches.
@@ -264,7 +325,16 @@ export async function updateSettings(patch: SettingsUpdate) {
       data[k] = normalizeBirthday(t);
       continue;
     }
-    data[k] = URL_FIELDS.has(k) ? normalizeUrl(t) : t;
+    data[k] = URL_FIELDS.has(k)
+      ? normalizeUrl(t)
+      : OHIF_ENDPOINT_FIELDS.has(k)
+        ? normalizeOhifEndpoint(t)
+        : t;
+  }
+  // OHIF routing mode is an enum — an unexpected value stores as "auto"
+  // rather than a string the resolver would never match.
+  if (typeof patch.ohifMode === "string") {
+    data.ohifMode = normalizeOhifMode(patch.ohifMode);
   }
   // USG machine banner toggle arrives as a string checkbox value.
   if (typeof patch.usgShowMachine === "string") {

@@ -134,11 +134,12 @@ describe("untrusted / legacy fields can never be written (v4 USG-only guard)", (
     expect((s as Record<string, unknown>).nonsense).toBeUndefined();
   });
 
-  it("keeps the legacy v1-v3 MRI/OHIF fields dropped, accepts the v6 bridge fields", async () => {
+  it("keeps the legacy v1-v3 MRI fields dropped, accepts the v6 bridge + OHIF fields", async () => {
     // A stale browser tab (or an old backup restore payload) may still send
     // the MRI-era fields; writing them would throw an unknown-column Prisma
     // error. The v6 CARE/Orthanc bridge columns, however, ARE real now and
-    // must persist (URL normalized, secrets write-only).
+    // must persist (URL normalized, secrets write-only) — and so must the
+    // restored OHIF viewer columns, which are plain settings, not secrets.
     await expect(
       updateSettings({
         careApiBase: "172.16.1.139:8888",
@@ -146,7 +147,7 @@ describe("untrusted / legacy fields can never be written (v4 USG-only guard)", (
         orthancUrl: "172.16.1.139:8042",
         orthancUsername: "admin",
         orthancPassword: "bridge-pw",
-        ohifLanUrl: "http://172.16.1.139:3010",
+        ohifLanUrl: "172.16.1.139:3010",
         ohifTailscaleUrl: "https://care.tail-abc.ts.net",
         radiologistName: "Dr. Legacy",
         radiologistQual: "MD",
@@ -155,18 +156,79 @@ describe("untrusted / legacy fields can never be written (v4 USG-only guard)", (
     ).resolves.toBeUndefined();
     const s = await getSettings();
     expect((s as Record<string, unknown>).radiologistName).toBeUndefined();
-    expect((s as Record<string, unknown>).ohifLanUrl).toBeUndefined();
     expect((s as Record<string, unknown>).careApiBase).toBe("http://172.16.1.139:8888");
     expect((s as Record<string, unknown>).orthancUrl).toBe("http://172.16.1.139:8042");
     expect(s.careApiKey).toBe("bridge-key");
     expect(s.orthancUsername).toBe("admin");
     expect(s.orthancPassword).toBe("bridge-pw");
+    // OHIF endpoints persist and survive a restart — scripts/usg-v4-cleanup.mjs
+    // must never list them again or the doctor's saved viewer is wiped at boot.
+    expect(s.ohifLanUrl).toBe("http://172.16.1.139:3010");
+    expect(s.ohifTailscaleUrl).toBe("https://care.tail-abc.ts.net");
     // Secrets are masked out of the client payload, only their presence flips.
+    // OHIF has no secret, so the client sees the real endpoints.
     const masked = await getMaskedSettings();
     expect((masked as Record<string, unknown>).careApiKey).toBeUndefined();
     expect(masked.careApiKeySet).toBe(true);
     expect((masked as Record<string, unknown>).orthancPassword).toBeUndefined();
     expect(masked.orthancPasswordSet).toBe(true);
+    expect(masked.ohifLanUrl).toBe("http://172.16.1.139:3010");
+    expect(masked.ohifMode).toBe("auto");
+  });
+
+  it("stores the OHIF routing mode as a validated enum", async () => {
+    await updateSettings({ ohifMode: "tailscale" });
+    expect((await getSettings()).ohifMode).toBe("tailscale");
+
+    // Anything unexpected cannot be saved — an unmatchable mode would leave
+    // the resolver with no rule to follow.
+    await updateSettings({ ohifMode: "cloudflare" as string });
+    expect((await getSettings()).ohifMode).toBe("auto");
+  });
+
+  it("keeps a same-origin OHIF path instead of mangling it into a URL", async () => {
+    // "/ohif" is a legitimate endpoint (the Caddy proxy route) and the only
+    // mixed-content-safe way an https studio can show an http LAN viewer.
+    // normalizeUrl() would produce the unusable "http:///ohif".
+    await updateSettings({ ohifCustomUrl: "/ohif" });
+    expect((await getSettings()).ohifCustomUrl).toBe("/ohif");
+
+    // A protocol-relative "//host" inherits whatever scheme the page uses, so
+    // it is refused rather than silently sent somewhere unexpected.
+    await updateSettings({ ohifCustomUrl: "//evil.example/ohif" });
+    expect((await getSettings()).ohifCustomUrl).toBe("");
+  });
+
+  it("falls back to env then the LAN default when OHIF is unsaved", async () => {
+    const saved = process.env.OHIF_LAN_URL;
+    const savedTs = process.env.OHIF_TAILSCALE_URL;
+    try {
+      // Nothing saved, nothing configured → the built-in LAN default, which
+      // is derived from the clinic LAN host rather than a launch-path literal.
+      delete process.env.OHIF_LAN_URL;
+      delete process.env.OHIF_TAILSCALE_URL;
+      await db.hospitalSettings.deleteMany();
+      let s = await getSettings();
+      expect(s.ohifLanUrl).toMatch(/^https?:\/\/.+:\d+$/);
+      expect(s.ohifLanUrl.endsWith(":3010")).toBe(true);
+      // Tailscale is never guessed — an unconfigured route is simply skipped.
+      expect(s.ohifTailscaleUrl).toBe("");
+
+      // An environment value applies while nothing is saved…
+      process.env.OHIF_LAN_URL = "http://10.9.8.7:3011";
+      process.env.OHIF_TAILSCALE_URL = "https://ohif.tail-example.ts.net";
+      s = await getSettings();
+      expect(s.ohifLanUrl).toBe("http://10.9.8.7:3011");
+      expect(s.ohifTailscaleUrl).toBe("https://ohif.tail-example.ts.net");
+
+      // …but a saved value always wins.
+      await updateSettings({ ohifTailscaleUrl: "https://saved.tail-real.ts.net" });
+      s = await getSettings();
+      expect(s.ohifTailscaleUrl).toBe("https://saved.tail-real.ts.net");
+    } finally {
+      if (saved === undefined) delete process.env.OHIF_LAN_URL; else process.env.OHIF_LAN_URL = saved;
+      if (savedTs === undefined) delete process.env.OHIF_TAILSCALE_URL; else process.env.OHIF_TAILSCALE_URL = savedTs;
+    }
   });
 
   it("setPinHash writes the hash and needsSetup flips (auth state path)", async () => {

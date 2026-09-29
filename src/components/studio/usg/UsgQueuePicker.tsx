@@ -4,7 +4,7 @@
  * Lets the sonographer switch cases from Studio without bouncing to Worklist.
  * Date range defaults to today; patient select sits beside study select.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useStudio } from "@/lib/store";
 import { toLocalDateString } from "@/lib/usg/dates";
@@ -192,6 +192,25 @@ export function UsgQueuePicker({ compact = false, className, currentReportId }: 
     },
     [orders, currentReportId, openComposer, prefetchReport, queryClient],
   );
+
+  // A patient with exactly one study in range needs no dropdown trip — open it.
+  // Once per patient selection, so stepping back out to the list does not
+  // bounce the doctor straight back in.
+  const autoOpenedKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!patientId) return;
+    if (studies.length !== 1) {
+      autoOpenedKeyRef.current = null;
+      return;
+    }
+    if (worklistQ.isLoading || opening) return;
+    const only = studies[0];
+    const key = `${patientId}|${only.id}`;
+    if (autoOpenedKeyRef.current === key) return;
+    autoOpenedKeyRef.current = key;
+    if (only.reportId && only.reportId === currentReportId) return;
+    void openOrder(only.id);
+  }, [patientId, studies, currentReportId, opening, worklistQ.isLoading, openOrder]);
 
   const inputCls = compact
     ? "h-7 rounded-md border border-border bg-background px-1.5 text-[10px]"

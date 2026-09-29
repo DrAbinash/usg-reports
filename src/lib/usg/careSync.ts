@@ -35,6 +35,7 @@ import {
   type CareWorklistItem,
 } from "./careClient";
 import type { OrthancStudy, OrthancUsStudyRow } from "./orthancClient";
+import { UNNAMED_STUDY_PLACEHOLDER } from "./billedStudyType";
 
 // ── pure row normalisation ──────────────────────────────────────────────────
 
@@ -511,7 +512,7 @@ export async function importOrthancOrphans(
       patientAddress: "",
       billNumber: "",
       referringDoctor: (st.referringDoctor ?? "").trim(),
-      testName: (st.testName ?? "").trim() || "USG Study",
+      testName: (st.testName ?? "").trim() || UNNAMED_STUDY_PLACEHOLDER,
       testCode: "",
       modality: "USG",
       studyInstanceUid: uid,

@@ -51,6 +51,24 @@ export type StudyTypeKey =
 export const USG_BILLING_PROCEDURE_MAP_KEY = "usg_billing_procedure_map";
 
 /**
+ * What careSync writes as testName when a study arrives from Orthanc with no
+ * DICOM StudyDescription. It is a display stand-in, NOT bill data — the CARE
+ * catalog has no test called "USG Study".
+ *
+ * It has to stay out of resolution: a study that arrived in PACS first and got
+ * its bill linked later keeps this string in testName, and feeding it to the
+ * matcher produced "Billed: USG Study — no matching USG report format" for a
+ * study the catalog actually covers (USG W = USG WHOLE ABDOMEN).
+ */
+export const UNNAMED_STUDY_PLACEHOLDER = "USG Study";
+
+/** True when a name carries no real procedure information. */
+export function isUnnamedStudyPlaceholder(name: string | null | undefined): boolean {
+  const t = (name ?? "").trim();
+  return t === "" || t.toUpperCase() === UNNAMED_STUDY_PLACEHOLDER.toUpperCase();
+}
+
+/**
  * Default procedure → study-type table (uppercase keys).
  * Includes bill-desk catalog **codes** (ECHO, USG W, …) and display names.
  * "echo" matches the seeded Echo — Adult M-Mode template's studyKey.
@@ -312,8 +330,10 @@ export function billDeskProcedureCandidates(ref: string | null | BillDeskTestRef
     if (!out.some((x) => normalizeProcedureKey(x) === normalizeProcedureKey(t))) out.push(t);
   };
   push(r.testCode);
-  push(r.testName);
-  push(r.billedProcedure);
+  // Display stand-ins are not procedures — skipping them lets the catalog code
+  // below decide, instead of matching (or failing to match) a made-up name.
+  if (!isUnnamedStudyPlaceholder(r.testName)) push(r.testName);
+  if (!isUnnamedStudyPlaceholder(r.billedProcedure)) push(r.billedProcedure);
   return out;
 }
 
@@ -343,10 +363,14 @@ export function resolveBilledStudyType(
   return sawUnmapped ? "unmapped" : null;
 }
 
-/** Label for banners / study title — name preferred, else code. */
+/** Label for banners / study title — name preferred, else code. A display
+ * stand-in is not a name, so the catalog code surfaces instead: "Billed: USG W"
+ * tells the doctor (and any screenshot) what the bill actually carried. */
 export function billDeskProcedureLabel(ref: string | null | BillDeskTestRef): string {
   const r = asBillDeskRef(ref);
-  return (r.testName ?? "").trim() || (r.billedProcedure ?? "").trim() || (r.testCode ?? "").trim();
+  const name = isUnnamedStudyPlaceholder(r.testName) ? "" : (r.testName ?? "").trim();
+  const billed = isUnnamedStudyPlaceholder(r.billedProcedure) ? "" : (r.billedProcedure ?? "").trim();
+  return name || billed || (r.testCode ?? "").trim();
 }
 
 /** Concrete composer study key for a resolved study type + patient sex. */
@@ -450,7 +474,9 @@ export function resolveNormalBootstrapFormat(ctx: {
     return {
       kind: "unmapped",
       procedure,
-      banner: billedUnmappedBanner(procedure || "unknown procedure"),
+      banner: procedure
+        ? billedUnmappedBanner(procedure)
+        : "This study reached the PACS without a test name and the bill carries no catalog code — choose a format.",
     };
   }
   const g = String(ctx.patientSex ?? "").trim().toUpperCase();

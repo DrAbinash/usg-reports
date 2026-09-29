@@ -99,8 +99,8 @@ export function UsgTemplateBar({ onApply, currentStateJson, currentStudyKey }: U
 
   return (
     <div className="flex min-w-0 flex-1 items-center gap-1.5">
-      <span className="inline-flex shrink-0 items-center gap-0.5 text-[11px] font-bold text-amber-800">
-        <Zap className="h-3 w-3 text-amber-500" />
+      <span className="inline-flex shrink-0 items-center gap-1 text-[12px] font-extrabold text-amber-900">
+        <Zap className="h-3.5 w-3.5 text-amber-600" />
         Templates
       </span>
       <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap pb-0.5 [scrollbar-width:thin]">
@@ -112,10 +112,10 @@ export function UsgTemplateBar({ onApply, currentStateJson, currentStudyKey }: U
               <button
                 onClick={() => onApply(t)}
                 className={cn(
-                  "rounded-full border px-2.5 py-0.5 text-[11px] font-bold transition-colors",
+                  "rounded-full border px-2.5 py-0.5 text-[11.5px] font-bold text-slate-950 shadow-sm transition-colors",
                   t.pinned
-                    ? "border-amber-400 bg-amber-100 text-amber-950 hover:bg-amber-200"
-                    : "border-slate-300 bg-white text-slate-900 hover:border-emerald-400 hover:bg-emerald-50",
+                    ? "border-amber-500 bg-amber-200 text-amber-950 hover:bg-amber-300"
+                    : "border-slate-400 bg-white text-slate-950 hover:border-emerald-500 hover:bg-emerald-50",
                 )}
                 title={`Apply template: ${t.name}`}
               >

@@ -9,9 +9,17 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SectionLabel } from "./bits";
 import { LOGIN_THEMES, type LoginThemeName } from "./LockScreen";
-import { Building2, ShieldCheck, Check, Palette, Upload, Trash2, Waves, Download, ArchiveRestore, Database, History, RefreshCw, Link2, Loader2, Users } from "lucide-react";
+import { Building2, ShieldCheck, Check, Palette, Upload, Trash2, Waves, Download, ArchiveRestore, Database, History, RefreshCw, Link2, Loader2, Monitor, Users } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import {
+  fetchOhifStatus,
+  ohifRouteLabel,
+  pickOhifEndpoint,
+  type OhifRoute,
+  type OhifStatus,
+} from "@/lib/usg/ohifLaunch";
+import type { OhifTestResult } from "@/lib/usg/ohifResolver";
 import { auditLabel } from "@/lib/usg/auditShared";
 import { UsgClinicsAdmin } from "./usg/UsgClinicsAdmin";
 
@@ -35,6 +43,8 @@ type Settings = {
   // v6 integrations (secrets arrive masked — only their presence flags)
   careApiBase: string; careApiKeySet: boolean;
   orthancUrl: string; orthancUsername: string; orthancPasswordSet: boolean;
+  // OHIF viewer — routing mode + endpoints, no secrets involved
+  ohifMode?: string; ohifLanUrl?: string; ohifTailscaleUrl?: string; ohifCustomUrl?: string;
   geminiApiKeySet: boolean;
   pcpndtCentreName: string; usgFormFEnabled: boolean; pcpndtRegistrationNo: string; pcpndtPlace: string;
   // v6.10 feature toggles (per-clinic)
@@ -173,10 +183,28 @@ export function SettingsView() {
   const [careKey, setCareKey] = useState("");
   const [orthancPass, setOrthancPass] = useState("");
   const [geminiKey, setGeminiKey] = useState("");
-  const [testing, setTesting] = useState<"" | "care" | "orthanc">("");
-  const [testResult, setTestResult] = useState<{ care?: { ok: boolean; version?: string; error?: string }; orthanc?: { ok: boolean; version?: string; error?: string } } | null>(null);
+  const [testing, setTesting] = useState<"" | "care" | "orthanc" | "ohif">("");
+  const [testResult, setTestResult] = useState<{
+    care?: { ok: boolean; version?: string; error?: string };
+    orthanc?: { ok: boolean; version?: string; error?: string };
+    ohif?: OhifTestResult;
+  } | null>(null);
 
-  const testConnections = async (which: "all" | "care" | "orthanc") => {
+  // OHIF: where the studio would actually open a study right now.
+  const [ohifStatus, setOhifStatus] = useState<OhifStatus | null>(null);
+  const loadOhifStatus = useCallback(async (force = false) => {
+    setOhifStatus(await fetchOhifStatus({ force }));
+  }, []);
+  useEffect(() => { void loadOhifStatus(); }, [loadOhifStatus]);
+
+  // What a study would actually open in THIS browser right now: the saved mode
+  // plus measured reachability, filtered by what this page may embed.
+  const ohifEffective =
+    typeof window === "undefined" || !ohifStatus
+      ? null
+      : pickOhifEndpoint(ohifStatus, (s?.ohifMode as OhifRoute) || "auto", window.location.protocol).endpoint;
+
+  const testConnections = async (which: "all" | "care" | "orthanc" | "ohif") => {
     setTesting(which === "all" ? "" : which);
     const r = await fetch("/api/settings/test", {
       method: "POST",
@@ -191,13 +219,20 @@ export function SettingsView() {
       return;
     }
     setTestResult(r);
-    if (which !== "orthanc" && r.care) {
+    if (which !== "orthanc" && which !== "ohif" && r.care) {
       if (r.care.ok) toast.success(`CARE connected (v${r.care.version ?? "?"})`);
       else toast.error(r.care.error ?? "CARE unreachable");
     }
-    if (which !== "care" && r.orthanc) {
+    if (which !== "care" && which !== "ohif" && r.orthanc) {
       if (r.orthanc.ok) toast.success(`Orthanc connected (v${r.orthanc.version ?? "?"})`);
       else toast.error(r.orthanc.error ?? "Orthanc unreachable");
+    }
+    if (which === "ohif" && r.ohif) {
+      // The probe is sequential with short timeouts, so the message carries the
+      // per-endpoint truth — show it in full rather than a bare ok/fail.
+      if (r.ohif.ok) toast.success(r.ohif.message);
+      else toast.error(r.ohif.message, { duration: 8_000 });
+      void loadOhifStatus(true);
     }
   };
 
@@ -266,6 +301,8 @@ export function SettingsView() {
       setCareKey("");
       setOrthancPass("");
       setGeminiKey("");
+      // Endpoints may have changed — re-probe so the card shows the new truth.
+      void loadOhifStatus(true);
     } else {
       toast.error("Could not save settings");
     }
@@ -970,6 +1007,124 @@ export function SettingsView() {
                 </span>
               ) : null}
             </div>
+          </section>
+
+          {/* OHIF Viewer */}
+          <section className="space-y-3 border-t border-border pt-4">
+            <div className="flex items-center gap-2">
+              <Monitor className="h-4 w-4 text-teal-600" />
+              <h3 className="text-[13px] font-bold">OHIF Viewer — DICOM image viewer</h3>
+              {ohifStatus ? (
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-[10px] font-bold ring-1",
+                    ohifStatus.availability === "available"
+                      ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                      : "bg-red-50 text-red-700 ring-red-200",
+                  )}
+                  data-testid="ohif-availability"
+                >
+                  {ohifStatus.availability === "available" ? "viewer available" : "viewer unavailable"}
+                </span>
+              ) : null}
+            </div>
+
+            <Field
+              label="Routing mode"
+              hint="AUTO probes the endpoints from the server and uses the nearest one that actually answers — LAN first, then the custom endpoint, then Tailscale. It is not a guess from the page URL. Manual modes force that route and report its real state, including failures."
+            >
+              <select
+                aria-label="OHIF routing mode"
+                className="h-9 w-full rounded-md border border-border bg-panel px-2 text-[12px]"
+                value={s.ohifMode || "auto"}
+                onChange={(e) => set("ohifMode", e.target.value)}
+              >
+                <option value="auto">AUTO — pick the reachable endpoint</option>
+                <option value="lan">LAN — always the in-clinic viewer</option>
+                <option value="tailscale">Tailscale — always the tailnet viewer</option>
+                <option value="custom">Custom — always the canonical / same-origin endpoint</option>
+              </select>
+            </Field>
+
+            <Field
+              label="LAN endpoint"
+              hint="In-hospital address, e.g. http://172.16.1.139:3010. Blank falls back to the clinic LAN host + port 3010, then to the OHIF_LAN_URL environment default."
+            >
+              <Input value={s.ohifLanUrl ?? ""} onChange={(e) => set("ohifLanUrl", e.target.value)} placeholder="http://172.16.1.139:3010"
+                className="h-9 border-border bg-panel text-[12.5px] font-mono" />
+            </Field>
+
+            <Field
+              label="Tailscale endpoint"
+              hint="Outside-hospital address over your tailnet, e.g. https://ohif-viewer.<tailnet>.ts.net. Left blank it is never guessed — AUTO simply skips it. Needs the OHIF_TAILSCALE_URL environment value or a saved URL."
+            >
+              <Input value={s.ohifTailscaleUrl ?? ""} onChange={(e) => set("ohifTailscaleUrl", e.target.value)} placeholder="https://….<tailnet>.ts.net"
+                className="h-9 border-border bg-panel text-[12.5px] font-mono" />
+            </Field>
+
+            <Field
+              label="Custom / canonical endpoint (optional)"
+              hint="A stable front door for the viewer. A path beginning with / is proxied same-origin by our own web server, which is how an HTTPS studio shows an HTTP-only LAN viewer — the browser blocks that iframe otherwise. Set OHIF_CUSTOM_URL, or the /ohif route on Caddy, then use this field."
+            >
+              <Input value={s.ohifCustomUrl ?? ""} onChange={(e) => set("ohifCustomUrl", e.target.value)} placeholder="/ohif  ·  https://ohif.example"
+                className="h-9 border-border bg-panel text-[12.5px] font-mono" />
+            </Field>
+
+            {/* Effective route — what a study actually opens right now. */}
+            <div className="rounded-md border border-border bg-panel/60 px-3 py-2 text-[11.5px]" data-testid="ohif-effective">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="font-bold text-foreground">Effective route:</span>
+                {ohifEffective ? (
+                  <span className="rounded bg-teal-100 px-1.5 py-0.5 font-bold text-teal-800 dark:bg-teal-900 dark:text-teal-200">
+                    {ohifRouteLabel(ohifEffective.key)}
+                  </span>
+                ) : (
+                  <span className="rounded bg-red-100 px-1.5 py-0.5 font-bold text-red-800 dark:bg-red-900 dark:text-red-200">none</span>
+                )}
+                <span className="font-mono text-muted-foreground" data-testid="ohif-effective-endpoint">
+                  {ohifEffective?.url || "—"}
+                </span>
+              </div>
+              <p className="mt-1 leading-relaxed text-faint">
+                {ohifStatus?.serverPick.reason ?? "Loading viewer routing status…"}
+              </p>
+              <ul className="mt-1.5 space-y-0.5">
+                {(ohifStatus?.endpoints ?? []).map((ep) => (
+                  <li key={ep.key} className="flex items-center gap-2" data-testid={`ohif-endpoint-${ep.key}`}>
+                    <span className="w-[74px] shrink-0 font-semibold text-muted-foreground">{ep.label}</span>
+                    <span
+                      className={cn(
+                        "h-1.5 w-1.5 shrink-0 rounded-full",
+                        !ep.configured ? "bg-slate-300 dark:bg-slate-600"
+                          : ep.reachable === true ? "bg-emerald-500"
+                            : ep.reachable === false ? "bg-red-500" : "bg-amber-400",
+                      )}
+                    />
+                    <span className="truncate font-mono text-[10.5px] text-faint">
+                      {ep.configured ? ep.url : "not configured"}
+                      {ep.reachable === false && ep.error ? ` — ${ep.error}` : ""}
+                      {ep.reachable === true && ep.latencyMs != null ? ` — ${ep.latencyMs}ms` : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" className="h-8 text-[12px]" onClick={() => void testConnections("ohif")} disabled={testing !== ""}>
+                {testing === "ohif" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+                Test OHIF
+              </Button>
+              {testResult?.ohif ? (
+                <span className={cn("text-[11.5px] font-semibold", testResult.ohif.ok ? "text-emerald-700" : "text-red-600")}>
+                  {testResult.ohif.message}
+                </span>
+              ) : null}
+            </div>
+            <p className="text-[11px] leading-relaxed text-faint">
+              Tests use the <span className="font-semibold">saved</span> endpoints — change a URL, press Save, then Test.
+              Probing happens on the server, so a viewer the browser cannot reach directly still reports honestly.
+            </p>
           </section>
 
           {/* Optional Vision OCR */}

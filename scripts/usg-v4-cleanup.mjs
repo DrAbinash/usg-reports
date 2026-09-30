@@ -13,9 +13,12 @@
  *             QuickPhrase, TechniqueTemplate, ReportFormat, SyncState
  *   - columns on HospitalSettings named in LEGACY_SETTINGS_COLUMNS below
  *
- * NEVER touched: UsgReport, UsgPathology, Session and every surviving
- * HospitalSettings column. Safe to run on every boot — on a clean or
- * already-migrated database it is a fast no-op.
+ * NEVER touched: UsgReport, UsgPathology, Session, every surviving
+ * HospitalSettings column, and the OHIF viewer fields
+ * (ohifMode/ohifLanUrl/ohifTailscaleUrl/ohifCustomUrl) — those are live
+ * app settings, so dropping them here would wipe the doctor's saved viewer
+ * endpoints on every container restart. Safe to run on every boot — on a
+ * clean or already-migrated database it is a fast no-op.
  *
  * LEGACY_SETTINGS_COLUMNS is a claim about the past, not the authority: the
  * schema is. Any name `prisma/schema.prisma` still declares is live and is
@@ -49,8 +52,10 @@ export const LEGACY_SETTINGS_COLUMNS = [
   "orthancUrl",
   "orthancUsername",
   "orthancPassword",
-  "ohifLanUrl",
-  "ohifTailscaleUrl",
+  // OHIF viewer fields are deliberately NOT listed: they are live USG Studio
+  // settings (Settings → Integrations → OHIF Viewer) read by
+  // src/lib/usg/ohifResolver.ts. Dropping them here would delete the doctor's
+  // saved endpoints at boot and re-add them blank on the next `db push`.
 ];
 
 /**

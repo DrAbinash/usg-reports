@@ -4,6 +4,9 @@
 import { describe, expect, test } from "vitest";
 import {
   DEFAULT_BILLING_PROCEDURE_MAP,
+  UNNAMED_STUDY_PLACEHOLDER,
+  billDeskProcedureLabel,
+  isUnnamedStudyPlaceholder,
   resolveBilledStudyType,
   resolveNormalBootstrapFormat,
   studyKeyForStudyType,
@@ -212,5 +215,59 @@ describe("studyKeyForStudyType + resolveNormalBootstrapFormat", () => {
       studyKey: "echo",
       npTemplateName: "Echo — Adult M-Mode",
     });
+  });
+});
+
+/**
+ * The PACS importer writes UNNAMED_STUDY_PLACEHOLDER when Orthanc has no
+ * StudyDescription. A study that arrives in PACS before its bill is linked
+ * keeps that string in testName, so it must never be treated as the billed
+ * procedure — that produced "Billed: USG Study — no matching USG report
+ * format" for a study the CARE catalog covers as USG W / USG WHOLE ABDOMEN.
+ */
+describe("PACS placeholder is not bill data", () => {
+  test("recognises the placeholder in any case/spacing, and blank", () => {
+    expect(isUnnamedStudyPlaceholder(UNNAMED_STUDY_PLACEHOLDER)).toBe(true);
+    expect(isUnnamedStudyPlaceholder("  usg study ")).toBe(true);
+    expect(isUnnamedStudyPlaceholder("")).toBe(true);
+    expect(isUnnamedStudyPlaceholder(null)).toBe(true);
+    expect(isUnnamedStudyPlaceholder("USG WHOLE ABDOMEN")).toBe(false);
+  });
+
+  test("placeholder alone resolves to null — no bogus unmapped banner", () => {
+    expect(resolveBilledStudyType({ testName: UNNAMED_STUDY_PLACEHOLDER, testCode: null })).toBeNull();
+    const boot = resolveNormalBootstrapFormat({ testName: UNNAMED_STUDY_PLACEHOLDER });
+    expect(boot.kind).toBe("none");
+  });
+
+  test("catalog code still resolves through a placeholder name", () => {
+    expect(
+      resolveBilledStudyType({ testName: UNNAMED_STUDY_PLACEHOLDER, testCode: "USG W" }),
+    ).toBe("whole-abdomen");
+    const boot = resolveNormalBootstrapFormat({
+      testCode: "USG W",
+      testName: UNNAMED_STUDY_PLACEHOLDER,
+      patientSex: "F",
+    });
+    expect(boot.kind).toBe("mapped");
+    if (boot.kind === "mapped") expect(boot.studyKey).toBe("wa-female");
+  });
+
+  test("a real billed name is never displaced by the placeholder", () => {
+    expect(
+      resolveBilledStudyType({ testName: "USG WHOLE ABDOMEN", testCode: null }),
+    ).toBe("whole-abdomen");
+  });
+
+  test("banner quotes the catalog code rather than the stand-in", () => {
+    expect(
+      billDeskProcedureLabel({ testName: UNNAMED_STUDY_PLACEHOLDER, testCode: "USGXYZ" }),
+    ).toBe("USGXYZ");
+    const boot = resolveNormalBootstrapFormat({
+      testCode: "USGXYZ",
+      testName: UNNAMED_STUDY_PLACEHOLDER,
+    });
+    expect(boot.kind).toBe("unmapped");
+    if (boot.kind === "unmapped") expect(boot.banner).toContain("USGXYZ");
   });
 });

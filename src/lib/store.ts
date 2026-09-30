@@ -17,6 +17,9 @@ export type ComposerStrip = {
   patientSex: string;
   referredBy: string;
   studyLabel: string;
+  /** Active format key — lets the header picker show (and change) the study
+   * without expanding the demography form. */
+  studyKey: string;
   title: string;
   status: "draft" | "final";
   allNormal: boolean;
@@ -38,6 +41,8 @@ type StudioState = {
   composerBack: (() => void) | null;
   /** Expand demography form in the composer. */
   expandPatientForm: (() => void) | null;
+  /** Change the open report's format from the header strip. */
+  composerPickStudy: ((studyKey: string) => void) | null;
 
   setAuth: (v: { needsSetup: boolean; authenticated: boolean }) => void;
   setView: (v: View) => void;
@@ -47,6 +52,7 @@ type StudioState = {
   setComposerStrip: (s: ComposerStrip | null) => void;
   setComposerBack: (fn: (() => void) | null) => void;
   setExpandPatientForm: (fn: (() => void) | null) => void;
+  setComposerPickStudy: (fn: ((studyKey: string) => void) | null) => void;
 };
 
 export const useStudio = create<StudioState>((set) => ({
@@ -59,6 +65,7 @@ export const useStudio = create<StudioState>((set) => ({
   composerStrip: null,
   composerBack: null,
   expandPatientForm: null,
+  composerPickStudy: null,
 
   setAuth: (v) => set({ ...v, bootstrapped: true }),
   setView: (view) => set({ view }),
@@ -68,4 +75,5 @@ export const useStudio = create<StudioState>((set) => ({
   setComposerStrip: (composerStrip) => set({ composerStrip }),
   setComposerBack: (composerBack) => set({ composerBack }),
   setExpandPatientForm: (expandPatientForm) => set({ expandPatientForm }),
+  setComposerPickStudy: (composerPickStudy) => set({ composerPickStudy }),
 }));

@@ -51,7 +51,7 @@ export function UsgFormatsLibrary({
         }}
         variant="outline"
         size="sm"
-        className="h-7 shrink-0 border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-900 hover:bg-slate-50"
+        className="h-7 shrink-0 border-slate-400 bg-white px-2 text-[11.5px] font-bold text-slate-950 shadow-sm hover:border-indigo-500 hover:bg-indigo-50 hover:text-indigo-950"
       >
         <BookOpen className="mr-1 h-3.5 w-3.5" />
         Formats

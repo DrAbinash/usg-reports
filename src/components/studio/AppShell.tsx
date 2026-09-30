@@ -12,6 +12,16 @@ import { UsgCommandPalette } from "./usg/UsgCommandPalette";
 import { UsgClinicSwitcher } from "./usg/UsgClinicSwitcher";
 import { UsgClinicLink } from "./usg/UsgClinicLink";
 import { UsgQueuePicker } from "./usg/UsgQueuePicker";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { STUDY_GROUPS, USG_STUDIES } from "@/lib/usg/studies";
 import { OnboardingLayer } from "./usg/OnboardingLayer";
 import { UsgBirthdayGreeting, BirthdayHeaderButton, birthdayDismissed, rememberBirthdayDismissed, useBirthdayFlag } from "./usg/UsgBirthdayGreeting";
 import { Waves, Settings2, LogOut, Stethoscope, BarChart3, ClipboardList, ExternalLink, ArrowLeft } from "lucide-react";
@@ -40,6 +50,7 @@ export function AppShell() {
     composerStrip,
     composerBack,
     expandPatientForm,
+    composerPickStudy,
     activeReportId,
   } = useStudio();
   const router = useRouter();
@@ -172,7 +183,6 @@ export function AppShell() {
               <span className="shrink-0 text-[11px] text-muted-foreground">
                 {composerStrip.patientSex === "C" ? "Child" : composerStrip.patientSex}
               </span>
-              <span className="hidden truncate text-[11px] text-faint lg:inline">· {composerStrip.studyLabel}</span>
               <span
                 className={cn(
                   "shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold",
@@ -183,6 +193,50 @@ export function AppShell() {
               </span>
             </button>
             <div className="mx-0.5 hidden h-5 w-px bg-border sm:block" />
+            {/* Format override, surfaced in the header: when the bill has no
+                matching USG format the doctor must change it, and until now the
+                only picker sat inside the collapsed demography form. */}
+            {composerPickStudy ? (
+              <Select
+                value={composerStrip.studyKey}
+                onValueChange={(k) => composerPickStudy(k)}
+                disabled={composerStrip.status === "final"}
+              >
+                <SelectTrigger
+                  data-testid="header-study-picker"
+                  aria-label="Report format"
+                  className={cn(
+                    "h-7 w-auto min-w-[9.5rem] max-w-[15rem] gap-1 rounded-md border-rose-300 bg-white px-2 text-[11.5px] font-bold text-rose-900 shadow-sm hover:border-rose-400",
+                    !composerStrip.studyKey && "border-dashed text-rose-700",
+                  )}
+                >
+                  <SelectValue placeholder="Choose a format" />
+                </SelectTrigger>
+                <SelectContent className="max-h-96 overflow-y-auto">
+                  {STUDY_GROUPS.map((g) => {
+                    const items = USG_STUDIES.filter((s) => s.group === g.key);
+                    if (!items.length) return null;
+                    return (
+                      <SelectGroup key={g.key}>
+                        <SelectLabel className="text-[10px] font-bold uppercase tracking-wider text-faint">
+                          {g.label}
+                        </SelectLabel>
+                        {items.map((s) => (
+                          <SelectItem key={s.key} value={s.key} className="text-[12px]">
+                            {s.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    );
+                  })}
+                  {USG_STUDIES.filter((s) => !s.group || !STUDY_GROUPS.some((g) => g.key === s.group)).map((s) => (
+                    <SelectItem key={s.key} value={s.key} className="text-[12px]">
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : null}
             <UsgQueuePicker
               compact
               className="hidden min-w-0 flex-1 sm:flex"

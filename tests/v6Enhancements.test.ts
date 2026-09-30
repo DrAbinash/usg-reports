@@ -17,6 +17,7 @@ import { validateMeasurement, validateAllMeasurements, validationClass } from "@
 import { matchSnippet, getAllSnippets } from "@/lib/usg/textExpansion";
 import { buildGrowthChart } from "@/lib/usg/growthChart";
 import { buildDailySummary } from "@/lib/usg/dailySummary";
+import { toLocalDateString } from "@/lib/usg/dates";
 
 // ── Quick Actions ─────────────────────────────────────────────────────────
 
@@ -303,8 +304,12 @@ describe("growthChart", () => {
 // ── Daily Summary ─────────────────────────────────────────────────────────
 
 describe("dailySummary", () => {
+  // `buildDailySummary` filters on the LOCAL calendar date, so the fixture
+  // dates must be local too: `new Date().toISOString()` is UTC and lagged a
+  // day behind between midnight and 05:30 IST, failing these two tests only in
+  // that window.
   it("builds a summary from today's reports", () => {
-    const today = new Date().toISOString();
+    const today = toLocalDateString();
     const reports = [
       { id: 1, scanDate: today, finalizedAt: today, status: "FINALIZED", studyKey: "wa-female", studyTitle: "Whole Abdomen", impression: "Normal study.", patientName: "Test", serialNo: 1 },
       { id: 2, scanDate: today, finalizedAt: null, status: "DRAFT", studyKey: "wa-male", studyTitle: "Whole Abdomen (M)", impression: "", patientName: "Test2", serialNo: null },
@@ -323,7 +328,7 @@ describe("dailySummary", () => {
   });
 
   it("calculates revenue from pricing", () => {
-    const today = new Date().toISOString();
+    const today = toLocalDateString();
     const reports = [
       { id: 1, scanDate: today, finalizedAt: today, status: "FINALIZED", studyKey: "wa-female", studyTitle: "WA", impression: "", patientName: "T", serialNo: 1 },
       { id: 2, scanDate: today, finalizedAt: today, status: "FINALIZED", studyKey: "kub", studyTitle: "KUB", impression: "", patientName: "T2", serialNo: 2 },

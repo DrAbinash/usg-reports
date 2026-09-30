@@ -12,11 +12,19 @@
  *   LAN → configured canonical/custom → Tailscale,
  * skipping anything not configured and falling over on the first failure.
  *
+ * The browser that asked may pass its own scheme (pageProtocol). AUTO then
+ * keeps walking past a candidate that is reachable but which that page cannot
+ * frame — an https page and a plain-http LAN viewer — so the HTTPS Tailscale
+ * endpoint is still found. Reachability is still measured only here, on the
+ * server; the scheme is not a measurement, just a rule the browser already
+ * enforces.
+ *
  * Nothing in here hard-codes an endpoint; the values come from Settings
  * (ohifMode / ohifLanUrl / ohifTailscaleUrl / ohifCustomUrl) with env and
  * LAN defaults applied by src/lib/settings.ts.
  */
 import { getSettings } from "@/lib/settings";
+import { isEmbedSafe } from "@/lib/usg/ohifLaunch";
 import type {
   OhifCandidateKey,
   OhifEndpointInfo,
@@ -263,11 +271,23 @@ async function probeOne(
 /**
  * Resolve the viewer for a route preference.
  *
- * @param routeOverride a per-call manual route (the viewer's L/T/C buttons)
- *                      wins over the saved Settings mode.
+ * @param routeOverride a manual route (the viewer's L/T/C buttons, or the
+ *                      Settings mode) wins over the AUTO walk.
  * @param force         bypass the reachability cache.
+ * @param pageProtocol  scheme of the page that asked ("https:" | "http:").
+ *                      AUTO normally stops at the first reachable candidate —
+ *                      correct for the server, wrong for a browser, because an
+ *                      https page cannot frame a plain-http viewer. When this
+ *                      is https the walk keeps going past a reachable-but-
+ *                      unembeddable endpoint so an HTTPS route (the ts.net
+ *                      Tailscale viewer, or a same-origin path) is still found,
+ *                      and the skipped one is reported as blocked rather than
+ *                      as a success. Left undefined, reachability alone decides
+ *                      — the pre-existing server-only contract.
  */
-export async function resolveOhifStatus(opts: { routeOverride?: OhifRoute; force?: boolean } = {}): Promise<OhifStatus> {
+export async function resolveOhifStatus(
+  opts: { routeOverride?: OhifRoute; force?: boolean; pageProtocol?: string } = {},
+): Promise<OhifStatus> {
   const cfg = await getOhifConfig();
   const mode = opts.routeOverride ?? cfg.mode;
   const urls: Record<OhifCandidateKey, string> = Object.fromEntries(
@@ -281,6 +301,10 @@ export async function resolveOhifStatus(opts: { routeOverride?: OhifRoute; force
    * usable unless the browser has already disproved them. */
   const usable = (e: OhifEndpointInfo): boolean =>
     e.reachable === true || (e.probeBy === "browser" && e.reachable !== false);
+
+  const pageIsHttps = opts.pageProtocol === "https:";
+  /** First reachable candidate this page cannot frame, if any. */
+  let blockedByPage: OhifEndpointInfo | null = null;
 
   if (mode === "auto") {
     const probed: OhifEndpointInfo[] = [];
@@ -297,7 +321,14 @@ export async function resolveOhifStatus(opts: { routeOverride?: OhifRoute; force
       }
       const { endpoint, cached } = await probeOne(ep, !!opts.force, false);
       probed.push(endpoint);
-      if (usable(endpoint) && !pickedKey) {
+      if (usable(endpoint)) {
+        if (pageIsHttps && !isEmbedSafe(endpoint, "https:")) {
+          // Reachable, but framing it here would show a blank iframe. Keep
+          // walking — the next candidate may be the HTTPS route that works.
+          // Not a failure of the viewer, so it is not counted as one.
+          blockedByPage ??= endpoint;
+          continue;
+        }
         pickedKey = endpoint.key;
         usedCache = cached;
         // Short-circuit: once the LAN viewer answers we never touch the
@@ -316,6 +347,19 @@ export async function resolveOhifStatus(opts: { routeOverride?: OhifRoute; force
     }
 
     const chosen = probed.find((e) => e.key === pickedKey);
+    let reason: string;
+    if (pickedKey) {
+      reason = `${LABELS[pickedKey]} reachable`;
+    } else if (blockedByPage) {
+      reason =
+        `${LABELS[blockedByPage.key]} is reachable but cannot be embedded in an https page — it is plain http. ` +
+        `Point Settings → Integrations → OHIF Viewer at an HTTPS route (the Tailscale ts.net address, or a same-origin path).`;
+      if (failures.length) reason += ` (${failures.join("; ")})`;
+    } else if (failures.length) {
+      reason = `no configured viewer reachable (${failures.join("; ")})`;
+    } else {
+      reason = "no viewer endpoint configured (Settings → Integrations → OHIF Viewer)";
+    }
 
     return {
       mode,
@@ -323,13 +367,9 @@ export async function resolveOhifStatus(opts: { routeOverride?: OhifRoute; force
       serverPick: {
         key: pickedKey,
         url: chosen?.url ?? "",
-        reason: pickedKey
-          ? `${LABELS[pickedKey]} reachable`
-          : failures.length
-            ? `no configured viewer reachable (${failures.join("; ")})`
-            : "no viewer endpoint configured (Settings → Integrations → OHIF Viewer)",
+        reason,
       },
-      availability: pickedKey ? "available" : "unavailable",
+      availability: pickedKey ? "available" : blockedByPage ? "blocked" : "unavailable",
       checkedAt: Date.now(),
       cached: usedCache,
     };
@@ -341,6 +381,11 @@ export async function resolveOhifStatus(opts: { routeOverride?: OhifRoute; force
   const configured = !!target?.configured;
   const manual = target ? await probeOne({ ...target, configured }, !!opts.force, false) : null;
   const reachable = manual?.endpoint.reachable ?? null;
+  // A forced http endpoint on an https page is still the doctor's choice, so
+  // the pick is unchanged — but "available" would be a lie: the browser frames
+  // it as a blank iframe. Report it as blocked and say why. Unconfigured routes
+  // are answered ahead of this, so "blocked" can never mean "not configured".
+  const manualBlocked = !!manual && pageIsHttps && !isEmbedSafe(manual.endpoint, "https:");
 
   const endpoints = ordered.map((e) => {
     if (e.key === mode && manual) return manual.endpoint;
@@ -357,11 +402,19 @@ export async function resolveOhifStatus(opts: { routeOverride?: OhifRoute; force
         ? `${LABELS[mode]} is not configured (Settings → Integrations → OHIF Viewer)`
         : reachable === false
           ? `${LABELS[mode]} selected manually but unreachable: ${manual?.endpoint.error ?? "no answer"}`
-          : reachable === null
-            ? `${LABELS[mode]} selected manually — browser verifies reachability`
-            : `${LABELS[mode]} selected manually and reachable`,
+          : manualBlocked
+            ? `${LABELS[mode]} selected manually and reachable, but an https page cannot embed a plain http viewer — the browser will show a blank frame`
+            : reachable === null
+              ? `${LABELS[mode]} selected manually — browser verifies reachability`
+              : `${LABELS[mode]} selected manually and reachable`,
     },
-    availability: configured && reachable !== false ? "available" : "unavailable",
+    availability: !configured
+      ? "unavailable"
+      : reachable === false
+        ? "unavailable"
+        : manualBlocked
+          ? "blocked"
+          : "available",
     checkedAt: Date.now(),
     cached: manual?.cached ?? false,
   };

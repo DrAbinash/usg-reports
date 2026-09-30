@@ -37,7 +37,10 @@ import {
 import {
   buildOhifViewerUrl,
   buildOhifWorklistUrl,
+  fetchOhifStatus,
+  invalidateOhifStatusCache,
   isEmbedSafe,
+  ohifEndpointHealth,
   ohifStudyPath,
   pickOhifEndpoint,
   type OhifStatus,
@@ -524,5 +527,234 @@ describe("mixed-content safety", () => {
       ],
     });
     expect(pickOhifEndpoint(status, "auto", "http:").endpoint).toBeNull();
+  });
+});
+
+// ── Browser-aware AUTO: the caller's scheme decides when the walk stops ─
+//
+// The server used to stop at the first endpoint IT could reach. From an https
+// studio that is the wrong place to stop: the LAN viewer answers happily, gets
+// picked, and the browser then refuses to frame it — so the clinic saw
+// "viewer available" beside "Effective route: none" and the newly configured
+// HTTPS tailnet viewer was never even tried. The walk now continues past an
+// endpoint this page cannot use. Reachability is still measured only here.
+
+describe("AUTO when the caller reports an https page", () => {
+  it("continues past a reachable plain-http LAN viewer and picks the HTTPS Tailscale endpoint", async () => {
+    routeTable({ [LAN]: 200, [TS]: 200 });
+    setCfg({ ohifTailscaleUrl: TS });
+
+    const status = await resolveOhifStatus({ pageProtocol: "https:" });
+    expect(status.serverPick.key).toBe("tailscale");
+    expect(status.serverPick.url).toBe(TS);
+    expect(status.availability).toBe("available");
+    // LAN is still reported truthfully — it IS reachable, just unusable here.
+    expect(status.endpoints.find((e) => e.key === "lan")?.reachable).toBe(true);
+  });
+
+  it("actually probes Tailscale instead of stopping at LAN", async () => {
+    routeTable({ [LAN]: 200, [TS]: 200 });
+    setCfg({ ohifTailscaleUrl: TS });
+    await resolveOhifStatus({ pageProtocol: "https:" });
+    expect(calls).toEqual([LAN, TS]);
+  });
+
+  it("yields a real embeddable study URL on an https page", async () => {
+    const UID = "1.2.840.113704.1.111.1";
+    routeTable({ [LAN]: 200, [TS]: 200 });
+    setCfg({ ohifTailscaleUrl: TS });
+
+    const status = await resolveOhifStatus({ pageProtocol: "https:" });
+    const pick = pickOhifEndpoint(status, "auto", "https:");
+    expect(pick.endpoint?.url).toBe(TS);
+    expect(pick.blocked?.key).toBe("lan");
+    expect(buildOhifViewerUrl(pick.endpoint!.url, UID)).toBe(`${TS}/viewer?StudyInstanceUIDs=${UID}`);
+  });
+
+  it("says 'blocked', never 'available', when the only reachable viewer is plain http", async () => {
+    routeTable({ [LAN]: 200 });
+    const status = await resolveOhifStatus({ pageProtocol: "https:" });
+    expect(status.serverPick.key).toBeNull();
+    expect(status.availability).toBe("blocked");
+    expect(status.serverPick.reason).toMatch(/cannot be embedded in an https page/);
+  });
+
+  it("leaves availability alone for an http page — LAN still wins and nothing else is probed", async () => {
+    routeTable({ [LAN]: 200, [TS]: 200 });
+    setCfg({ ohifTailscaleUrl: TS });
+
+    const status = await resolveOhifStatus({ pageProtocol: "http:" });
+    expect(status.serverPick.key).toBe("lan");
+    expect(calls).toEqual([LAN]); // in-clinic viewing must not depend on the internet
+  });
+
+  it("treats an HTTPS LAN viewer as usable on the clinic floor, so LAN is still first", async () => {
+    const LAN_HTTPS = "https://ohif.lan.test";
+    routeTable({ [LAN_HTTPS]: 200, [TS]: 200 });
+    setCfg({ ohifLanUrl: LAN_HTTPS, ohifTailscaleUrl: TS });
+
+    const status = await resolveOhifStatus({ pageProtocol: "https:" });
+    expect(status.serverPick.key).toBe("lan");
+    expect(calls).toEqual([LAN_HTTPS]);
+  });
+
+  it("prefers a same-origin custom endpoint over a blocked LAN viewer", async () => {
+    routeTable({ [LAN]: 200 });
+    setCfg({ ohifCustomUrl: "/ohif" });
+
+    const status = await resolveOhifStatus({ pageProtocol: "https:" });
+    expect(status.serverPick.key).toBe("custom");
+    expect(status.availability).toBe("available");
+  });
+
+  it("keeps reporting an unconfigured Tailscale route as skipped, not failed", async () => {
+    routeTable({});
+    const status = await resolveOhifStatus({ pageProtocol: "https:" });
+    const ts = status.endpoints.find((e) => e.key === "tailscale");
+    expect(ts?.configured).toBe(false);
+    expect(ts?.error).toBe("not configured");
+    expect(status.availability).toBe("unavailable");
+  });
+});
+
+// ── Manual routes are honoured, but labelled honestly ──────────────────
+
+describe("manual routes with an https caller", () => {
+  it("TAILSCALE uses the configured endpoint", async () => {
+    routeTable({ [LAN]: 200, [TS]: 200 });
+    setCfg({ ohifTailscaleUrl: TS });
+
+    const status = await resolveOhifStatus({ routeOverride: "tailscale", pageProtocol: "https:" });
+    expect(status.serverPick.key).toBe("tailscale");
+    expect(status.serverPick.url).toBe(TS);
+    expect(status.availability).toBe("available");
+    // A forced route probes only its own endpoint.
+    expect(calls).toEqual([TS]);
+  });
+
+  it("keeps a forced LAN route but reports it as blocked, not available", async () => {
+    routeTable({ [LAN]: 200 });
+    const status = await resolveOhifStatus({ routeOverride: "lan", pageProtocol: "https:" });
+    // The doctor's choice is preserved…
+    expect(status.serverPick.key).toBe("lan");
+    expect(status.serverPick.url).toBe(LAN);
+    // …and so is the truth about what the browser will do with it.
+    expect(status.availability).toBe("blocked");
+    expect(status.serverPick.reason).toMatch(/blank frame|cannot embed/i);
+  });
+
+  it("CUSTOM stays usable when selected explicitly", async () => {
+    routeTable({ [LAN]: 200 });
+    setCfg({ ohifCustomUrl: "/ohif" });
+
+    const status = await resolveOhifStatus({ routeOverride: "custom", pageProtocol: "https:" });
+    expect(status.serverPick.key).toBe("custom");
+    expect(status.serverPick.url).toBe("/ohif");
+    expect(status.availability).toBe("available");
+  });
+
+  it("an unconfigured forced route is unavailable, never reported as blocked", async () => {
+    // "blocked" must only ever mean "there is a viewer, and this page cannot
+    // frame it" — not a re-labelled missing configuration.
+    routeTable({});
+    const status = await resolveOhifStatus({ routeOverride: "tailscale", pageProtocol: "https:" });
+    expect(status.availability).toBe("unavailable");
+    expect(status.serverPick.reason).toMatch(/not configured/);
+  });
+});
+
+// ── Integration Health: five distinct endpoint states ──────────────────
+
+const EP = (over: Partial<Parameters<typeof ohifEndpointHealth>[0]> = {}) => ({
+  configured: true,
+  reachable: true as boolean | null,
+  sameOrigin: false,
+  secure: false,
+  ...over,
+});
+
+describe("ohifEndpointHealth", () => {
+  it("separates 'reachable' from 'usable by this page'", () => {
+    expect(ohifEndpointHealth(EP(), "https:")).toBe("blocked");
+    expect(ohifEndpointHealth(EP(), "http:")).toBe("connected");
+    expect(ohifEndpointHealth(EP({ secure: true }), "https:")).toBe("connected");
+    expect(ohifEndpointHealth(EP({ sameOrigin: true }), "https:")).toBe("connected");
+  });
+
+  it("keeps 'not configured' and 'not tested' distinct from 'unreachable'", () => {
+    expect(ohifEndpointHealth(EP({ configured: false, reachable: null }), "https:")).toBe("not_configured");
+    expect(ohifEndpointHealth(EP({ reachable: null }), "https:")).toBe("unknown");
+    expect(ohifEndpointHealth(EP({ reachable: false }), "https:")).toBe("unreachable");
+  });
+
+  it("never reports an unconfigured endpoint as connected whatever the scheme", () => {
+    for (const protocol of ["https:", "http:"]) {
+      expect(ohifEndpointHealth(EP({ configured: false, reachable: null }), protocol)).not.toBe("connected");
+    }
+  });
+});
+
+// ── The wire contract that makes the above reachable from a browser ────
+//
+// If fetchOhifStatus stopped sending the scheme, every rule above would go
+// back to ignoring it and the studio would show "available" with no route.
+// Guarded here because it is a request shape, not a decision.
+
+describe("fetchOhifStatus", () => {
+  const EMBED_AWARE: OhifStatus = {
+    mode: "auto",
+    endpoints: [
+      { key: "lan", label: "LAN viewer", configured: true, url: LAN, sameOrigin: false, secure: false, reachable: true, probeBy: "server" },
+      { key: "tailscale", label: "Tailscale viewer", configured: true, url: TS, sameOrigin: false, secure: true, reachable: true, probeBy: "server" },
+      { key: "custom", label: "Custom viewer", configured: false, url: "", sameOrigin: false, secure: false, reachable: null, error: "not configured", probeBy: "server" },
+    ],
+    serverPick: { key: "tailscale", url: TS, reason: "Tailscale viewer reachable" },
+    availability: "available",
+    checkedAt: 1,
+    cached: false,
+  };
+
+  function stubBrowser(protocol: string): { asked: string[] } {
+    const asked: string[] = [];
+    vi.stubGlobal("window", { location: { protocol } });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: unknown) => {
+        asked.push(String(input));
+        return new Response(JSON.stringify(EMBED_AWARE), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }),
+    );
+    return { asked };
+  }
+
+  it("sends its scheme so AUTO can skip what this page cannot frame", async () => {
+    invalidateOhifStatusCache();
+    const { asked } = stubBrowser("https:");
+    try {
+      const status = await fetchOhifStatus({ force: true });
+      expect(asked[0]).toContain("page=https%3A");
+      expect(status?.serverPick.key).toBe("tailscale");
+      // The http LAN viewer is reported as the blocked one, not as a success.
+      const pick = pickOhifEndpoint(status!, "auto", "https:");
+      expect(pick.endpoint?.key).toBe("tailscale");
+      expect(pick.blocked?.key).toBe("lan");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("sends http: from the plain-LAN studio and changes nothing there", async () => {
+    invalidateOhifStatusCache();
+    const { asked } = stubBrowser("http:");
+    try {
+      const status = await fetchOhifStatus({ force: true });
+      expect(asked[0]).toContain("page=http%3A");
+      expect(pickOhifEndpoint(status!, "auto", "http:").endpoint?.key).toBe("lan");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

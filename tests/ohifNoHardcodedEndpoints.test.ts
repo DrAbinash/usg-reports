@@ -9,7 +9,7 @@
  * (a LAN IP and a tailnet hostname) and AppShell/UsgPacsQueue built their own,
  * so a viewer move needed four code edits and AUTO silently ignored Settings.
  */
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 /** Every path that can open the viewer. */
@@ -131,5 +131,55 @@ describe("OHIF settings are the single source", () => {
     for (const env of ["OHIF_LAN_URL", "OHIF_TAILSCALE_URL", "OHIF_CUSTOM_URL", "OHIF_MODE"]) {
       expect(compose).toContain(env);
     }
+  });
+});
+
+// ── The tailnet OHIF address is deployment configuration, not code ─────
+//
+// Remote reading needs an HTTPS viewer, and the clinic's tailnet address is a
+// fact about one deployment. It belongs in docker-compose.yml (one place,
+// overridable from .env) — never in a launch path, where a second copy would
+// silently win over a saved Settings value the next time the viewer moves.
+
+/** Every file under a source directory (no build output, no node_modules). */
+function walk(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = `${dir}/${entry.name}`;
+    return entry.isDirectory() ? walk(path) : [path];
+  });
+}
+
+describe("the tailnet OHIF endpoint stays in deployment configuration", () => {
+  const compose = readFileSync("docker-compose.yml", "utf8");
+  const defaulted = /OHIF_TAILSCALE_URL=\$\{OHIF_TAILSCALE_URL:-([^}]*)\}/.exec(compose);
+
+  it("ships an HTTPS .ts.net default, so remote reading needs no code edit", () => {
+    expect(defaulted, "docker-compose.yml must give OHIF_TAILSCALE_URL a default").toBeTruthy();
+    expect(defaulted![1]).toMatch(/^https:\/\/[^\s}]+\.ts\.net$/);
+  });
+
+  it("does not duplicate that hostname anywhere in application source", () => {
+    // Read out of compose rather than restated here, so this guard cannot
+    // itself become the second copy it is checking for.
+    const host = new URL(defaulted![1]).hostname;
+    const hits = walk("src").filter((file) => readFileSync(file, "utf8").includes(host));
+    expect(hits).toEqual([]);
+  });
+
+  it("leaves the LAN and same-origin routes unguessed — only Tailscale is defaulted", () => {
+    expect(compose).toMatch(/OHIF_LAN_URL=\$\{OHIF_LAN_URL:-\}/);
+    expect(compose).toMatch(/OHIF_CUSTOM_URL=\$\{OHIF_CUSTOM_URL:-\}/);
+  });
+
+  it("keeps a saved Settings value above that deployment default", () => {
+    const settings = readFileSync("src/lib/settings.ts", "utf8");
+    // saved → env → built-in fallback, unchanged by the new default…
+    expect(settings).toMatch(/if \(saved\.trim\(\)\) return fix\(saved\);/);
+    expect(settings).toMatch(/return fix\(envOverride\(envName\) \|\| fallback\);/);
+    // …and there is no built-in Tailscale fallback to compete with it, so the
+    // compose value is the only default an unsaved install sees.
+    const lanDefaults = /const LAN_DEFAULTS = \{([\s\S]*?)\} as const;/.exec(settings);
+    expect(lanDefaults, "LAN_DEFAULTS block not found").toBeTruthy();
+    expect(lanDefaults![1]).not.toMatch(/[Tt]ailscale/);
   });
 });

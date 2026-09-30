@@ -11,7 +11,9 @@ const ROUTES: readonly string[] = ["auto", "lan", "tailscale", "custom"];
  *
  * ?force=1 bypasses the reachability cache (after a settings change or a load
  * failure); ?route=lan|tailscale|custom resolves a manual route so its real
- * state can be shown instead of the AUTO result.
+ * state can be shown instead of the AUTO result; ?page=https: says the caller is
+ * an https document, so AUTO keeps walking past a reachable-but-unframeable
+ * http endpoint. Absent/other = reachability alone, as before.
  */
 export async function GET(req: Request) {
   const guard = await requireSession();
@@ -21,6 +23,7 @@ export async function GET(req: Request) {
   const force = /^(1|true)$/i.test(params.get("force") ?? "");
   const route = params.get("route") ?? "";
   const routeOverride = ROUTES.includes(route) ? (route as OhifRoute) : undefined;
+  const pageProtocol = params.get("page") === "https:" ? ("https:" as const) : undefined;
 
-  return Response.json(await resolveOhifStatus({ force, routeOverride }));
+  return Response.json(await resolveOhifStatus({ force, routeOverride, pageProtocol }));
 }

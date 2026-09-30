@@ -123,6 +123,27 @@ describe("GET /api/usg/ohif/status", () => {
     await STATUS_GET(new NextRequest("http://localhost/api/usg/ohif/status?route=custom&force=true"));
     expect(resolveOhifStatus).toHaveBeenCalledWith({ force: true, routeOverride: "custom" });
   });
+
+  it("?page=https: makes AUTO judge embeddability for that page", async () => {
+    await STATUS_GET(new NextRequest("http://localhost/api/usg/ohif/status?page=https:"));
+    expect(resolveOhifStatus).toHaveBeenCalledWith({
+      force: false,
+      routeOverride: undefined,
+      pageProtocol: "https:",
+    });
+  });
+
+  it("any other ?page value stays reachability-only — the client cannot invent a filter", async () => {
+    for (const value of ["http:", "", "ftp:", "https"]) {
+      resolveOhifStatus.mockClear();
+      await STATUS_GET(new NextRequest(`http://localhost/api/usg/ohif/status?page=${value}`));
+      expect(resolveOhifStatus).toHaveBeenCalledWith({
+        force: false,
+        routeOverride: undefined,
+        pageProtocol: undefined,
+      });
+    }
+  });
 });
 
 describe("POST /api/settings/test — Test OHIF", () => {

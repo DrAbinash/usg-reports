@@ -36,6 +36,7 @@ export const BACKUP_SETTINGS_KEYS = [
   "usgPrintSpacing",
   "usgPrintShowTechnique",
   "usgPrintShowThanks",
+  "usgPrintQrEnabled",
   // v6 — PC-PNDT Form F fixed details (personalisation, not clinical)
   "pcpndtCentreName",
   "pcpndtRegistrationNo",

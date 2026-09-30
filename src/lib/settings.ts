@@ -377,7 +377,8 @@ export async function updateSettings(patch: SettingsUpdate) {
   }
   // Clinical-body fit: one_page (default) | multi.
   if (typeof patch.usgPrintBodyFit === "string") {
-    data.usgPrintBodyFit = patch.usgPrintBodyFit.trim() === "multi" ? "multi" : "one_page";
+    const v = patch.usgPrintBodyFit.trim();
+    data.usgPrintBodyFit = v === "multi" || v === "auto" ? v : "one_page";
   }
   // v6.2 print fine-tuning — the numeric dials arrive as strings from the
   // sliders and are clamped so a stray value can never wreck the letterhead.
@@ -414,7 +415,7 @@ export async function updateSettings(patch: SettingsUpdate) {
       : "normal";
   }
   // Technique band + referral tagline toggles (string-checkbox contract).
-  for (const k of ["usgPrintShowTechnique", "usgPrintShowThanks"] as const) {
+  for (const k of ["usgPrintShowTechnique", "usgPrintShowThanks", "usgPrintQrEnabled"] as const) {
     const v = patch[k];
     if (typeof v === "string") {
       data[k] = !/^(0|false|off|no)$/i.test(v.trim());

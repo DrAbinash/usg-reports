@@ -8,11 +8,13 @@
   .sheet { max-width: 186mm; margin: 0 auto; }
 
   .masthead { background: linear-gradient(120deg, #143E6E 0%, #1B4F8A 45%, #2E6DA4 100%); color: #fff; border-radius: 12px; padding: 10px 14px; display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 6px rgba(20,62,110,.25); }
-  .logo-slot { width: var(--logo-box, 78px); height: var(--logo-box, 78px); background: #fff; border-radius: 11px; flex-shrink: 0; overflow: hidden; display: flex; align-items: stretch; justify-content: stretch; padding: 0; }
-  .logo-slot .logo { width: 100%; height: 100%; object-fit: cover; object-position: center; display: block; border-radius: 0; background: transparent; padding: 0; }
+  .logo-slot { height: var(--logo-box, 78px); background: #fff; border-radius: 11px; flex-shrink: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; padding: 0; }
+  /* The mark keeps its own aspect ratio — a wide CARE wordmark must not be
+     crushed into the old square slot, which is what made it read as missing. */
+  .logo-slot .logo { max-height: 100%; max-width: var(--logo-max-w, 46mm); width: auto; height: auto; object-fit: contain; object-position: center; display: block; border-radius: 0; background: transparent; padding: 0; }
   .logo-slot .logo.logo-contain { object-fit: contain; padding: 1px; }
   /* Split brand mark: heart band + CARE word — fills the whole white slot. */
-  .logo-slot .logo-fallback { width: 100%; height: 100%; display: grid; grid-template-rows: 1.15fr 1fr; align-items: stretch; justify-items: stretch; font-weight: 800; color: #C41E3A; line-height: 1; background: linear-gradient(180deg, #FFF7F8 0%, #FFFFFF 55%); }
+  .logo-slot .logo-fallback { width: var(--logo-box, 78px); height: var(--logo-box, 78px); display: grid; grid-template-rows: 1.15fr 1fr; align-items: stretch; justify-items: stretch; font-weight: 800; color: #C41E3A; line-height: 1; background: linear-gradient(180deg, #FFF7F8 0%, #FFFFFF 55%); }
   .logo-slot .logo-fallback .mark { display: flex; align-items: center; justify-content: center; font-size: calc(var(--logo-box, 78px) * 0.38); color: #C41E3A; }
   .logo-slot .logo-fallback .word { display: flex; align-items: center; justify-content: center; font-size: calc(var(--logo-box, 78px) * 0.22); letter-spacing: 0.08em; color: #143E6E; border-top: 1px solid #E8F1FA; }
   .masthead-mid { flex: 1; min-width: 0; }
@@ -83,7 +85,7 @@
   .advice-box .advice-h { font-size: 9pt; font-weight: 800; letter-spacing: 1.2px; color: #143E6E; text-transform: uppercase; margin-bottom: 3px; }
   .advice-box p { margin: 3px 0; font-weight: 700; color: #143E6E; }
 
-  .sig-block { margin-top: 16px; display: flex; justify-content: flex-end; page-break-inside: avoid; }
+  .sig-block { margin-top: 16px; display: flex; justify-content: flex-end; align-items: flex-end; gap: 10px; page-break-inside: avoid; }
   .sig { text-align: center; min-width: 62mm; }
   .sig .line { border-bottom: 2px solid #143E6E; height: 18px; margin-bottom: 5px; }
   .sig .name { font-weight: 800; color: #143E6E; font-size: 11.5pt; }
@@ -91,13 +93,15 @@
 
   .declaration { margin-top: 10px; font-size: 8pt; font-weight: 600; color: #61788C; border: 1px solid #AFCDE8; border-radius: 7px; padding: 6px 10px; text-align: left; }
 
-  .pcpndt { margin-top: 10px; border: 1.5px solid #1B4F8A; border-radius: 8px; padding: 8px 12px; background: #F4F8FC; page-break-inside: avoid; }
-  .pcpndt-title { font-size: 9pt; font-weight: 800; letter-spacing: 1.2px; color: #143E6E; text-transform: uppercase; margin-bottom: 4px; }
-  .pcpndt p { font-size: 8.5pt; font-weight: 600; color: #16222E; text-align: left; line-height: 1.55; }
+  .pcpndt { margin-top: 7px; border: 1.2px solid #1B4F8A; border-radius: 6px; padding: 3px 9px; background: #F4F8FC; page-break-inside: avoid; line-height: 1.2; }
+  .pcpndt-title { font-size: 7.5pt; font-weight: 800; letter-spacing: 1px; color: #143E6E; text-transform: uppercase; margin-bottom: 1px; }
+  .pcpndt p { font-size: 7.5pt; font-weight: 600; color: #16222E; text-align: left; line-height: 1.25; }
 
   .footer { margin-top: 10px; border-top: 2.5px solid #1B4F8A; padding-top: 5px; font-size: 8pt; font-weight: 600; color: #61788C; display: flex; justify-content: space-between; align-items: center; }
-  .qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 1px; }
-  .qr { width: 20mm; height: 20mm; }
+  /* Verification QR rides the signature row, pinned to its left edge, so it
+     stops costing a whole band of vertical space under the footer rule. */
+  .qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 1px; margin-right: auto; align-self: flex-end; }
+  .qr { width: 64px; height: 64px; image-rendering: pixelated; }
   .qr-cap { font-size: 6.5pt; font-weight: 700; letter-spacing: .5px; }
 
   .sig-img { height: 18mm; max-width: 64mm; object-fit: contain; display: block; margin: 0 auto; }
@@ -107,7 +111,7 @@
   body { font-size: 9.5pt; line-height: 1.38; }
   .masthead { padding-top: 8px; padding-bottom: 7px; }
   .masthead .hospital { font-size: 14pt; }
-  .logo-slot { width: 58px; height: 58px; }
+  .logo-slot { height: 58px; }
   table.patient { margin-top: 6px; }
   table.patient td { padding: 2.5px 7px; }
   .study { margin-top: 3px; }
@@ -126,7 +130,7 @@
   @page { size: A4; margin: 8mm; }
   body { font-size: 8.7pt; line-height: 1.28; }
   .masthead { padding: 6px 10px; gap: 8px; border-radius: 8px; }
-  .logo-slot { width: 48px; height: 48px; border-radius: 8px; }
+  .logo-slot { height: 48px; border-radius: 8px; }
   .masthead .hospital { font-size: 12.5pt; }
   .masthead-addr { font-size: 6.5pt; line-height: 1.25; }
   table.patient { margin-top: 4px; border-radius: 6px; font-size: 8pt; }
@@ -189,11 +193,11 @@ body { font-size: 10pt; line-height: 1.4; }
     padding: 2px 10px; text-transform: uppercase;
   }
 
-  :root { --logo-box: 53px; }
+  :root { --logo-box: 53px; --logo-max-w: 159px; }
 
 /* Flow layout for signature / PC-PNDT / footer — never pin to page-1 bottom
    so long reports push the tail cleanly onto page 2 as one unit. */
-.tail { page-break-inside: avoid; break-inside: avoid; margin-top: 12px; }
+.tail { page-break-inside: avoid; break-inside: avoid; margin-top: 4px; }
 .sig-block { page-break-inside: avoid; break-inside: avoid; }
 
 /* Stills appendix — own A4 page after the signed report body. */
@@ -213,6 +217,14 @@ body { font-size: 10pt; line-height: 1.4; }
 .demo-strip .n { font-weight: 800; }
 .demo-strip .sep { color: #AFCDE8; font-weight: 400; }
 
+/* Advice on one line — a heading block over a paragraph block spent two rows
+   on what is usually a single sentence. */
+.advice-inline { display: flex; align-items: baseline; gap: 6px; }
+.advice-inline .advice-h { margin-bottom: 0; flex: 0 0 auto; }
+.advice-inline .suggestions { margin-top: 0; flex: 1 1 auto; }
+.advice-inline .suggestions p { display: inline; margin: 0; }
+.advice-inline .advice-sep { margin: 0 4px; font-weight: 700; }
+
 /* Two-line demography strip */
 .patient-strip { display: flex; flex-direction: column; gap: 4px; margin: 4mm 0 3mm; }
 .strip-row { display: flex; justify-content: space-between; align-items: center; }
@@ -231,8 +243,8 @@ body { font-size: 10pt; line-height: 1.4; }
 <div class="watermark">PROVISIONAL</div>
 <div class="sheet">
   <div class="masthead">
-    <div class="logo-slot"><div class="logo logo-fallback"><span class="mark">♥</span><span class="word">CARE</span></div></div>
-    <div class="masthead-mid"><div class="hospital">CARE Diagnostics</div></div>
+    <div class="logo-slot"><img src="/brand/care-diagnostics.jpg" alt="logo" class="logo logo-contain" /></div>
+    
     <div class="masthead-addr"><span class="line">Subhash Chowk, Deoghar</span><span class="line">06432-123456</span><span class="line">care@example.com</span></div>
   </div>
   <div class="provisional-tag"><span>Provisional — not the final record</span></div>
@@ -241,12 +253,10 @@ body { font-size: 10pt; line-height: 1.4; }
     <tr>
       <td class="k">Patient</td><td class="v">Sita Kumari</td>
       <td class="k">Age / Sex</td><td class="v">26 / F</td>
-      <td class="k">USG No.</td><td class="v">USG-0002</td>
     </tr>
     <tr>
       <td class="k">Referred by</td><td class="v">Dr. Kumar</td>
       <td class="k">Date</td><td class="v">01-Sep-2026</td>
-      <td class="k"></td><td class="v"></td>
     </tr>
   </table>
 
@@ -270,15 +280,19 @@ body { font-size: 10pt; line-height: 1.4; }
 
   <h2 class="band">Impression</h2>
   <div class="impression-box"><ol class="impression"><li>A single live intrauterine fetus at ___ wk ___ days of average gestational age in cephalic presentation.</li></ol></div>
-  <div class="advice-box"><div class="advice-h">Advice</div><div class="suggestions"><p>Suggested: Clinical correlation as indicated.</p></div></div>
+  <div class="advice-box advice-inline"><span class="advice-h">Advice</span><div class="suggestions"><p>Suggested: Clinical correlation as indicated.</p></div></div>
 
+  
   <div class="tail">
-  <div class="sig-block"><div class="sig">
+  <div class="sig-block">
+    
+    <div class="sig">
     <div class="line"></div>
     <div class="name">Dr. Sugandha</div>
     <div class="sub">MBBS, MD</div>
     <div class="sub">Reg. No: J/12345</div>
-  </div></div>
+    </div>
+  </div>
 
   <div class="pcpndt">
       <div class="pcpndt-title">DECLARATION OF DOCTOR PERFORMING ULTRA SONOGRAPHY</div>
@@ -288,8 +302,7 @@ body { font-size: 10pt; line-height: 1.4; }
 
   <div class="footer">
     <span>Correlate clinically.</span>
-    
-    <span>CARE Diagnostics</span>
+    <span>CARE Diagnostics · USG-0002</span>
   </div>
   </div>
 

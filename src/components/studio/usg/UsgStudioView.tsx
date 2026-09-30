@@ -83,6 +83,10 @@ async function fetchSettingsBundle(): Promise<SettingsBundle> {
   const sRes = await fetch("/api/settings");
   if (!sRes.ok) throw new Error("settings");
   const s = (await sRes.json()).settings ?? {};
+  // The letterhead dials are optional on UsgPrintSettings — print.ts falls back
+  // to its own preset when a value is absent, so a blank row must stay undefined
+  // rather than become 0 and clamp the logo or signature away.
+  const num = (v: unknown) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : undefined);
   const formFDefaults: FormFDefaults = {
     pcpndtCentreName: s.pcpndtCentreName ?? "",
     pcpndtRegistrationNo: s.pcpndtRegistrationNo ?? "",
@@ -108,7 +112,8 @@ async function fetchSettingsBundle(): Promise<SettingsBundle> {
     usgDeclarationLine: s.usgDeclarationLine ?? "",
     usgPrintStyle: s.usgPrintStyle ?? "premium",
     usgPrintCompact: s.usgPrintCompact === true || s.usgPrintCompact === "true",
-    usgPrintBodyFit: s.usgPrintBodyFit === "multi" ? "multi" : "one_page",
+    usgPrintBodyFit:
+      s.usgPrintBodyFit === "multi" || s.usgPrintBodyFit === "auto" ? s.usgPrintBodyFit : "one_page",
     usgPrintPaper: s.usgPrintPaper ?? "a4",
     usgSignatureUrl: s.usgSignatureUrl ?? "",
     usgPrintFontSize: Number(s.usgPrintFontSize) > 0 ? Number(s.usgPrintFontSize) : 10,
@@ -116,6 +121,18 @@ async function fetchSettingsBundle(): Promise<SettingsBundle> {
     usgPrintSpacing: s.usgPrintSpacing ?? "tight",
     usgPrintShowTechnique: s.usgPrintShowTechnique !== false && s.usgPrintShowTechnique !== "false",
     usgPrintShowThanks: s.usgPrintShowThanks !== false && s.usgPrintShowThanks !== "false",
+    usgPrintQrEnabled: s.usgPrintQrEnabled !== false && s.usgPrintQrEnabled !== "false",
+    // These reached the PDF but never the browser-side draft print, so the
+    // logo and name sized themselves from presets no slider could move.
+    registrationNo: s.registrationNo ?? "",
+    usgLogoSizeMm: num(s.usgLogoSizeMm),
+    usgNameSizePt: num(s.usgNameSizePt),
+    usgAddressSizePt: num(s.usgAddressSizePt),
+    usgSignatureSizeMm: num(s.usgSignatureSizeMm),
+    usgPrintFontFamily: s.usgPrintFontFamily ?? undefined,
+    usgSidebarPosition: s.usgSidebarPosition ?? undefined,
+    usgLogoPosition: s.usgLogoPosition ?? undefined,
+    usgAddressPosition: s.usgAddressPosition ?? undefined,
     enableCriticalComm: s.enableCriticalComm !== false,
     enableFollowUps: s.enableFollowUps !== false,
     enableAiDraft: s.enableAiDraft !== false,

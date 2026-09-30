@@ -12,10 +12,12 @@
  * spacing preset, Technique-band toggle) so the shared PDF matches what the
  * browser prints.
  */
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage, type RGB } from "pdf-lib";
+import { existsSync, readFileSync } from "fs";
+import { join } from "path";
 import type { UsgResolved } from "./types";
 import { clinicDisplayName, clinicFooterText } from "./branding";
-import { mastheadAddressLines, resolveMachineLine, type UsgPrintSettings, type UsgPrintImage } from "./print";
+import { DEFAULT_BRAND_LOGO_URL, mastheadAddressLines, resolveMachineLine, type UsgPrintSettings, type UsgPrintImage } from "./print";
 import { segmentAbnormalFindings } from "./abnormalBold";
 
 export type UsgPrintPatient = {
@@ -102,9 +104,57 @@ async function embedDataUrl(doc: PDFDocument, dataUrl: string): Promise<PDFImage
   }
 }
 
+/**
+ * Letterhead mark for the PDF. pdf-lib embeds only PNG/JPEG, so a WebP or SVG
+ * logo returned null and the sheet printed with no branding at all while the
+ * browser print showed it. Falls back to the CARE wordmark committed with the
+ * app, so a PDF is never unbranded. A remote (http) logo URL is not fetched
+ * here — the report route must stay offline-safe on the clinic LAN.
+ */
+async function embedBrandLogo(doc: PDFDocument, logoUrl: string | undefined): Promise<PDFImage | null> {
+  const raw = (logoUrl ?? "").trim();
+  if (raw.startsWith("data:")) {
+    const embedded = await embedDataUrl(doc, raw);
+    if (embedded) return embedded;
+  } else if (raw && !raw.startsWith("/")) {
+    return null;
+  }
+  try {
+    const file = join(process.cwd(), "public", DEFAULT_BRAND_LOGO_URL.replace(/^\//, ""));
+    return existsSync(file) ? await doc.embedJpg(readFileSync(file)) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** CARE wordmark letter colours — the same four the clinic's logo uses. */
+const CARE_COLORS: RGB[] = [
+  rgb(0.894, 0.0, 0.169), // red
+  rgb(0.224, 0.71, 0.29), // green
+  rgb(0.0, 0.576, 0.835), // blue
+  rgb(0.953, 0.573, 0.0), // orange
+];
+
+/**
+ * Last-resort brand emblem: the four CARE colours as a 2×2 tile. Only reached
+ * when neither the clinic's upload nor the committed wordmark could embed — it
+ * stays wordless so it can never duplicate the clinic name beside it.
+ */
+function drawCareEmblem(ctx: Ctx, x: number, yTop: number, size: number): void {
+  const cell = size / 2;
+  CARE_COLORS.forEach((color, i) => {
+    ctx.page.drawRectangle({
+      x: x + (i % 2) * cell,
+      y: yTop - cell - Math.floor(i / 2) * cell,
+      width: cell,
+      height: cell,
+      color,
+    });
+  });
+}
+
 /** Sanitise to WinAnsi-safe text for the standard fonts. */
-const S = (s: string) =>
-  String(s ?? "")
+const S = (s: string) =>  String(s ?? "")
     .replace(/[\u2018\u2019]/g, "'")
     .replace(/[\u201C\u201D]/g, '"')
     .replace(/\u2026/g, "...")
@@ -177,15 +227,20 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
   } else {
   ensure(ctx, nameSize + 40);
   let headerX = margin;
-  let logo: PDFImage | null = null;
-  if (settings.logoUrl) logo = await embedDataUrl(doc, settings.logoUrl);
+  const bandH = logoSizeMm * 2.83; // the logo dial, mm → points
+  const logo = await embedBrandLogo(doc, settings.logoUrl);
   if (logo) {
-    const h = logoSizeMm * 2.83; // mm to pt
-    // Fill a near-square slot (logo dial) — keep aspect, clamp width.
-    const slot = h;
-    const w = Math.min((logo.width / logo.height) * h, slot * 1.35, contentW * 0.28);
-    ctx.page.drawImage(logo, { x: margin, y: ctx.y - slot, height: Math.min(h, slot), width: w });
-    headerX = margin + Math.max(w, slot) + 10;
+    // Keep the mark's own aspect ratio. It used to be clamped to 1.35 × a
+    // square slot, which drew a wide CARE wordmark horizontally squashed.
+    const ar = logo.width / logo.height;
+    const w = Math.min(bandH * ar, Math.min(contentW * 0.34, bandH * 4));
+    const h = w / ar;
+    ctx.page.drawImage(logo, { x: margin, y: ctx.y - bandH, width: w, height: h });
+    headerX = margin + w + 10;
+  } else {
+    const emblem = Math.min(bandH, nameSize * 1.6);
+    drawCareEmblem(ctx, margin, ctx.y, emblem);
+    headerX = margin + emblem + 10;
   }
   ctx.page.drawText(hospital, { x: headerX, y: ctx.y - nameSize, size: nameSize, font: fonts.bold, color: NAVY });
 
@@ -378,6 +433,24 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
     ctx.y -= 4;
   }
 
+  // ── Auto fit: drop the signed tail to the foot of the sheet ───────────
+  // Mirrors the HTML flex spacer. Moves the tail down only, never up, so a
+  // study that already fills the page is left exactly as it was.
+  if (settings.usgPrintBodyFit === "auto" && !a5) {
+    const FOOT = 46; // clear of the footer rule drawn at y=34
+    const subLines = [settings.usgDoctorQual, settings.usgDoctorRegNo ? "1" : ""].filter(Boolean).length;
+    const tailH =
+      (settings.usgSignatureUrl?.trim() ? (fitOnePage ? 21 : 29) : fitOnePage ? 8 : 14) +
+      (fitOnePage ? 9 : 12) +
+      (fitOnePage ? 8 : 11) +
+      subLines * (fitOnePage ? 7 : 10) +
+      (resolved.study.pcpndt ? 68 : 0) +
+      (settings.usgDeclarationLine?.trim()
+        ? Math.ceil(settings.usgDeclarationLine.trim().length / 95) * 9 + 6
+        : 0);
+    ctx.y = Math.max(ctx.y, FOOT + tailH);
+  }
+
   // ── Signature ─────────────────────────────────────────────────────────
   ctx.y -= a5 ? 12 : fitOnePage ? 8 : 16;
   const sigW = a5 ? 130 : fitOnePage ? 150 : 170;
@@ -400,6 +473,21 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
   for (const sub of [settings.usgDoctorQual, settings.usgDoctorRegNo ? `Reg. No: ${settings.usgDoctorRegNo}` : ""].filter(Boolean)) {
     ctx.page.drawText(S(sub), { x: sigX, y: ctx.y, size: a5 ? 6.5 : fitOnePage ? 7 : 8, font: fonts.reg, color: GREY });
     ctx.y -= a5 ? 8 : fitOnePage ? 7 : 10;
+  }
+
+  // ── Verification QR beside the signature ──────────────────────────────
+  // On the signed line, to its left. It used to sit in the page footer, which
+  // cost a band of paper under an already short tail and landed on the stills
+  // appendix page whenever the report had images.
+  if (settings.usgPrintQrEnabled !== false && qrPng) {
+    const qrImg = await doc.embedPng(qrPng);
+    const size = a5 ? 26 : 38;
+    const capSize = a5 ? 5 : 6;
+    const bottom = ctx.y + 2;
+    const cap = "scan to verify";
+    const cw = fonts.reg.widthOfTextAtSize(cap, capSize);
+    ctx.page.drawImage(qrImg, { x: sigX - size - 14, y: bottom, width: size, height: size });
+    ctx.page.drawText(cap, { x: sigX - 14 - cw, y: bottom - capSize - 2, size: capSize, font: fonts.reg, color: GREY });
   }
 
   // ── PC-PNDT declaration (obstetric scans) ─────────────────────────────
@@ -468,19 +556,21 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
     if (col !== 0) ctx.y = rowTop - cellH - (a5 ? 8 : 12);
   }
 
-  // ── Footer + QR ───────────────────────────────────────────────────────
-  // Leave room on the right for the verification QR on the last page so the
-  // footer line never draws through the code.
+  // ── Footer ────────────────────────────────────────────────────────────
+  // The verification QR moved up beside the signature, so the band no longer
+  // reserves its right-hand width and the footer line stops being truncated
+  // short of the page.
   for (const p of ctx.pages) {
-    const isLast = p === ctx.pages[ctx.pages.length - 1];
-    const footerEndX = isLast && qrPng ? pageW - margin - (a5 ? 36 : 48) : pageW - margin;
     p.drawLine({
-      start: { x: margin, y: 34 }, end: { x: footerEndX, y: 34 }, thickness: 1, color: NAVY,
+      start: { x: margin, y: 34 }, end: { x: pageW - margin, y: 34 }, thickness: 1, color: NAVY,
     });
+    const brand = S(clinicDisplayName(settings));
+    const bw = fonts.bold.widthOfTextAtSize(brand, a5 ? 6 : 7);
+    const brandX = Math.max(margin, pageW - margin - bw);
     const footer = S(clinicFooterText(settings));
     if (footer) {
-      const maxFooterW = footerEndX - margin - (a5 ? 4 : 8);
-      // Truncate by approximate glyph width so the text stays left of the QR.
+      const maxFooterW = brandX - margin - 8;
+      // Truncate by approximate glyph width so the text stops left of the brand.
       let text = footer;
       while (fonts.reg.widthOfTextAtSize(S(text), a5 ? 6 : 7) > maxFooterW && text.length > 8) {
         text = text.slice(0, -4);
@@ -488,22 +578,7 @@ export async function buildUsgReportPdf(input: UsgPdfInput): Promise<Uint8Array>
       if (text.length < footer.length) text = `${text.trimEnd()}…`;
       p.drawText(S(text), { x: margin, y: 24, size: a5 ? 6 : 7, font: fonts.reg, color: GREY });
     }
-    const brand = S(clinicDisplayName(settings));
-    const bw = fonts.bold.widthOfTextAtSize(brand, a5 ? 6 : 7);
-    const brandX = Math.min(
-      pageW - margin - bw - (isLast && qrPng ? (a5 ? 30 : 38) : 0),
-      footerEndX - bw,
-    );
-    p.drawText(brand, { x: Math.max(margin, brandX), y: 24, size: a5 ? 6 : 7, font: fonts.bold, color: GREY });
-  }
-  if (qrPng) {
-    const qrImg = await ctx.doc.embedPng(qrPng);
-    const size = a5 ? 24 : 32;
-    const last = ctx.pages[ctx.pages.length - 1];
-    last.drawImage(qrImg, { x: pageW - margin - size, y: 20, width: size, height: size });
-    const cap = "verify";
-    const cw = fonts.reg.widthOfTextAtSize(cap, a5 ? 5.5 : 6.5);
-    last.drawText(cap, { x: pageW - margin - size + (size - cw) / 2, y: size + 22, size: a5 ? 5.5 : 6.5, font: fonts.reg, color: GREY });
+    p.drawText(brand, { x: brandX, y: 24, size: a5 ? 6 : 7, font: fonts.bold, color: GREY });
   }
 
   // ── PROVISIONAL watermark on every page ───────────────────────────────

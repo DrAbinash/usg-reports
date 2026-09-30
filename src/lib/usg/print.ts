@@ -80,6 +80,8 @@ export type UsgPrintSettings = {
    *   • "one_page" (default) — pack letterhead + findings + impression + advice
    *     onto one A4; stills stay on a following appendix page.
    *   • "multi" — comfortable multi-page flow for long studies.
+   *   • "auto" — the one_page ladder, plus the sheet flex-filled to exactly one
+   *     A4 so a short study's slack lands above the signature. Type size fixed.
    */
   usgPrintBodyFit?: string;
   /** "a4" (default) or "a5" — half-sheet print for short studies. */
@@ -96,6 +98,8 @@ export type UsgPrintSettings = {
   usgPrintShowTechnique?: boolean;
   /** v6.2 — print the "Thanks For Your Referral." tagline (default true). */
   usgPrintShowThanks?: boolean;
+  /** v6.21 — print the "scan to verify" QR beside the signature (default true). */
+  usgPrintQrEnabled?: boolean;
   /** v6.7 — image sidebar position: "right" (default) | "left". */
   usgSidebarPosition?: string;
   /** v6.7 — logo position: "left" (default) | "right" | "center". */
@@ -163,7 +167,9 @@ export function toUsgPrintSettings(s: Record<string, unknown> | UsgPrintSettings
     usgDeclarationLine: str(r.usgDeclarationLine),
     usgPrintStyle: str(r.usgPrintStyle, "premium") || "premium",
     usgPrintCompact: bool(r.usgPrintCompact, false),
-    usgPrintBodyFit: str(r.usgPrintBodyFit, "one_page") === "multi" ? "multi" : "one_page",
+    usgPrintBodyFit: (["multi", "auto"] as const).includes(str(r.usgPrintBodyFit) as "multi" | "auto")
+      ? str(r.usgPrintBodyFit)
+      : "one_page",
     usgPrintPaper: str(r.usgPrintPaper, "a4") || "a4",
     usgSignatureUrl: str(r.usgSignatureUrl),
     usgPrintFontSize: num(r.usgPrintFontSize),
@@ -171,6 +177,7 @@ export function toUsgPrintSettings(s: Record<string, unknown> | UsgPrintSettings
     usgPrintSpacing: str(r.usgPrintSpacing) || undefined,
     usgPrintShowTechnique: bool(r.usgPrintShowTechnique, true),
     usgPrintShowThanks: bool(r.usgPrintShowThanks, true),
+    usgPrintQrEnabled: bool(r.usgPrintQrEnabled, true),
     usgSidebarPosition: str(r.usgSidebarPosition) || undefined,
     usgLogoPosition: str(r.usgLogoPosition) || undefined,
     usgAddressPosition: str(r.usgAddressPosition) || undefined,
@@ -216,9 +223,18 @@ function safeImgUrl(raw: string | undefined | null): string {
   return "";
 }
 
+/** Committed CARE wordmark, used when a clinic has configured no logo of its
+ *  own. The schema already ships CARE defaults (appTitle, PC-PNDT centre name),
+ *  so a bare letterhead is the anomaly here rather than the design. */
+export const DEFAULT_BRAND_LOGO_URL = "/brand/care-diagnostics.jpg";
+
+/** Logo for the letterhead: the clinic's own upload, else the CARE mark. */
+export function brandLogoUrl(settings: UsgPrintSettings): string {
+  return safeImgUrl(settings.logoUrl) || DEFAULT_BRAND_LOGO_URL;
+}
+
 /** Resolve the machine banner: studio override → global usgMachineLine. */
-export function resolveMachineLine(settings: UsgPrintSettings): string {
-  const studioId = settings.studioId?.trim();
+export function resolveMachineLine(settings: UsgPrintSettings): string {  const studioId = settings.studioId?.trim();
   if (studioId && settings.machineLineByStudio?.[studioId]?.trim()) {
     return settings.machineLineByStudio[studioId].trim();
   }
@@ -325,11 +341,13 @@ const PREMIUM_CSS = `
   .sheet { max-width: 186mm; margin: 0 auto; }
 
   .masthead { background: linear-gradient(120deg, #143E6E 0%, #1B4F8A 45%, #2E6DA4 100%); color: #fff; border-radius: 12px; padding: 10px 14px; display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 6px rgba(20,62,110,.25); }
-  .logo-slot { width: var(--logo-box, 78px); height: var(--logo-box, 78px); background: #fff; border-radius: 11px; flex-shrink: 0; overflow: hidden; display: flex; align-items: stretch; justify-content: stretch; padding: 0; }
-  .logo-slot .logo { width: 100%; height: 100%; object-fit: cover; object-position: center; display: block; border-radius: 0; background: transparent; padding: 0; }
+  .logo-slot { height: var(--logo-box, 78px); background: #fff; border-radius: 11px; flex-shrink: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; padding: 0; }
+  /* The mark keeps its own aspect ratio — a wide CARE wordmark must not be
+     crushed into the old square slot, which is what made it read as missing. */
+  .logo-slot .logo { max-height: 100%; max-width: var(--logo-max-w, 46mm); width: auto; height: auto; object-fit: contain; object-position: center; display: block; border-radius: 0; background: transparent; padding: 0; }
   .logo-slot .logo.logo-contain { object-fit: contain; padding: 1px; }
   /* Split brand mark: heart band + CARE word — fills the whole white slot. */
-  .logo-slot .logo-fallback { width: 100%; height: 100%; display: grid; grid-template-rows: 1.15fr 1fr; align-items: stretch; justify-items: stretch; font-weight: 800; color: #C41E3A; line-height: 1; background: linear-gradient(180deg, #FFF7F8 0%, #FFFFFF 55%); }
+  .logo-slot .logo-fallback { width: var(--logo-box, 78px); height: var(--logo-box, 78px); display: grid; grid-template-rows: 1.15fr 1fr; align-items: stretch; justify-items: stretch; font-weight: 800; color: #C41E3A; line-height: 1; background: linear-gradient(180deg, #FFF7F8 0%, #FFFFFF 55%); }
   .logo-slot .logo-fallback .mark { display: flex; align-items: center; justify-content: center; font-size: calc(var(--logo-box, 78px) * 0.38); color: #C41E3A; }
   .logo-slot .logo-fallback .word { display: flex; align-items: center; justify-content: center; font-size: calc(var(--logo-box, 78px) * 0.22); letter-spacing: 0.08em; color: #143E6E; border-top: 1px solid #E8F1FA; }
   .masthead-mid { flex: 1; min-width: 0; }
@@ -400,7 +418,7 @@ const PREMIUM_CSS = `
   .advice-box .advice-h { font-size: 9pt; font-weight: 800; letter-spacing: 1.2px; color: #143E6E; text-transform: uppercase; margin-bottom: 3px; }
   .advice-box p { margin: 3px 0; font-weight: 700; color: #143E6E; }
 
-  .sig-block { margin-top: 16px; display: flex; justify-content: flex-end; page-break-inside: avoid; }
+  .sig-block { margin-top: 16px; display: flex; justify-content: flex-end; align-items: flex-end; gap: 10px; page-break-inside: avoid; }
   .sig { text-align: center; min-width: 62mm; }
   .sig .line { border-bottom: 2px solid #143E6E; height: 18px; margin-bottom: 5px; }
   .sig .name { font-weight: 800; color: #143E6E; font-size: 11.5pt; }
@@ -408,25 +426,27 @@ const PREMIUM_CSS = `
 
   .declaration { margin-top: 10px; font-size: 8pt; font-weight: 600; color: #61788C; border: 1px solid #AFCDE8; border-radius: 7px; padding: 6px 10px; text-align: left; }
 
-  .pcpndt { margin-top: 10px; border: 1.5px solid #1B4F8A; border-radius: 8px; padding: 8px 12px; background: #F4F8FC; page-break-inside: avoid; }
-  .pcpndt-title { font-size: 9pt; font-weight: 800; letter-spacing: 1.2px; color: #143E6E; text-transform: uppercase; margin-bottom: 4px; }
-  .pcpndt p { font-size: 8.5pt; font-weight: 600; color: #16222E; text-align: left; line-height: 1.55; }
+  .pcpndt { margin-top: 7px; border: 1.2px solid #1B4F8A; border-radius: 6px; padding: 3px 9px; background: #F4F8FC; page-break-inside: avoid; line-height: 1.2; }
+  .pcpndt-title { font-size: 7.5pt; font-weight: 800; letter-spacing: 1px; color: #143E6E; text-transform: uppercase; margin-bottom: 1px; }
+  .pcpndt p { font-size: 7.5pt; font-weight: 600; color: #16222E; text-align: left; line-height: 1.25; }
 
   .footer { margin-top: 10px; border-top: 2.5px solid #1B4F8A; padding-top: 5px; font-size: 8pt; font-weight: 600; color: #61788C; display: flex; justify-content: space-between; align-items: center; }
-  .qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 1px; }
-  .qr { width: 20mm; height: 20mm; }
+  /* Verification QR rides the signature row, pinned to its left edge, so it
+     stops costing a whole band of vertical space under the footer rule. */
+  .qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 1px; margin-right: auto; align-self: flex-end; }
+  .qr { width: 64px; height: 64px; image-rendering: pixelated; }
   .qr-cap { font-size: 6.5pt; font-weight: 700; letter-spacing: .5px; }
 `;
 
 const CLASSIC_CSS = `
   @page { size: A4; margin: 14mm; }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body { font-family: "Georgia", "Times New Roman", "Noto Serif", serif; color: #000; font-size: 10.5pt; line-height: 1.55; }
   .sheet { max-width: 182mm; margin: 0 auto; }
 
   .masthead { text-align: center; border-bottom: 3px double #000; padding: 2px 0 9px; display: block; }
-  .logo-slot { width: 52px; height: 52px; margin: 0 auto 3px; background: transparent; border-radius: 0; }
-  .logo-slot .logo { width: 100%; height: 100%; object-fit: contain; }
+  .logo-slot { height: var(--logo-box, 52px); margin: 0 auto 3px; background: transparent; border-radius: 0; display: flex; justify-content: center; }
+  .logo-slot .logo { max-height: 100%; max-width: var(--logo-max-w, 46mm); width: auto; height: auto; object-fit: contain; }
   .logo-slot .logo-fallback { display: none; }
   .masthead-mid { text-align: center; }
   .masthead .hospital { font-size: 17pt; font-weight: 700; letter-spacing: 2px; line-height: 1.2; text-transform: uppercase; }
@@ -481,7 +501,7 @@ const CLASSIC_CSS = `
   .advice-box { margin-top: 8px; page-break-inside: avoid; }
   .advice-box .advice-h { font-size: 9pt; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; margin-bottom: 3px; }
 
-  .sig-block { margin-top: 16px; display: flex; justify-content: flex-end; page-break-inside: avoid; }
+  .sig-block { margin-top: 16px; display: flex; justify-content: flex-end; align-items: flex-end; gap: 10px; page-break-inside: avoid; }
   .sig { text-align: center; min-width: 62mm; }
   .sig .line { border-bottom: 1.5px solid #000; height: 18px; margin-bottom: 5px; }
   .sig .name { font-weight: 700; font-size: 11pt; }
@@ -494,8 +514,9 @@ const CLASSIC_CSS = `
   .pcpndt p { font-size: 8.5pt; font-weight: 600; text-align: left; line-height: 1.55; }
 
   .footer { margin-top: 10px; border-top: 1.5px solid #000; padding-top: 5px; font-size: 8pt; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
-  .qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 1px; }
-  .qr { width: 20mm; height: 20mm; }
+  /* Verification QR rides the signature row, pinned to its left edge. */
+  .qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 1px; margin-right: auto; align-self: flex-end; }
+  .qr { width: 64px; height: 64px; image-rendering: pixelated; }
   .qr-cap { font-size: 6.5pt; font-weight: 700; }
 `;
 
@@ -503,7 +524,7 @@ const COMPACT_CSS = `
   body { font-size: 9.5pt; line-height: 1.38; }
   .masthead { padding-top: 8px; padding-bottom: 7px; }
   .masthead .hospital { font-size: 14pt; }
-  .logo-slot { width: 58px; height: 58px; }
+  .logo-slot { height: 58px; }
   table.patient { margin-top: 6px; }
   table.patient td { padding: 2.5px 7px; }
   .study { margin-top: 3px; }
@@ -525,7 +546,7 @@ const ONE_PAGE_BODY_CSS = `
   @page { size: A4; margin: 8mm; }
   body { font-size: 8.7pt; line-height: 1.28; }
   .masthead { padding: 6px 10px; gap: 8px; border-radius: 8px; }
-  .logo-slot { width: 48px; height: 48px; border-radius: 8px; }
+  .logo-slot { height: 48px; border-radius: 8px; }
   .masthead .hospital { font-size: 12.5pt; }
   .masthead-addr { font-size: 6.5pt; line-height: 1.25; }
   table.patient { margin-top: 4px; border-radius: 6px; font-size: 8pt; }
@@ -563,7 +584,7 @@ const A5_CSS = `
   .sheet { max-width: 132mm; }
   body { font-size: 8.5pt; line-height: 1.4; }
   .masthead { padding: 7px 10px 6px; gap: 8px; border-radius: 9px; }
-  .logo-slot { width: 48px; height: 48px; border-radius: 8px; }
+  .logo-slot { height: 48px; border-radius: 8px; }
   .masthead .hospital { font-size: 11.5pt; }
   .masthead-addr { font-size: 6.5pt; max-width: 46%; }
   table.patient { margin-top: 6px; border-radius: 6px; border-width: 1px; font-size: 7.5pt; }
@@ -602,6 +623,20 @@ const A5_CSS = `
   .footer { margin-top: 8px; padding-top: 3px; font-size: 6.5pt; }
   .qr { width: 14mm; height: 14mm; }
   .qr-cap { font-size: 5.5pt; }
+`;
+
+/**
+ * Auto fit — the sheet is sized to exactly one A4 and the leftover space is
+ * absorbed by a growable spacer above the signature, so a short study reads as
+ * a full page instead of ending mid-sheet. Type size is deliberately untouched:
+ * only the gap grows, so every patient's report prints at the same readability.
+ * When the content is already taller than the sheet the spacer collapses to its
+ * 6px floor and the report flows to page 2 as before.
+ */
+const AUTO_FIT_CSS = `
+  html, body { height: 100%; }
+  .sheet { display: flex; flex-direction: column; min-height: 281mm; }
+  .fit-spacer { flex: 1 1 auto; min-height: 6px; }
 `;
 
 /** Draft discipline — big diagonal watermark on every printed page plus a
@@ -728,6 +763,39 @@ function tuningCss(settings: UsgPrintSettings, a5: boolean): string {
 }
 
 /**
+ * v6.21 — the name / address / signature size dials were persisted, clamped and
+ * wired to sliders in Settings, but the HTML renderer never read them, so they
+ * did nothing on paper.
+ *
+ * Each dial lands as a DELTA from its schema default rather than an absolute
+ * size, and emits nothing at all when the doctor has not moved it. Taking the
+ * raw value instead would override the one_page density preset (a 15pt clinic
+ * name on a sheet preset to 12.5pt) and spill a normal study onto page two.
+ */
+function letterheadDialCss(
+  settings: UsgPrintSettings,
+  opts: { classic: boolean; a5: boolean; fitOnePage: boolean; compact: boolean },
+): string {
+  const { classic, a5, fitOnePage, compact } = opts;
+  // The size the preset ladder already renders at, before any dial shift.
+  const nameBase = a5 ? 11.5 : fitOnePage ? 12.5 : compact ? 14 : classic ? 17 : 16.5;
+  const addrBase = a5 || fitOnePage ? 6.5 : classic ? 9 : 8;
+  const sigBaseMm = a5 ? 13 : fitOnePage ? 12 : compact ? 14 : 18;
+  const dialed = (value: unknown, dflt: number, min: number, max: number, base: number) => {
+    const n = clampNum(value, min, max, dflt);
+    return n === dflt ? null : base + (n - dflt);
+  };
+  const rules: string[] = [];
+  const name = dialed(settings.usgNameSizePt, 15, 10, 22, nameBase);
+  if (name != null) rules.push(`.masthead .hospital { font-size: ${name.toFixed(2)}pt; }`);
+  const addr = dialed(settings.usgAddressSizePt, 8.5, 6, 12, addrBase);
+  if (addr != null) rules.push(`.masthead-addr { font-size: ${addr.toFixed(2)}pt; }`);
+  const sig = dialed(settings.usgSignatureSizeMm, 26, 12, 40, sigBaseMm);
+  if (sig != null) rules.push(`.sig-img { height: ${sig.toFixed(1)}mm; }`);
+  return rules.length ? `\n  ${rules.join("\n  ")}\n` : "";
+}
+
+/**
  * Split clinic contact into ≤4 right-aligned masthead lines:
  * address (1–2 lines) + phone + email (+ optional reg no if room).
  */
@@ -761,7 +829,7 @@ export function mastheadAddressLines(settings: UsgPrintSettings): string[] {
 }
 
 function renderLogoSlot(settings: UsgPrintSettings): string {
-  const safeLogo = safeImgUrl(settings.logoUrl);
+  const safeLogo = brandLogoUrl(settings);
   if (safeLogo) {
     // Wide wordmark logos fill better with contain; square marks use cover.
     // Default contain so CARE heart+wordmark stays fully visible inside the slot.
@@ -771,22 +839,24 @@ function renderLogoSlot(settings: UsgPrintSettings): string {
   return `<div class="logo-slot"><div class="logo logo-fallback"><span class="mark">♥</span><span class="word">CARE</span></div></div>`;
 }
 
+/**
+ * The premium masthead is led by the logo plate, which already carries the
+ * clinic wordmark — the white name beside it only duplicated the logo. Classic
+ * is a black-and-white ink-saver that may well print with no logo at all, so it
+ * keeps the name. The clinic name still prints in the footer either way.
+ */
 function renderMasthead(settings: UsgPrintSettings, classic: boolean): string {
   const logo = renderLogoSlot(settings);
   const addrLines = mastheadAddressLines(settings);
   const addrHtml = addrLines.length
     ? `<div class="masthead-addr">${addrLines.map((l) => `<span class="line">${esc(l)}</span>`).join("")}</div>`
     : "";
-  if (classic) {
-    return `<div class="masthead">
-    ${logo}
-    <div class="masthead-mid"><div class="hospital">${esc(clinicDisplayName(settings))}</div></div>
-    ${addrHtml}
-  </div>`;
-  }
+  const mid = classic
+    ? `<div class="masthead-mid"><div class="hospital">${esc(clinicDisplayName(settings))}</div></div>`
+    : "";
   return `<div class="masthead">
     ${logo}
-    <div class="masthead-mid"><div class="hospital">${esc(clinicDisplayName(settings))}</div></div>
+    ${mid}
     ${addrHtml}
   </div>`;
 }
@@ -822,6 +892,9 @@ export function buildUsgReportHtml(
   const a5 = settings.usgPrintPaper === "a5";
   // Default one_page — CARE WA reports pack clinical body onto a single A4.
   const fitOnePage = !a5 && settings.usgPrintBodyFit !== "multi";
+  // Auto fit rides on the one_page density ladder and only adds the flex-fill
+  // sheet, so short studies still land as one complete sheet.
+  const autoFit = fitOnePage && settings.usgPrintBodyFit === "auto";
   const provisional = patient.provisional === true;
   // v6.2 dials: the Technique band and referral tagline are switchable.
   // Section bands are unnumbered — short reports (Findings + Impression) read cleaner.
@@ -840,11 +913,13 @@ export function buildUsgReportHtml(
     (compact || fitOnePage ? COMPACT_CSS : "") +
     (fitOnePage ? ONE_PAGE_BODY_CSS : "") +
     tuningCss(settings, a5) +
+    letterheadDialCss(settings, { classic, a5, fitOnePage, compact }) +
+    (autoFit ? AUTO_FIT_CSS : "") +
     (provisional ? (classic ? PROVISIONAL_CSS_CLASSIC : PROVISIONAL_CSS) : "") +
     (preprinted
       ? `\n  @page { size: A4; margin: 10mm; margin-top: 12mm; }\n  .masthead { display: none !important; }\n`
       : "") +
-    `\n  :root { --logo-box: ${logoBoxPx}px; }\n`;
+    `\n  :root { --logo-box: ${logoBoxPx}px; --logo-max-w: ${Math.round(logoBoxPx * 3)}px; }\n`;
 
   const resolvedMachine = resolveMachineLine(settings);
   const machineLine =
@@ -892,12 +967,21 @@ export function buildUsgReportHtml(
     resolved.suggestions ??
     [];
   const suggestionsHtml = adviceLines.length
-    ? `<div class="advice-box"><div class="advice-h">Advice</div><div class="suggestions">${adviceLines
+    ? `<div class="advice-box advice-inline"><span class="advice-h">Advice</span><div class="suggestions">${adviceLines
         .map((s) => `<p>${esc(s)}</p>`)
-        .join("")}</div></div>`
+        .join(`<span class="advice-sep">·</span>`)}</div></div>`
     : "";
 
   const doctor = settings.usgDoctorName?.trim() || "Sonologist";
+
+  // v6.21 — the verification QR sits to the LEFT of the signature on the same
+  // line instead of costing a full band under the footer rule. Off in
+  // Settings → Print layout removes it from print, PDF and share alike; the
+  // register number still prints and /verify still resolves without it.
+  const showQr = settings.usgPrintQrEnabled !== false && !!qr?.dataUrl;
+  const qrCell = showQr
+    ? `<span class="qr-wrap"><img class="qr" src="${esc(qr!.dataUrl)}" alt="verification QR" /><span class="qr-cap">scan to verify</span></span>`
+    : "";
 
   const declaration = settings.usgDeclarationLine?.trim()
     ? `<p class="declaration">${esc(settings.usgDeclarationLine.trim())}</p>`
@@ -912,6 +996,8 @@ export function buildUsgReportHtml(
     </div>`
     : "";
 
+  // Off the demography strip (v6.21) but still on the sheet: the footer carries
+  // it, so a printed USG keeps its register number for the PC-PNDT log.
   const serial = patient.serial?.trim();
 
   const chromeHtml = preview
@@ -929,12 +1015,10 @@ export function buildUsgReportHtml(
     <tr>
       <td class="k">Patient</td><td class="v">${esc(patient.name || "—")}</td>
       <td class="k">Age / Sex</td><td class="v">${esc(patient.age || "—")} / ${esc(patient.sex || "—")}</td>
-      ${serial ? `<td class="k">USG No.</td><td class="v">${esc(serial)}</td>` : ""}
     </tr>
     <tr>
       <td class="k">Referred by</td><td class="v">${esc(patient.referredBy || "—")}</td>
       <td class="k">Date</td><td class="v">${esc(patient.date)}</td>
-      ${serial ? `<td class="k"></td><td class="v"></td>` : ""}
     </tr>
   </table>
 
@@ -955,7 +1039,7 @@ export function buildUsgReportHtml(
 <style>${css}
 /* Flow layout for signature / PC-PNDT / footer — never pin to page-1 bottom
    so long reports push the tail cleanly onto page 2 as one unit. */
-.tail { page-break-inside: avoid; break-inside: avoid; margin-top: 12px; }
+.tail { page-break-inside: avoid; break-inside: avoid; margin-top: 4px; }
 .sig-block { page-break-inside: avoid; break-inside: avoid; }
 
 /* Stills appendix — own A4 page after the signed report body. */
@@ -974,6 +1058,14 @@ export function buildUsgReportHtml(
 }
 .demo-strip .n { font-weight: 800; }
 .demo-strip .sep { color: #AFCDE8; font-weight: 400; }
+
+/* Advice on one line — a heading block over a paragraph block spent two rows
+   on what is usually a single sentence. */
+.advice-inline { display: flex; align-items: baseline; gap: 6px; }
+.advice-inline .advice-h { margin-bottom: 0; flex: 0 0 auto; }
+.advice-inline .suggestions { margin-top: 0; flex: 1 1 auto; }
+.advice-inline .suggestions p { display: inline; margin: 0; }
+.advice-inline .advice-sep { margin: 0 4px; font-weight: 700; }
 
 /* Two-line demography strip */
 .patient-strip { display: flex; flex-direction: column; gap: 4px; margin: 4mm 0 3mm; }
@@ -1001,21 +1093,24 @@ ${watermark}
   ${impressionHtml}
   ${suggestionsHtml}
 
+  ${autoFit ? `<div class="fit-spacer" aria-hidden="true"></div>` : ""}
   <div class="tail">
-  <div class="sig-block"><div class="sig">
+  <div class="sig-block">
+    ${qrCell}
+    <div class="sig">
     ${sigVisual}
     <div class="name">${esc(doctor)}</div>
     ${settings.usgDoctorQual ? `<div class="sub">${esc(settings.usgDoctorQual)}</div>` : ""}
     ${settings.usgDoctorRegNo ? `<div class="sub">Reg. No: ${esc(settings.usgDoctorRegNo)}</div>` : ""}
-  </div></div>
+    </div>
+  </div>
 
   ${pcpndt}
   ${declaration}
 
   <div class="footer">
     <span>${esc(clinicFooterText(settings))}</span>
-    ${qr ? `<span class="qr-wrap"><img class="qr" src="${esc(qr.dataUrl)}" alt="verification QR" /><span class="qr-cap">scan to verify</span></span>` : ""}
-    <span>${esc(clinicDisplayName(settings))}</span>
+    <span>${esc(clinicDisplayName(settings))}${serial ? ` · ${esc(serial)}` : ""}</span>
   </div>
   </div>
 
@@ -1093,6 +1188,15 @@ body {
 .body-grid.sidebar-left { grid-template-columns: 1fr var(--sidebar-w, 60mm); }
 .body-grid.sidebar-left .sidebar { order: 2; }
 .body-grid.sidebar-left .main-col { order: 1; }
+/* No stills attached — the narrative takes the whole sheet instead of leaving
+   the image column standing empty beside it. */
+.body-grid.no-images,
+.body-grid.no-images.sidebar-left { grid-template-columns: 1fr; }
+
+/* Auto fit — the sheet is one full A4 and the body column stretches to it, so
+   the footer band lands at the foot of page 1 on a short study. */
+.page.fit-auto { display: flex; flex-direction: column; }
+.page.fit-auto .body-grid { flex: 1 1 auto; }
 
 /* ── Image sidebar ────────────────────────────────────────────────────────── */
 .sidebar {
@@ -1197,14 +1301,37 @@ body {
 .impression-box .body { font-size: 10pt; line-height: 1.5; }
 .impression-box .body p { margin-bottom: 1mm; }
 
+/* ── Advice on one line ──────────────────────────────────────────────────── */
+.advice-inline-side { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.advice-inline-side .advice-h { padding-bottom: 0; border-bottom: 0; margin-bottom: 0; }
+.advice-inline-side .advice-t { font-size: 8.5pt; color: #64748b; }
+
+/* ── PC-PNDT statutory declaration (obstetric studies) ───────────────────── */
+.pcpndt-side {
+  border: 1px solid #1e3a5f;
+  border-radius: 5px;
+  padding: 1.4mm 3mm;
+  margin: 2mm 0 0;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+.pcpndt-side-title { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #1e3a5f; margin-bottom: .6mm; }
+.pcpndt-side p { font-size: 7.5pt; color: #1a1a2e; line-height: 1.3; }
+
 /* ── Signature block ──────────────────────────────────────────────────────── */
 .signature-block {
   display: flex;
   justify-content: space-between;
+  align-items: flex-end;
   padding: 8mm 10mm 4mm 10mm;
-  gap: 20mm;
+  gap: 6mm;
 }
 .signature-block .sig-item { flex: 1; }
+/* Verification QR on the signature line (v6.21) — it used to float into the
+   footer band, which cost a whole band of paper below an already short tail. */
+.signature-block .sig-qr { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 1mm; }
+.signature-block .sig-qr .qr { width: 64px; height: 64px; image-rendering: pixelated; }
+.signature-block .sig-qr .qr-cap { font-size: 6.5pt; color: #64748b; font-weight: 600; }
 .signature-block .sig-line {
   border-top: 1px solid #1e293b;
   margin-top: 10mm;
@@ -1229,7 +1356,6 @@ body {
   padding: 3mm 10mm;
   text-transform: uppercase;
 }
-.footer-band .qr { float: right; }
 .footer-band .serial { float: left; color: #64748b; font-family: monospace; }
 
 /* ── Provisional watermark ──────────────────────────────────────────────── */
@@ -1278,6 +1404,7 @@ function buildSidebarReportHtml(
   qr?: UsgPrintQr | null,
 ): string {
   const provisional = patient.provisional === true;
+  const autoFit = settings.usgPrintBodyFit === "auto";
   const sidebarLeft = (settings.usgSidebarPosition ?? "right") === "left";
   const logoPos = settings.usgLogoPosition ?? "left";
   const addrPos = settings.usgAddressPosition ?? "right";
@@ -1285,7 +1412,7 @@ function buildSidebarReportHtml(
   const showTechnique = settings.usgPrintShowTechnique !== false && !!resolved.technique?.trim();
   const showThanks = settings.usgPrintShowThanks !== false;
 
-  const safeLogo = safeImgUrl(settings.logoUrl);
+  const safeLogo = brandLogoUrl(settings);
   const logo = safeLogo
     ? `<img src="${esc(safeLogo)}" alt="logo" />`
     : `<div class="logo-fallback">USG</div>`;
@@ -1338,14 +1465,25 @@ function buildSidebarReportHtml(
       </div>`
     : "";
 
-  // Advice / suggested next steps
+  // Advice / suggested next steps — one line, matching the single-column sheet.
   const adviceLines =
     (resolved.advice?.length ? resolved.advice : null) ??
     resolved.suggestions ??
     [];
   const suggestionsHtml = adviceLines.length
-    ? `<div class="section"><div class="section-header">Advice</div><div class="section-body" style="font-size:8.5pt;color:#64748b;">
-        ${adviceLines.map((s) => `• ${esc(s)}`).join("<br>")}</div></div>`
+    ? `<div class="section advice-inline-side"><span class="section-header advice-h">Advice</span><span class="advice-t">${adviceLines.map((s) => esc(s)).join(" · ")}</span></div>`
+    : "";
+
+  // PC-PNDT statutory declaration. The sidebar template omitted this entirely,
+  // which is why the single-column sheet is the only one that could legally
+  // print an obstetric study — now that sidebar is the clinic standard it must
+  // carry the same declaration.
+  const doctorName = settings.usgDoctorName?.trim() || "Sonologist";
+  const pcpndtHtml = resolved.study.pcpndt
+    ? `<div class="pcpndt-side">
+        <div class="pcpndt-side-title">Declaration of doctor performing ultrasonography</div>
+        <p>I ${esc(doctorName)}${settings.usgDoctorQual ? `, ${esc(settings.usgDoctorQual)}` : ""} declare that while conducting USG on above patient, I have neither detected nor disclosed the sex of the foetus to anybody in any manner.</p>
+      </div>`
     : "";
 
   // Signature
@@ -1356,7 +1494,12 @@ function buildSidebarReportHtml(
 
   // Footer
   const serialNo = patient.serial ?? "";
-  const qrHtml = qr?.dataUrl ? `<div class="qr"><img src="${esc(qr.dataUrl)}" alt="QR" style="height:12mm;width:auto;" /></div>` : "";
+  // Same rule as the single-column letterhead: the QR belongs on the signature
+  // line, not in the footer band, and Settings can switch it off entirely.
+  const showQr = settings.usgPrintQrEnabled !== false && !!qr?.dataUrl;
+  const qrHtml = showQr
+    ? `<div class="sig-qr"><img class="qr" src="${esc(qr!.dataUrl)}" alt="verification QR" /><span class="qr-cap">scan to verify</span></div>`
+    : "";
   const footerMsg = clinicFooterText(settings)
     ? esc(clinicFooterText(settings))
     : "Kindly correlate with clinico-pathological findings.";
@@ -1379,7 +1522,7 @@ ${SIDEBAR_CSS}
 }
 </style>
 ${PRINT_CSS}</head><body>
-<div class="page">
+<div class="page ${autoFit ? "fit-auto" : ""}">
   ${watermark}
   ${provisionalTag}
 
@@ -1387,11 +1530,7 @@ ${PRINT_CSS}</head><body>
   <div class="top-bar ${topBarClass}">
     <div class="logo-block">
       ${logo}
-      <div>
-        <div class="hospital-name">${esc(clinicDisplayName(settings))}</div>
-        ${settings.appTitle?.trim() && settings.appTitle.trim() !== clinicDisplayName(settings) ? `<div class="tagline">${esc(settings.appTitle.trim())}</div>` : ""}
-        ${settings.registrationNo?.trim() ? `<div class="tagline">Reg. No: ${esc(settings.registrationNo.trim())}</div>` : ""}
-      </div>
+      ${settings.appTitle?.trim() && settings.appTitle.trim() !== clinicDisplayName(settings) ? `<div><div class="tagline">${esc(settings.appTitle.trim())}</div>${settings.registrationNo?.trim() ? `<div class="tagline">Reg. No: ${esc(settings.registrationNo.trim())}</div>` : ""}</div>` : settings.registrationNo?.trim() ? `<div><div class="tagline">Reg. No: ${esc(settings.registrationNo.trim())}</div></div>` : ""}
     </div>
     <div class="contact-block">${addrHtml}${settings.phone ? `<div class="line">📞 ${esc(settings.phone)}</div>` : ""}${settings.email ? `<div class="line">✉ ${esc(settings.email)}</div>` : ""}</div>
   </div>
@@ -1406,11 +1545,11 @@ ${PRINT_CSS}</head><body>
       <div class="field"><div class="label">REFERRED BY</div><div class="value">${esc(patient.referredBy || "—")}</div></div>
       <div class="field"><div class="label">DATE</div><div class="value">${esc(patient.date || "—")}</div></div>
     </div>
-    ${patient.serial ? `<div class="strip-row"><div class="field"><div class="label">USG No.</div><div class="value">${esc(patient.serial)}</div></div><div class="field"><div class="label">Study</div><div class="value">${esc(resolved.title || resolved.study.label)}</div></div></div>` : `<div class="strip-row"><div class="field"><div class="label">Study</div><div class="value">${esc(resolved.title || resolved.study.label)}</div></div></div>`}
+    <div class="strip-row"><div class="field"><div class="label">Study</div><div class="value">${esc(resolved.title || resolved.study.label)}</div></div></div>
   </div>
 
   <!-- Two-column body -->
-  <div class="body-grid ${sidebarLeft ? "sidebar-left" : ""}">
+  <div class="body-grid ${sidebarLeft ? "sidebar-left" : ""} ${images.length ? "" : "no-images"}">
     <!-- Image sidebar -->
     ${images.length > 0 ? `
     <div class="sidebar">
@@ -1425,10 +1564,12 @@ ${PRINT_CSS}</head><body>
       ${sectionsHtml}
       ${impressionHtml}
       ${suggestionsHtml}
+      ${pcpndtHtml}
       ${settings.usgDeclarationLine?.trim() ? `<div class="section"><div class="section-body" style="font-size:8pt;color:#64748b;border:1px solid #e2e8f0;padding:2mm;border-radius:4px;">${esc(settings.usgDeclarationLine)}</div></div>` : ""}
 
-      <!-- Signature -->
+      <!-- Signature (verification QR on its left, same line) -->
       <div class="signature-block">
+        ${qrHtml}
         <div class="sig-item">
           ${sigVisual}
           <div class="sig-line"></div>
@@ -1444,7 +1585,6 @@ ${PRINT_CSS}</head><body>
   <div class="footer-band">
     ${serialNo ? `<div class="serial">${serialNo}</div>` : ""}
     ${showThanks ? esc(footerMsg) : ""}
-    ${qrHtml}
   </div>
 </div>
 </body></html>`;

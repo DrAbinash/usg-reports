@@ -58,6 +58,7 @@ type Settings = {
   usgPrintPaper: string; usgSignatureUrl: string;
   usgPrintFontSize: number; usgPrintLineHeight: number;
   usgPrintSpacing: string; usgPrintShowTechnique: boolean; usgPrintShowThanks: boolean;
+  usgPrintQrEnabled?: boolean;
   usgSidebarPosition?: string; usgLogoPosition?: string; usgAddressPosition?: string; usgPrintFontFamily?: string;
   usgLogoSizeMm?: number; usgNameSizePt?: number; usgAddressSizePt?: number; usgSignatureSizeMm?: number;
   usgAutoBackup: boolean;
@@ -757,35 +758,29 @@ export function SettingsView() {
           </Field>
           <Field
             label="Clinical body on A4"
-            hint="Fit packs letterhead + findings + impression + advice on one A4 (readable density). Stills always print on the next page. Choose 2+ pages for a more open layout on long studies."
+            hint="Fit packs letterhead + findings + impression + advice on one A4 (readable density). Stills always print on the next page. Auto keeps that density and stretches the sheet to a full page, so a short study has no blank band under the signature."
           >
             <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setS({ ...s, usgPrintBodyFit: "one_page" } as Settings)}
-                className={cn(
-                  "flex-1 rounded-lg border px-3 py-2 text-left text-[12px] font-semibold transition-colors",
-                  (s.usgPrintBodyFit ?? "one_page") !== "multi"
-                    ? "border-rose-300 bg-rose-50 text-rose-800 ring-1 ring-rose-200"
-                    : "border-border bg-panel text-muted-foreground hover:border-rose-200",
-                )}
-              >
-                Fit on 1 A4
-                <span className="block text-[10px] font-normal text-faint">Letterhead · findings · impression · advice</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setS({ ...s, usgPrintBodyFit: "multi" } as Settings)}
-                className={cn(
-                  "flex-1 rounded-lg border px-3 py-2 text-left text-[12px] font-semibold transition-colors",
-                  s.usgPrintBodyFit === "multi"
-                    ? "border-rose-300 bg-rose-50 text-rose-800 ring-1 ring-rose-200"
-                    : "border-border bg-panel text-muted-foreground hover:border-rose-200",
-                )}
-              >
-                Allow 2+ pages
-                <span className="block text-[10px] font-normal text-faint">Comfortable spacing · long studies</span>
-              </button>
+              {([
+                ["auto", "Auto fill A4", "Gaps stretch to the foot of page 1"],
+                ["one_page", "Fit on 1 A4", "Letterhead · findings · impression · advice"],
+                ["multi", "Allow 2+ pages", "Comfortable spacing · long studies"],
+              ] as const).map(([value, label, sub]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setS({ ...s, usgPrintBodyFit: value } as Settings)}
+                  className={cn(
+                    "flex-1 rounded-lg border px-3 py-2 text-left text-[12px] font-semibold transition-colors",
+                    (s.usgPrintBodyFit ?? "one_page") === value
+                      ? "border-rose-300 bg-rose-50 text-rose-800 ring-1 ring-rose-200"
+                      : "border-border bg-panel text-muted-foreground hover:border-rose-200",
+                  )}
+                >
+                  {label}
+                  <span className="block text-[10px] font-normal text-faint">{sub}</span>
+                </button>
+              ))}
             </div>
           </Field>
 
@@ -883,6 +878,15 @@ export function SettingsView() {
                 className="h-4 w-4 accent-rose-600"
               />
               Print the "Thanks For Your Referral." tagline under the patient strip
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-[12px] font-medium text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={s.usgPrintQrEnabled !== false}
+                onChange={(e) => setS({ ...s, usgPrintQrEnabled: e.target.checked } as Settings)}
+                className="h-4 w-4 accent-rose-600"
+              />
+              Print the "scan to verify" QR beside the signature (off hides it on print, PDF and share)
             </label>
           </div>
 

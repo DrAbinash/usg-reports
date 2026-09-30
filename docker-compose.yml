@@ -19,13 +19,30 @@ services:
 
       # CARE / PACS integration defaults.
       # Values saved inside the app Settings take precedence.
+      # CLINIC_LAN_HOST drives the built-in LAN defaults for CARE, Orthanc and
+      # OHIF (port differs per service); leave it unset to keep 172.16.1.139.
+      - CLINIC_LAN_HOST=${CLINIC_LAN_HOST:-}
       - CARE_API_BASE=${CARE_API_BASE:-}
       - CARE_API_KEY=${CARE_API_KEY:-}
       - ORTHANC_URL=${ORTHANC_URL:-}
       - ORTHANC_USERNAME=${ORTHANC_USERNAME:-}
       - ORTHANC_PASSWORD=${ORTHANC_PASSWORD:-}
+
+      # OHIF viewer. These are initial/default values only — Settings
+      # -> Integrations -> OHIF Viewer is the source of truth and a saved
+      # value always wins, so endpoints never require a code change.
       - OHIF_LAN_URL=${OHIF_LAN_URL:-}
       - OHIF_TAILSCALE_URL=${OHIF_TAILSCALE_URL:-}
+      # Canonical/same-origin endpoint, e.g. /ohif when the Caddy proxy route is
+      # enabled (see Caddyfile). Never guessed when unset.
+      - OHIF_CUSTOM_URL=${OHIF_CUSTOM_URL:-}
+      # auto | lan | tailscale | custom  (change it in Settings to persist it)
+      - OHIF_MODE=${OHIF_MODE:-auto}
+      # AUTO probe budget: a dead LAN must never stall the reporting workspace.
+      - OHIF_PROBE_TIMEOUT_MS=${OHIF_PROBE_TIMEOUT_MS:-1500}
+      - OHIF_PROBE_GET_TIMEOUT_MS=${OHIF_PROBE_GET_TIMEOUT_MS:-2500}
+      - OHIF_PROBE_CACHE_MS=${OHIF_PROBE_CACHE_MS:-60000}
+      - OHIF_PROBE_FAIL_CACHE_MS=${OHIF_PROBE_FAIL_CACHE_MS:-15000}
       - INTEGRATION_DEFAULTS=${INTEGRATION_DEFAULTS:-on}
 
     volumes:

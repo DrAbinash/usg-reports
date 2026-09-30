@@ -8,6 +8,11 @@
 // were REMOVED — this app reports ultrasound only. Upgrade is handled by
 // scripts/usg-v4-cleanup.mjs (idempotent; USG data is never touched).
 //
+// Later: the CARE/Orthanc bridge (v6) and the OHIF viewer settings
+// (ohifMode/ohifLanUrl/ohifTailscaleUrl/ohifCustomUrl) came back as
+// modality-agnostic integration columns, so scripts/usg-v4-cleanup.mjs no
+// longer lists them — it must never drop a column the app reads.
+//
 // v6.10 — multi-clinic: a Clinic model + clinicId on every data table
 // (defaulting to "default" for backward compat). One installation can
 // host multiple trial centers, each with their own letterhead, settings,
@@ -149,6 +154,18 @@ model HospitalSettings {
   orthancUrl        String   @default("")   // e.g. http://172.16.1.139:8042
   orthancUsername   String   @default("")   // empty pair = anonymous (no Basic header)
   orthancPassword   String?                 // secret — never sent to the browser
+
+  // ── v6 OHIF viewer (restored) ───────────────────────────────────────
+  // The DICOM image viewer the studio launches. These are the ONLY OHIF
+  // endpoints the app knows about — src/lib/usg/ohifResolver.ts reads them
+  // and no launch path may contain a URL literal of its own.
+  //   ohifMode  auto | lan | tailscale | custom  (auto = real reachability)
+  //   custom may be an absolute URL OR a same-origin path (e.g. "/ohif"),
+  //   which is how an https studio embeds an http-only LAN viewer safely.
+  ohifMode          String   @default("auto")
+  ohifLanUrl        String   @default("")   // e.g. http://172.16.1.139:3010
+  ohifTailscaleUrl  String   @default("")   // optional — never guessed
+  ohifCustomUrl     String   @default("")   // optional canonical/same-origin
 
   // ── v6 optional Vision OCR (Gemini, same contract as the ERP) ───────
   geminiApiKey      String?                 // secret — empty = SR-only extraction

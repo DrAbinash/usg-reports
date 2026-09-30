@@ -11,12 +11,15 @@
  * Removed, if present:
  *   - tables: CareOrderLink, Report, ReportImage, FindingRow,
  *             QuickPhrase, TechniqueTemplate, ReportFormat, SyncState
- *   - columns on HospitalSettings: radiologist*, careApi*, orthanc*,
- *             ohif* (MRI/PACS/OHIF integration fields)
+ *   - columns on HospitalSettings: radiologist*, careApi*, orthanc*
+ *             (MRI-era integration fields superseded by the v6 bridge)
  *
- * NEVER touched: UsgReport, UsgPathology, Session and every surviving
- * HospitalSettings column. Safe to run on every boot — on a clean or
- * already-migrated database it is a fast no-op.
+ * NEVER touched: UsgReport, UsgPathology, Session, every surviving
+ * HospitalSettings column, and the OHIF viewer fields
+ * (ohifMode/ohifLanUrl/ohifTailscaleUrl/ohifCustomUrl) — those are live
+ * app settings, so dropping them here would wipe the doctor's saved
+ * viewer endpoints on every container restart. Safe to run on every boot —
+ * on a clean or already-migrated database it is a fast no-op.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -42,8 +45,10 @@ const LEGACY_SETTINGS_COLUMNS = [
   "orthancUrl",
   "orthancUsername",
   "orthancPassword",
-  "ohifLanUrl",
-  "ohifTailscaleUrl",
+  // OHIF viewer fields are deliberately NOT listed: they are live USG Studio
+  // settings (Settings → Integrations → OHIF Viewer) read by
+  // src/lib/usg/ohifResolver.ts. Dropping them here would delete the doctor's
+  // saved endpoints at boot and re-add them blank on the next `db push`.
 ];
 
 function databaseFile() {

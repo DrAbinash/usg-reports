@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { WifiOff, Activity, RefreshCw } from "lucide-react";
+import { buildOhifViewerUrl, fetchOhifStatus, pickOhifEndpoint } from "@/lib/usg/ohifLaunch";
 
 type PacsRow = {
   worklistId: string; accessionNumber: string; patientName: string;
@@ -19,6 +20,29 @@ export function UsgPacsQueue() {
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Resolved OHIF base for the "Viewer" button — from the shared resolver, so
+  // this queue routes exactly like the embedded viewer.
+  const [viewerBase, setViewerBase] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const status = await fetchOhifStatus();
+      if (!alive) return;
+      const ep = status ? pickOhifEndpoint(status, "auto", window.location.protocol).endpoint : null;
+      setViewerBase(ep?.url ?? null);
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const openViewer = (studyInstanceUid: string) => {
+    const url = viewerBase ? buildOhifViewerUrl(viewerBase, studyInstanceUid) : "";
+    if (!url) {
+      setError("OHIF viewer is unreachable on every configured route — check Settings → Integrations → OHIF Viewer.");
+      return;
+    }
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -70,7 +94,7 @@ export function UsgPacsQueue() {
               </div>
               <div className="flex gap-2">
                 <Button size="sm" variant="ghost"
-                  onClick={() => window.open(`http://172.16.1.139:3010/viewer?StudyInstanceUIDs=${row.studyInstanceUid}`, "_blank")}>
+                  onClick={() => openViewer(row.studyInstanceUid)}>
                   <Activity className="mr-1 h-3 w-3" /> Viewer
                 </Button>
                 <Button size="sm" disabled={busy === row.worklistId}

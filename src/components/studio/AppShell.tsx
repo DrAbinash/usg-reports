@@ -17,6 +17,11 @@ import { UsgBirthdayGreeting, BirthdayHeaderButton, birthdayDismissed, rememberB
 import { Waves, Settings2, LogOut, Stethoscope, BarChart3, ClipboardList, ExternalLink, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import {
+  buildOhifWorklistUrl,
+  fetchOhifStatus,
+  pickOhifEndpoint,
+} from "@/lib/usg/ohifLaunch";
 import { useRouter } from "next/navigation";
 import type { View } from "@/lib/store";
 import { clinicDisplayName, studioProductTitle } from "@/lib/usg/branding";
@@ -27,9 +32,6 @@ const NAV: { id: View; label: string; icon: typeof Waves }[] = [
   { id: "insights", label: "Insights", icon: BarChart3 },
   { id: "settings", label: "Settings", icon: Settings2 },
 ];
-
-/** Opens the LAN OHIF worklist — useful when no study is open in the composer. */
-const PACS_OHIF_URL = "http://172.16.1.139:3010/viewer";
 
 export function AppShell() {
   const {
@@ -56,6 +58,17 @@ export function AppShell() {
   });
   const brandTitle = studioProductTitle(branding ?? {});
   const brandClinic = clinicDisplayName(branding ?? {});
+
+  // PACS button — resolved by the shared OHIF resolver, never a literal here.
+  const { data: ohif } = useQuery({
+    queryKey: ["ohif", "status"],
+    queryFn: () => fetchOhifStatus({ route: "auto" }),
+    staleTime: 30_000,
+  });
+  const pacsUrl =
+    typeof window === "undefined" || !ohif
+      ? null
+      : buildOhifWorklistUrl(pickOhifEndpoint(ohif, "auto", window.location.protocol).endpoint?.url ?? "");
 
   useEffect(() => {
     void queryClient.prefetchQuery({
@@ -197,15 +210,32 @@ export function AppShell() {
                 </button>
               );
             })}
-            <button
-              type="button"
-              onClick={() => window.open(PACS_OHIF_URL, "_blank", "noopener,noreferrer")}
-              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-bold text-indigo-800 hover:bg-indigo-50"
-              title="Open full OHIF / PACS in a new tab"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              <span>PACS</span>
-            </button>
+            {pacsUrl ? (
+              <a
+                href={pacsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="pacs-launch"
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-bold text-indigo-800 hover:bg-indigo-50"
+                title={`Open full OHIF / PACS in a new tab — ${pacsUrl}`}
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                <span>PACS</span>
+              </a>
+            ) : (
+              <button
+                type="button"
+                data-testid="pacs-launch-unavailable"
+                onClick={() =>
+                  toast.error(ohif?.serverPick.reason ?? "Viewer routing status unavailable — retry in a moment")
+                }
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-bold text-slate-400 hover:bg-slate-100"
+                title="OHIF viewer is not reachable on any configured route"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                <span>PACS</span>
+              </button>
+            )}
           </nav>
         )}
 

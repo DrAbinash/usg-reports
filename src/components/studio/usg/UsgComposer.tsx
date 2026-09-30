@@ -526,20 +526,25 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const setComposerStrip = useStudio((s) => s.setComposerStrip);
   const setComposerBack = useStudio((s) => s.setComposerBack);
   const setExpandPatientForm = useStudio((s) => s.setExpandPatientForm);
+  const setComposerPickStudy = useStudio((s) => s.setComposerPickStudy);
   const setActiveReportId = useStudio((s) => s.setActiveReportId);
   const onBackRef = useRef(onBack);
   onBackRef.current = onBack;
+  const pickStudyRef = useRef(pickStudy);
+  pickStudyRef.current = pickStudy;
   useEffect(() => {
     setComposerBack(() => onBackRef.current());
     setExpandPatientForm(() => setHeaderCollapsed(false));
+    setComposerPickStudy((k) => pickStudyRef.current(k));
     setActiveReportId(report?.id ?? savedIdRef.current);
     return () => {
       setComposerStrip(null);
       setComposerBack(null);
       setExpandPatientForm(null);
+      setComposerPickStudy(null);
       setActiveReportId(null);
     };
-  }, [setComposerBack, setExpandPatientForm, setComposerStrip, setActiveReportId, report?.id]);
+  }, [setComposerBack, setExpandPatientForm, setComposerPickStudy, setComposerStrip, setActiveReportId, report?.id]);
   useEffect(() => {
     const next = {
       patientName,
@@ -547,6 +552,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
       patientSex: patientSex === USG_SEX_CHILD ? "C" : patientSex,
       referredBy,
       studyLabel: study.label,
+      studyKey,
       title: resolved.title,
       status: (isFinal ? "final" : "draft") as "draft" | "final",
       allNormal: abnormalCount === 0,
@@ -560,6 +566,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
       prev.patientSex === next.patientSex &&
       prev.referredBy === next.referredBy &&
       prev.studyLabel === next.studyLabel &&
+      prev.studyKey === next.studyKey &&
       prev.title === next.title &&
       prev.status === next.status &&
       prev.allNormal === next.allNormal &&
@@ -574,6 +581,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     patientSex,
     referredBy,
     study.label,
+    studyKey,
     resolved.title,
     isFinal,
     abnormalCount,

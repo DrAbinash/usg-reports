@@ -12,11 +12,26 @@ import { UsgCommandPalette } from "./usg/UsgCommandPalette";
 import { UsgClinicSwitcher } from "./usg/UsgClinicSwitcher";
 import { UsgClinicLink } from "./usg/UsgClinicLink";
 import { UsgQueuePicker } from "./usg/UsgQueuePicker";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { STUDY_GROUPS, USG_STUDIES } from "@/lib/usg/studies";
 import { OnboardingLayer } from "./usg/OnboardingLayer";
 import { UsgBirthdayGreeting, BirthdayHeaderButton, birthdayDismissed, rememberBirthdayDismissed, useBirthdayFlag } from "./usg/UsgBirthdayGreeting";
 import { Waves, Settings2, LogOut, Stethoscope, BarChart3, ClipboardList, ExternalLink, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import {
+  buildOhifWorklistUrl,
+  fetchOhifStatus,
+  pickOhifEndpoint,
+} from "@/lib/usg/ohifLaunch";
 import { useRouter } from "next/navigation";
 import type { View } from "@/lib/store";
 import { clinicDisplayName, studioProductTitle } from "@/lib/usg/branding";
@@ -28,9 +43,6 @@ const NAV: { id: View; label: string; icon: typeof Waves }[] = [
   { id: "settings", label: "Settings", icon: Settings2 },
 ];
 
-/** Opens the LAN OHIF worklist — useful when no study is open in the composer. */
-const PACS_OHIF_URL = "http://172.16.1.139:3010/viewer";
-
 export function AppShell() {
   const {
     view,
@@ -38,6 +50,7 @@ export function AppShell() {
     composerStrip,
     composerBack,
     expandPatientForm,
+    composerPickStudy,
     activeReportId,
   } = useStudio();
   const router = useRouter();
@@ -56,6 +69,17 @@ export function AppShell() {
   });
   const brandTitle = studioProductTitle(branding ?? {});
   const brandClinic = clinicDisplayName(branding ?? {});
+
+  // PACS button — resolved by the shared OHIF resolver, never a literal here.
+  const { data: ohif } = useQuery({
+    queryKey: ["ohif", "status"],
+    queryFn: () => fetchOhifStatus({ route: "auto" }),
+    staleTime: 30_000,
+  });
+  const pacsUrl =
+    typeof window === "undefined" || !ohif
+      ? null
+      : buildOhifWorklistUrl(pickOhifEndpoint(ohif, "auto", window.location.protocol).endpoint?.url ?? "");
 
   useEffect(() => {
     void queryClient.prefetchQuery({
@@ -159,7 +183,6 @@ export function AppShell() {
               <span className="shrink-0 text-[11px] text-muted-foreground">
                 {composerStrip.patientSex === "C" ? "Child" : composerStrip.patientSex}
               </span>
-              <span className="hidden truncate text-[11px] text-faint lg:inline">· {composerStrip.studyLabel}</span>
               <span
                 className={cn(
                   "shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold",
@@ -170,6 +193,50 @@ export function AppShell() {
               </span>
             </button>
             <div className="mx-0.5 hidden h-5 w-px bg-border sm:block" />
+            {/* Format override, surfaced in the header: when the bill has no
+                matching USG format the doctor must change it, and until now the
+                only picker sat inside the collapsed demography form. */}
+            {composerPickStudy ? (
+              <Select
+                value={composerStrip.studyKey}
+                onValueChange={(k) => composerPickStudy(k)}
+                disabled={composerStrip.status === "final"}
+              >
+                <SelectTrigger
+                  data-testid="header-study-picker"
+                  aria-label="Report format"
+                  className={cn(
+                    "h-7 w-auto min-w-[9.5rem] max-w-[15rem] gap-1 rounded-md border-rose-300 bg-white px-2 text-[11.5px] font-bold text-rose-900 shadow-sm hover:border-rose-400",
+                    !composerStrip.studyKey && "border-dashed text-rose-700",
+                  )}
+                >
+                  <SelectValue placeholder="Choose a format" />
+                </SelectTrigger>
+                <SelectContent className="max-h-96 overflow-y-auto">
+                  {STUDY_GROUPS.map((g) => {
+                    const items = USG_STUDIES.filter((s) => s.group === g.key);
+                    if (!items.length) return null;
+                    return (
+                      <SelectGroup key={g.key}>
+                        <SelectLabel className="text-[10px] font-bold uppercase tracking-wider text-faint">
+                          {g.label}
+                        </SelectLabel>
+                        {items.map((s) => (
+                          <SelectItem key={s.key} value={s.key} className="text-[12px]">
+                            {s.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    );
+                  })}
+                  {USG_STUDIES.filter((s) => !s.group || !STUDY_GROUPS.some((g) => g.key === s.group)).map((s) => (
+                    <SelectItem key={s.key} value={s.key} className="text-[12px]">
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : null}
             <UsgQueuePicker
               compact
               className="hidden min-w-0 flex-1 sm:flex"
@@ -197,15 +264,32 @@ export function AppShell() {
                 </button>
               );
             })}
-            <button
-              type="button"
-              onClick={() => window.open(PACS_OHIF_URL, "_blank", "noopener,noreferrer")}
-              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-bold text-indigo-800 hover:bg-indigo-50"
-              title="Open full OHIF / PACS in a new tab"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              <span>PACS</span>
-            </button>
+            {pacsUrl ? (
+              <a
+                href={pacsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="pacs-launch"
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-bold text-indigo-800 hover:bg-indigo-50"
+                title={`Open full OHIF / PACS in a new tab — ${pacsUrl}`}
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                <span>PACS</span>
+              </a>
+            ) : (
+              <button
+                type="button"
+                data-testid="pacs-launch-unavailable"
+                onClick={() =>
+                  toast.error(ohif?.serverPick.reason ?? "Viewer routing status unavailable — retry in a moment")
+                }
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-bold text-slate-400 hover:bg-slate-100"
+                title="OHIF viewer is not reachable on any configured route"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                <span>PACS</span>
+              </button>
+            )}
           </nav>
         )}
 

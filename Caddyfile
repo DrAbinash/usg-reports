@@ -1,8 +1,27 @@
-# CARE USG Studio reverse proxy — the studio itself, nothing else.
-# (The v1-v3 optional /ohif same-origin viewer is gone: this app is
-# standalone sonography reporting with no PACS viewer.)
+# CARE USG Studio reverse proxy.
+#
+# OHIF is integrated again (Settings -> Integrations -> OHIF Viewer), but this
+# proxy still serves ONLY the studio. The viewer stays a separate service on
+# purpose: the OHIF at 172.16.1.139:3010 is shared with CARE ERP and is built to
+# live at the root path, so mounting it under /ohif here would break its own
+# asset bundle. Enable the same-origin route below only if you control that
+# OHIF build and can rebuild it with PUBLIC_URL=/ohif.
+#
+# Why you might want it: an https studio cannot embed an http:// LAN viewer in an
+# iframe (the browser blocks it as mixed active content). A same-origin /ohif
+# route inherits the page's scheme and removes that restriction; the studio's
+# AUTO mode then uses it as the "custom" endpoint.
 
 :8090 {
+	# --- Optional: same-origin OHIF proxy (opt-in) -------------------------
+	# To enable, uncomment BOTH lines, redeploy OHIF with PUBLIC_URL=/ohif,
+	# then set Custom endpoint = /ohif in Settings -> Integrations -> OHIF
+	# Viewer (or OHIF_CUSTOM_URL=/ohif for the studio container).
+	#
+	# handle_path /ohif/* {
+	# 	reverse_proxy {$OHIF_UPSTREAM:172.16.1.139:3010}
+	# }
+
 	handle {
 		reverse_proxy studio:3000
 	}

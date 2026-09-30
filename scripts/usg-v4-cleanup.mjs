@@ -11,18 +11,25 @@
  * Removed, if present:
  *   - tables: CareOrderLink, Report, ReportImage, FindingRow,
  *             QuickPhrase, TechniqueTemplate, ReportFormat, SyncState
- *   - columns on HospitalSettings: radiologist*, careApi*, orthanc*
- *             (MRI-era integration fields superseded by the v6 bridge)
+ *   - columns on HospitalSettings named in LEGACY_SETTINGS_COLUMNS below
  *
  * NEVER touched: UsgReport, UsgPathology, Session, every surviving
  * HospitalSettings column, and the OHIF viewer fields
  * (ohifMode/ohifLanUrl/ohifTailscaleUrl/ohifCustomUrl) — those are live
- * app settings, so dropping them here would wipe the doctor's saved
- * viewer endpoints on every container restart. Safe to run on every boot —
- * on a clean or already-migrated database it is a fast no-op.
+ * app settings, so dropping them here would wipe the doctor's saved viewer
+ * endpoints on every container restart. Safe to run on every boot — on a
+ * clean or already-migrated database it is a fast no-op.
+ *
+ * LEGACY_SETTINGS_COLUMNS is a claim about the past, not the authority: the
+ * schema is. Any name `prisma/schema.prisma` still declares is live and is
+ * skipped, because dropping it would destroy real configuration and `db push`
+ * would then silently recreate it empty. That is exactly what happened here —
+ * v4 listed the careApi and orthanc fields as dead, v6 brought them back, and
+ * every boot wiped the clinic's saved ERP + Orthanc credentials.
  */
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 
 const LEGACY_TABLES = [
@@ -36,7 +43,7 @@ const LEGACY_TABLES = [
   "SyncState",
 ];
 
-const LEGACY_SETTINGS_COLUMNS = [
+export const LEGACY_SETTINGS_COLUMNS = [
   "radiologistName",
   "radiologistQual",
   "radiologistRegNo",
@@ -50,6 +57,43 @@ const LEGACY_SETTINGS_COLUMNS = [
   // src/lib/usg/ohifResolver.ts. Dropping them here would delete the doctor's
   // saved endpoints at boot and re-add them blank on the next `db push`.
 ];
+
+/**
+ * Column names the current Prisma schema declares on HospitalSettings.
+ *
+ * Read from the schema file rather than the live database: the whole point is
+ * to know what the app still needs, and `db push` runs right after this script,
+ * so the DB will match the schema a moment later either way.
+ *
+ * Returns null when the schema cannot be read — callers must then drop nothing.
+ */
+export function schemaSettingsColumns(schemaPath) {
+  let src;
+  try {
+    src = fs.readFileSync(schemaPath, "utf8");
+  } catch {
+    return null;
+  }
+  const block = /\bmodel\s+HospitalSettings\s*\{([\s\S]*?)\n\}/.exec(src);
+  if (!block) return null;
+  const fields = new Set();
+  for (const raw of block[1].split("\n")) {
+    const line = raw.trim();
+    if (!line || line.startsWith("//") || line.startsWith("/*") || line.startsWith("*")) continue;
+    const field = /^[A-Za-z_][A-Za-z0-9_]*/.exec(line);
+    if (field) fields.add(field[0]);
+  }
+  return fields.size > 0 ? fields : null;
+}
+
+/**
+ * Legacy names that are safe to drop right now — i.e. not declared by the
+ * schema. Exported for tests.
+ */
+export function droppableSettingsColumns(live) {
+  if (!live) return [];
+  return LEGACY_SETTINGS_COLUMNS.filter((c) => !live.has(c));
+}
 
 function databaseFile() {
   const url = process.env.DATABASE_URL ?? "";
@@ -84,19 +128,39 @@ async function main() {
       }
     }
 
-    // 2) Legacy MRI/PACS columns on HospitalSettings (conditional —
-    //    re-running on a migrated database must stay a no-op).
-    const settingsExists = await prisma.$queryRawUnsafe(
-      `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'HospitalSettings'`,
+    // 2) Legacy columns on HospitalSettings (conditional — re-running on a
+    //    migrated database must stay a no-op, and a column the schema still
+    //    declares must survive even if it appears in the legacy list).
+    const schemaPath = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "../prisma/schema.prisma",
     );
-    if (settingsExists.length > 0) {
-      const cols = await prisma.$queryRawUnsafe(`PRAGMA table_info("HospitalSettings")`);
-      const names = new Set(cols.map((c) => String(c.name)));
-      for (const c of LEGACY_SETTINGS_COLUMNS) {
-        if (names.has(c)) {
-          await prisma.$executeRawUnsafe(`ALTER TABLE "HospitalSettings" DROP COLUMN "${c}"`);
-          removed++;
-          console.log(`[v4-cleanup] dropped legacy column HospitalSettings.${c}`);
+    const live = schemaSettingsColumns(schemaPath);
+    if (!live) {
+      console.warn(
+        `[v4-cleanup] WARNING: could not read HospitalSettings from ${schemaPath} — ` +
+          `skipping every column drop. Legacy tables above were still cleaned.`,
+      );
+    } else {
+      const settingsExists = await prisma.$queryRawUnsafe(
+        `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'HospitalSettings'`,
+      );
+      if (settingsExists.length > 0) {
+        const cols = await prisma.$queryRawUnsafe(`PRAGMA table_info("HospitalSettings")`);
+        const names = new Set(cols.map((c) => String(c.name)));
+        for (const c of droppableSettingsColumns(live)) {
+          if (names.has(c)) {
+            await prisma.$executeRawUnsafe(`ALTER TABLE "HospitalSettings" DROP COLUMN "${c}"`);
+            removed++;
+            console.log(`[v4-cleanup] dropped legacy column HospitalSettings.${c}`);
+          }
+        }
+        const kept = LEGACY_SETTINGS_COLUMNS.filter((c) => live.has(c) && names.has(c));
+        if (kept.length) {
+          console.log(
+            `[v4-cleanup] preserving HospitalSettings.${kept.join(", ")} — ` +
+              `declared by the schema, so live configuration rather than legacy structure`,
+          );
         }
       }
     }
@@ -107,11 +171,15 @@ async function main() {
   }
 }
 
-main().catch((e) => {
-  console.error(`[v4-cleanup] FAILED: ${e?.message ?? e}`);
-  // Non-fatal to the caller: the entrypoint's `prisma db push` (no
-  // --accept-data-loss) remains the real gate — if this script could not
-  // clean, db push will stop startup loudly instead of silently destroying
-  // anything.
-  process.exit(1);
-});
+// Only run when executed directly — tests import the pure helpers above.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((e) => {
+    console.error(`[v4-cleanup] FAILED: ${e?.message ?? e}`);
+    // Non-fatal to the caller: the entrypoint's `prisma db push` (no
+    // --accept-data-loss) remains the real gate — if this script could not
+    // clean, db push will stop startup loudly instead of silently destroying
+    // anything.
+    process.exit(1);
+  });
+}
+

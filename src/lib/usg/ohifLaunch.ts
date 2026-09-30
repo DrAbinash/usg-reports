@@ -46,7 +46,10 @@ export type OhifStatus = {
   endpoints: OhifEndpointInfo[];
   /** What the server would choose on reachability alone. */
   serverPick: { key: OhifCandidateKey | null; url: string; reason: string };
-  availability: "available" | "unavailable";
+  /** "blocked" = a viewer IS reachable, but this page cannot frame it (an https
+   * page and a plain-http endpoint). Reported only when the caller told the
+   * server its scheme, so server-only callers keep the old two-state answer. */
+  availability: "available" | "blocked" | "unavailable";
   checkedAt: number;
   cached: boolean;
 };
@@ -96,6 +99,30 @@ export function isEmbedSafe(endpoint: Pick<OhifEndpointInfo, "sameOrigin" | "sec
   if (endpoint.sameOrigin) return true;
   if (endpoint.secure) return true;
   return pageProtocol !== "https:";
+}
+
+/**
+ * How one endpoint looks to THIS browser — the server's reachability answer
+ * combined with the iframe rule above. Five states because the Integration
+ * Health card must not flatten them: "reachable" and "usable here" are not the
+ * same fact, and a green dot on an endpoint the browser will refuse to frame is
+ * what made the old card claim the viewer was available with no route.
+ */
+export type OhifEndpointHealth =
+  | "connected" //   reachable and embeddable here
+  | "blocked" //     reachable, but this page would not be allowed to frame it
+  | "unreachable" // the server asked and got no usable answer
+  | "not_configured"
+  | "unknown"; //    configured, not probed (or awaiting the browser's own probe)
+
+export function ohifEndpointHealth(
+  endpoint: Pick<OhifEndpointInfo, "configured" | "reachable" | "sameOrigin" | "secure">,
+  pageProtocol: string,
+): OhifEndpointHealth {
+  if (!endpoint.configured) return "not_configured";
+  if (endpoint.reachable === null) return "unknown";
+  if (endpoint.reachable === false) return "unreachable";
+  return isEmbedSafe(endpoint, pageProtocol) ? "connected" : "blocked";
 }
 
 /**
@@ -193,6 +220,11 @@ export async function fetchOhifStatus(
     const params = new URLSearchParams();
     if (opts.force) params.set("force", "1");
     if (route !== "auto") params.set("route", route);
+    // Our scheme, not our measurements: the server still owns every reachability
+    // answer, but it cannot know that this page is https and therefore cannot
+    // frame a plain-http viewer. Without it AUTO stops at the first endpoint the
+    // server can reach, which may be one the browser will only render blank.
+    params.set("page", window.location.protocol);
     const qs = params.toString();
     try {
       const res = await fetch(`/api/usg/ohif/status${qs ? `?${qs}` : ""}`, {

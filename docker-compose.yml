@@ -32,7 +32,12 @@ services:
       # -> Integrations -> OHIF Viewer is the source of truth and a saved
       # value always wins, so endpoints never require a code change.
       - OHIF_LAN_URL=${OHIF_LAN_URL:-}
-      - OHIF_TAILSCALE_URL=${OHIF_TAILSCALE_URL:-}
+      # The clinic's tailnet OHIF, served over HTTPS by the care-pacs
+      # `tailscale-ohif` sidecar (tailscale serve → 443 → http://ohif:80).
+      # HTTPS is what makes it embeddable from an HTTPS studio page; the plain
+      # http://<tailnet-IP>:3010 form is not, so it is never the default here.
+      # Override in .env to move the viewer — no code change is needed.
+      - OHIF_TAILSCALE_URL=${OHIF_TAILSCALE_URL:-https://ohif-viewer.tail7005c0.ts.net}
       # Canonical/same-origin endpoint, e.g. /ohif when the Caddy proxy route is
       # enabled (see Caddyfile). Never guessed when unset.
       - OHIF_CUSTOM_URL=${OHIF_CUSTOM_URL:-}

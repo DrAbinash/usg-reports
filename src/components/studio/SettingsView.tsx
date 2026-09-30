@@ -14,14 +14,35 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   fetchOhifStatus,
+  ohifEndpointHealth,
   ohifRouteLabel,
   pickOhifEndpoint,
+  type OhifEndpointHealth,
   type OhifRoute,
   type OhifStatus,
 } from "@/lib/usg/ohifLaunch";
 import type { OhifTestResult } from "@/lib/usg/ohifResolver";
 import { auditLabel } from "@/lib/usg/auditShared";
 import { UsgClinicsAdmin } from "./usg/UsgClinicsAdmin";
+
+/** Per-endpoint status lights for the OHIF card. "blocked" is the one that used
+ * to be missing: a reachable plain-http viewer on an https page shows as a blank
+ * iframe, so it is not a pass and must not be drawn as one. */
+const OHIF_HEALTH_DOT: Record<OhifEndpointHealth, string> = {
+  connected: "bg-emerald-500",
+  blocked: "bg-amber-500",
+  unreachable: "bg-red-500",
+  not_configured: "bg-slate-300 dark:bg-slate-600",
+  unknown: "bg-sky-400",
+};
+
+const OHIF_HEALTH_LABEL: Record<OhifEndpointHealth, string> = {
+  connected: "connected",
+  blocked: "reachable — not embeddable here",
+  unreachable: "unreachable",
+  not_configured: "not configured",
+  unknown: "not tested yet",
+};
 
 type Settings = {
   appTitle: string; hospitalName: string; addressLine: string; phone: string; email: string;
@@ -199,10 +220,13 @@ export function SettingsView() {
 
   // What a study would actually open in THIS browser right now: the saved mode
   // plus measured reachability, filtered by what this page may embed.
+  // "http:" during SSR is deliberate: it means "no scheme filter", matching the
+  // server's own behaviour when a caller does not report its protocol.
+  const pageProtocol = typeof window === "undefined" ? "http:" : window.location.protocol;
   const ohifEffective =
-    typeof window === "undefined" || !ohifStatus
+    !ohifStatus
       ? null
-      : pickOhifEndpoint(ohifStatus, (s?.ohifMode as OhifRoute) || "auto", window.location.protocol).endpoint;
+      : pickOhifEndpoint(ohifStatus, (s?.ohifMode as OhifRoute) || "auto", pageProtocol).endpoint;
 
   const testConnections = async (which: "all" | "care" | "orthanc" | "ohif") => {
     setTesting(which === "all" ? "" : which);
@@ -1020,11 +1044,18 @@ export function SettingsView() {
                     "rounded-full px-2 py-0.5 text-[10px] font-bold ring-1",
                     ohifStatus.availability === "available"
                       ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-                      : "bg-red-50 text-red-700 ring-red-200",
+                      : ohifStatus.availability === "blocked"
+                        ? "bg-amber-50 text-amber-700 ring-amber-200"
+                        : "bg-red-50 text-red-700 ring-red-200",
                   )}
                   data-testid="ohif-availability"
+                  data-state={ohifStatus.availability}
                 >
-                  {ohifStatus.availability === "available" ? "viewer available" : "viewer unavailable"}
+                  {ohifStatus.availability === "available"
+                    ? "viewer available"
+                    : ohifStatus.availability === "blocked"
+                      ? "reachable, blocked here"
+                      : "viewer unavailable"}
                 </span>
               ) : null}
             </div>
@@ -1089,24 +1120,33 @@ export function SettingsView() {
                 {ohifStatus?.serverPick.reason ?? "Loading viewer routing status…"}
               </p>
               <ul className="mt-1.5 space-y-0.5">
-                {(ohifStatus?.endpoints ?? []).map((ep) => (
-                  <li key={ep.key} className="flex items-center gap-2" data-testid={`ohif-endpoint-${ep.key}`}>
-                    <span className="w-[74px] shrink-0 font-semibold text-muted-foreground">{ep.label}</span>
-                    <span
-                      className={cn(
-                        "h-1.5 w-1.5 shrink-0 rounded-full",
-                        !ep.configured ? "bg-slate-300 dark:bg-slate-600"
-                          : ep.reachable === true ? "bg-emerald-500"
-                            : ep.reachable === false ? "bg-red-500" : "bg-amber-400",
-                      )}
-                    />
-                    <span className="truncate font-mono text-[10.5px] text-faint">
-                      {ep.configured ? ep.url : "not configured"}
-                      {ep.reachable === false && ep.error ? ` — ${ep.error}` : ""}
-                      {ep.reachable === true && ep.latencyMs != null ? ` — ${ep.latencyMs}ms` : ""}
-                    </span>
-                  </li>
-                ))}
+                {(ohifStatus?.endpoints ?? []).map((ep) => {
+                  const health = ohifEndpointHealth(ep, pageProtocol);
+                  return (
+                    <li
+                      key={ep.key}
+                      className="flex items-center gap-2"
+                      data-testid={`ohif-endpoint-${ep.key}`}
+                      data-health={health}
+                    >
+                      <span className="w-[74px] shrink-0 font-semibold text-muted-foreground">{ep.label}</span>
+                      <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", OHIF_HEALTH_DOT[health])} />
+                      <span className="truncate font-mono text-[10.5px] text-faint">
+                        {ep.configured
+                          ? <>
+                              {ep.url}
+                              {" — "}
+                              <span className={health === "blocked" ? "text-amber-700 font-semibold" : undefined}>
+                                {OHIF_HEALTH_LABEL[health]}
+                              </span>
+                              {health === "connected" && ep.latencyMs != null ? ` (${ep.latencyMs}ms)` : ""}
+                              {health === "unreachable" && ep.error ? ` (${ep.error})` : ""}
+                            </>
+                          : "not configured"}
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
 

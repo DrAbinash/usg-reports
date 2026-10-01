@@ -6,6 +6,12 @@
  * Baselines 04–08 were added deliberately via scripts/generateMissingBaselines.ts
  * (throwaway). Sentence-level abnormal bolding was rewritten deliberately via
  * scripts/rewrite-abnormal-bold-goldens.ts — never regenerate with `vitest -u`.
+ *
+ * All 8 were refreshed deliberately via scripts/rewrite-print-layout-goldens.ts
+ * for v6.21 (QR onto the signature line, logo plate without the duplicated
+ * wordmark, register number off the patient strip, one-line advice, thinner
+ * PC-PNDT band, sidebar fixes). That rewrite was an explicit human decision on
+ * the print-layout branch — the fixtures themselves were not edited by hand.
  */
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { buildUsgReportHtml } from "@/lib/usg/print";
@@ -103,7 +109,10 @@ describe("USG print golden snapshots", () => {
     expect(html).not.toMatch(/Ref\. Doctor/);
     // Premature strip close that left orphaned fields outside patient-strip.
     expect(html).not.toMatch(/<\/div><\/div>\s*<div class="field"><div class="label">Study Date/);
-    expect(html).toMatch(/USG No\./);
+    // v6.21 removed the register number from every printed sheet — the QR
+    // carries the verification code instead — so this template asserts the
+    // label is gone rather than that a serial is present.
+    expect(html).not.toMatch(/USG No\./);
     expect(normalize(html)).toMatchFileSnapshot("__golden__/print-sidebar.html");
   });
 });

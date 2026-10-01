@@ -342,10 +342,13 @@ export async function updateSettings(patch: SettingsUpdate) {
   } else if (typeof patch.usgShowMachine === "boolean") {
     data.usgShowMachine = patch.usgShowMachine;
   }
-  // Print style: "classic" | "premium" | "premium_sidebar" | "preprinted"
+  // Print style: "classic" | "premium" | "premium_sidebar" | "preprinted".
+  // "couture" was this template's original name (ported from the ERP) and was
+  // still accepted here long after nothing rendered it — a row holding it just
+  // fell through to premium, so dropping it from the list changes no output.
   if (typeof patch.usgPrintStyle === "string") {
     const style = patch.usgPrintStyle.trim();
-    data.usgPrintStyle = (["classic", "premium_sidebar", "couture", "preprinted"].includes(style))
+    data.usgPrintStyle = (["classic", "premium", "premium_sidebar", "preprinted"].includes(style))
       ? style
       : "premium";
   }
@@ -377,7 +380,8 @@ export async function updateSettings(patch: SettingsUpdate) {
   }
   // Clinical-body fit: one_page (default) | multi.
   if (typeof patch.usgPrintBodyFit === "string") {
-    data.usgPrintBodyFit = patch.usgPrintBodyFit.trim() === "multi" ? "multi" : "one_page";
+    const v = patch.usgPrintBodyFit.trim();
+    data.usgPrintBodyFit = v === "multi" || v === "auto" ? v : "one_page";
   }
   // v6.2 print fine-tuning — the numeric dials arrive as strings from the
   // sliders and are clamped so a stray value can never wreck the letterhead.
@@ -414,7 +418,7 @@ export async function updateSettings(patch: SettingsUpdate) {
       : "normal";
   }
   // Technique band + referral tagline toggles (string-checkbox contract).
-  for (const k of ["usgPrintShowTechnique", "usgPrintShowThanks"] as const) {
+  for (const k of ["usgPrintShowTechnique", "usgPrintShowThanks", "usgPrintQrEnabled"] as const) {
     const v = patch[k];
     if (typeof v === "string") {
       data[k] = !/^(0|false|off|no)$/i.test(v.trim());

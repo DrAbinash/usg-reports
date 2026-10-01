@@ -52,10 +52,11 @@ describe("Register discipline — serial formatting", () => {
     expect(formatUsgSerial(0)).toBe("USG-0000");
   });
 
-  test("serial prints in the patient strip; blank serial omits the cell", () => {
+  test("the single-column sheet prints no register number (v6.21)", () => {
     const resolved = resolve(initialState("wa-female"), lookupAll, "t");
     const withSerial = buildUsgReportHtml(SETTINGS, { ...patient, serial: "USG-0007" }, resolved);
-    expect(withSerial).toContain("USG-0007");
+    expect(withSerial).not.toContain("USG-0007");
+    expect(withSerial).not.toContain("USG No.");
     const without = buildUsgReportHtml(SETTINGS, patient, resolved);
     expect(without).not.toContain("USG No.");
   });
@@ -275,7 +276,8 @@ describe("Print upgrades — A5, PROVISIONAL watermark, signature image", () => 
     expect(html).toContain("size: A5");
     expect(html).toContain("font-size: 9.5pt"); // compact layer
     expect(html).toContain('class="watermark"');
-    expect(html).toContain("USG-0031");
+    // v6.21 dropped the printed serial from the single-column sheet, so this
+    // case referees the three layers its name promises and nothing else.
   });
 });
 

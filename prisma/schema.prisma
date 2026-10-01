@@ -127,6 +127,9 @@ model HospitalSettings {
   usgPrintSpacing      String  @default("tight") // tight | normal | relaxed (section gaps)
   usgPrintShowTechnique Boolean @default(true) // Technique band on printed reports
   usgPrintShowThanks   Boolean @default(true)  // "Thanks For Your Referral." tagline
+  // v6.21 — the verification QR beside the signature. Off hides it from print,
+  // PDF and share; the register number still prints and /verify still resolves.
+  usgPrintQrEnabled    Boolean @default(true)  // print the "scan to verify" QR
 
   // ── v6.7 PREMIUM sidebar layout (two-column with image sidebar) ──────
   // When usgPrintStyle = "premium_sidebar", the report uses a two-column

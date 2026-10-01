@@ -157,8 +157,9 @@ describe("register number left the header", () => {
       null,
     );
     expect(side).not.toContain("USG No.");
-    // It is still on the sheet — the sidebar footer band carries it.
-    expect(side).toContain(PATIENT.serial);
+    // v6.21 — neither template prints the register number at all now; the QR
+    // carries the verification code and /verify resolves it.
+    expect(side).not.toContain(PATIENT.serial);
   });
 
   test("…and the single-column sheet carries no serial at all", () => {

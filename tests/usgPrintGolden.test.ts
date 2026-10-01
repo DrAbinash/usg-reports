@@ -109,10 +109,10 @@ describe("USG print golden snapshots", () => {
     expect(html).not.toMatch(/Ref\. Doctor/);
     // Premature strip close that left orphaned fields outside patient-strip.
     expect(html).not.toMatch(/<\/div><\/div>\s*<div class="field"><div class="label">Study Date/);
-    // v6.21 moved the register number off the demography strip onto the footer
-    // band; the assertion is re-aimed at the number itself so it still referees
-    // "a sidebar sheet carries its serial", which is the actual invariant.
-    expect(html).toMatch(/USG-0001/);
+    // v6.21 removed the register number from every printed sheet — the QR
+    // carries the verification code instead — so this template asserts the
+    // label is gone rather than that a serial is present.
+    expect(html).not.toMatch(/USG No\./);
     expect(normalize(html)).toMatchFileSnapshot("__golden__/print-sidebar.html");
   });
 });

@@ -342,10 +342,13 @@ export async function updateSettings(patch: SettingsUpdate) {
   } else if (typeof patch.usgShowMachine === "boolean") {
     data.usgShowMachine = patch.usgShowMachine;
   }
-  // Print style: "classic" | "premium" | "premium_sidebar" | "preprinted"
+  // Print style: "classic" | "premium" | "premium_sidebar" | "preprinted".
+  // "couture" was this template's original name (ported from the ERP) and was
+  // still accepted here long after nothing rendered it — a row holding it just
+  // fell through to premium, so dropping it from the list changes no output.
   if (typeof patch.usgPrintStyle === "string") {
     const style = patch.usgPrintStyle.trim();
-    data.usgPrintStyle = (["classic", "premium_sidebar", "couture", "preprinted"].includes(style))
+    data.usgPrintStyle = (["classic", "premium", "premium_sidebar", "preprinted"].includes(style))
       ? style
       : "premium";
   }

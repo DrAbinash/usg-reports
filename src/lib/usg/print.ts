@@ -1354,7 +1354,6 @@ body {
   padding: 3mm 10mm;
   text-transform: uppercase;
 }
-.footer-band .serial { float: left; color: #64748b; font-family: monospace; }
 
 /* ── Provisional watermark ──────────────────────────────────────────────── */
 .watermark {
@@ -1490,8 +1489,7 @@ function buildSidebarReportHtml(
     ? `<img class="sig-img" src="${esc(safeSig)}" alt="signature" />`
     : "";
 
-  // Footer
-  const serialNo = patient.serial ?? "";
+  // Footer — no register number (v6.21). The QR carries the verification code.
   // Same rule as the single-column letterhead: the QR belongs on the signature
   // line, not in the footer band, and Settings can switch it off entirely.
   const showQr = settings.usgPrintQrEnabled !== false && !!qr?.dataUrl;
@@ -1581,7 +1579,6 @@ ${PRINT_CSS}</head><body>
 
   <!-- Footer band -->
   <div class="footer-band">
-    ${serialNo ? `<div class="serial">${serialNo}</div>` : ""}
     ${showThanks ? esc(footerMsg) : ""}
   </div>
 </div>

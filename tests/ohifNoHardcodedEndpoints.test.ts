@@ -134,12 +134,12 @@ describe("OHIF settings are the single source", () => {
   });
 });
 
-// ── The tailnet OHIF address is deployment configuration, not code ─────
+// ── The clinic's HTTPS viewer origin is deployment configuration, not code ──
 //
-// Remote reading needs an HTTPS viewer, and the clinic's tailnet address is a
-// fact about one deployment. It belongs in docker-compose.yml (one place,
-// overridable from .env) — never in a launch path, where a second copy would
-// silently win over a saved Settings value the next time the viewer moves.
+// An https studio page can only frame an https viewer, and which origin that is
+// stays a fact about one deployment. It belongs in docker-compose.yml (one
+// place, overridable from .env) — never in a launch path, where a second copy
+// would silently win over a saved Settings value the next time the viewer moves.
 
 /** Every file under a source directory (no build output, no node_modules). */
 function walk(dir: string): string[] {
@@ -149,16 +149,16 @@ function walk(dir: string): string[] {
   });
 }
 
-describe("the tailnet OHIF endpoint stays in deployment configuration", () => {
+describe("the canonical OHIF endpoint stays in deployment configuration", () => {
   const compose = readFileSync("docker-compose.yml", "utf8");
-  const defaulted = /OHIF_TAILSCALE_URL=\$\{OHIF_TAILSCALE_URL:-([^}]*)\}/.exec(compose);
+  const defaulted = /OHIF_CUSTOM_URL=\$\{OHIF_CUSTOM_URL:-([^}]*)\}/.exec(compose);
 
-  it("ships an HTTPS .ts.net default, so remote reading needs no code edit", () => {
-    expect(defaulted, "docker-compose.yml must give OHIF_TAILSCALE_URL a default").toBeTruthy();
-    expect(defaulted![1]).toMatch(/^https:\/\/[^\s}]+\.ts\.net$/);
+  it("ships an HTTPS origin, so AUTO has a route an https page may embed", () => {
+    expect(defaulted, "docker-compose.yml must give OHIF_CUSTOM_URL a default").toBeTruthy();
+    expect(defaulted![1]).toMatch(/^https:\/\/[^\s}]+$/);
   });
 
-  it("does not duplicate that hostname anywhere in application source", () => {
+  it("does not duplicate that origin anywhere in application source", () => {
     // Read out of compose rather than restated here, so this guard cannot
     // itself become the second copy it is checking for.
     const host = new URL(defaulted![1]).hostname;
@@ -166,9 +166,24 @@ describe("the tailnet OHIF endpoint stays in deployment configuration", () => {
     expect(hits).toEqual([]);
   });
 
-  it("leaves the LAN and same-origin routes unguessed — only Tailscale is defaulted", () => {
+  it("ships no tailnet default, because a .ts.net name resolves only in the tailnet", () => {
+    // The regression: an unreachable-by-DNS hostname as the only HTTPS
+    // candidate left AUTO with no embeddable route, so the iframe went blank.
+    const ts = /OHIF_TAILSCALE_URL=\$\{OHIF_TAILSCALE_URL:-([^}]*)\}/.exec(compose);
+    expect(ts, "OHIF_TAILSCALE_URL must stay declared").toBeTruthy();
+    expect(ts![1]).toBe("");
+    expect(compose).not.toContain("tail7005c0");
+  });
+
+  it("prefers the canonical origin over the tailnet in AUTO order", () => {
+    // AUTO walks LAN → custom → Tailscale, so a saved canonical HTTPS endpoint
+    // wins without the studio ever touching the tailnet.
+    const resolver = readFileSync("src/lib/usg/ohifResolver.ts", "utf8");
+    expect(resolver).toMatch(/\[\s*"lan",\s*"custom",\s*"tailscale"\s*\]/);
+  });
+
+  it("leaves the LAN route derived from the clinic host, not a literal", () => {
     expect(compose).toMatch(/OHIF_LAN_URL=\$\{OHIF_LAN_URL:-\}/);
-    expect(compose).toMatch(/OHIF_CUSTOM_URL=\$\{OHIF_CUSTOM_URL:-\}/);
   });
 
   it("keeps a saved Settings value above that deployment default", () => {

@@ -389,11 +389,13 @@ describe("Study switching into the new families", () => {
 describe("Print engine v2", () => {
   const resolved = resolve(withPathology("kub", "ureters", "ureter-calculus-distal"), lookupAll, "technique line");
 
-  test("premium (default) keeps the gradient letterhead and adds the referral line + serial", () => {
+  test("premium (default) keeps the gradient letterhead and the referral line", () => {
     const html = buildUsgReportHtml(SETTINGS, { ...patient, serial: "USG-00AB12" }, resolved);
     expect(html).toContain("linear-gradient");
     expect(html).toContain("Thanks For Your Referral.");
-    expect(html).toContain("USG-00AB12");
+    // v6.21 took the register number off the single-column sheet entirely — the
+    // QR carries it and /verify resolves it, so the sheet no longer prints it.
+    expect(html).not.toContain("USG-00AB12");
     expect(html).toContain("USG KUB");
   });
 

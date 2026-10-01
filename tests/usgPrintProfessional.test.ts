@@ -161,13 +161,11 @@ describe("register number left the header", () => {
     expect(side).toContain(PATIENT.serial);
   });
 
-  test("…and the premium footer still carries it for the register log", () => {
-    const html = buildUsgReportHtml(BASE as never, PATIENT, wa(), [], null);
-    const footer = html.slice(html.indexOf('class="footer"'));
-    expect(footer).toContain(PATIENT.serial);
-    // A draft with no serial yet prints no stray separator.
-    const draft = buildUsgReportHtml(BASE as never, { ...PATIENT, serial: undefined }, wa(), [], null);
-    expect(draft.slice(draft.indexOf('class="footer"'))).not.toMatch(/·\s*<\/span>/);
+  test("…and the single-column sheet carries no serial at all", () => {
+    const html = buildUsgReportHtml(BASE as never, PATIENT, wa(), [], QR);
+    expect(html).not.toContain(PATIENT.serial);
+    // The QR still carries the code, so verification is unaffected.
+    expect(html).toContain('class="qr"');
   });
 });
 

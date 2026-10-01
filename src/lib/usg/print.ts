@@ -996,10 +996,8 @@ export function buildUsgReportHtml(
     </div>`
     : "";
 
-  // Off the demography strip (v6.21) but still on the sheet: the footer carries
-  // it, so a printed USG keeps its register number for the PC-PNDT log.
-  const serial = patient.serial?.trim();
-
+  // v6.21 — the register number deliberately does not print on the single-column
+  // sheet. The QR still encodes it and /verify still resolves it.
   const chromeHtml = preview
     ? `<div class="demo-strip" data-testid="letterpad-demo-strip">
     <span><span class="lbl">Name</span><span class="n">${esc(patient.name || "—")}</span></span>
@@ -1110,7 +1108,7 @@ ${watermark}
 
   <div class="footer">
     <span>${esc(clinicFooterText(settings))}</span>
-    <span>${esc(clinicDisplayName(settings))}${serial ? ` · ${esc(serial)}` : ""}</span>
+    <span>${esc(clinicDisplayName(settings))}</span>
   </div>
   </div>
 

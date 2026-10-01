@@ -23,16 +23,15 @@ body {
   padding: 8mm 10mm 4mm 10mm;
 }
 .top-bar .logo-block { display: flex; align-items: center; gap: 8px; }
-.top-bar .logo-block img { height: 14mm; width: auto; }
+.top-bar .logo-block img { height: var(--logo-h, 14mm); width: auto; max-width: var(--logo-max-w, 62mm); object-fit: contain; }
 .top-bar .logo-block .logo-fallback {
-  height: 14mm; width: 14mm; border-radius: 50%;
+  height: var(--logo-h, 14mm); width: var(--logo-h, 14mm); border-radius: 50%;
   background: linear-gradient(135deg, #0ea5e9, #6366f1);
   color: #fff; font-size: 8pt; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
 }
-.top-bar .logo-block .hospital-name { font-size: 15pt; font-weight: 800; color: #1e3a5f; line-height: 1.1; }
 .top-bar .logo-block .tagline { font-size: 8pt; color: #64748b; font-style: italic; }
-.top-bar .contact-block { text-align: right; font-size: 8.5pt; color: #475569; line-height: 1.4; }
+.top-bar .contact-block { text-align: right; font-size: var(--addr-fs, 8.5pt); color: #475569; line-height: 1.4; }
 .top-bar .contact-block .line { display: flex; align-items: center; gap: 4px; justify-content: flex-end; }
 .top-bar.center .logo-block { order: 2; }
 .top-bar.center .contact-block { order: 1; }
@@ -217,7 +216,7 @@ body {
 .signature-block .sig-qual { font-size: 8pt; color: #64748b; }
 .signature-block .sig-reg { font-size: 7.5pt; color: #94a3b8; }
 .signature-block .sig-img {
-  max-height: 12mm; width: auto;
+  max-height: var(--sig-h, 12mm); width: auto;
   margin-bottom: -2mm;
 }
 
@@ -261,6 +260,10 @@ body {
   --body-fs: 10pt;
   --body-lh: 1.4;
   --sidebar-w: 55mm;
+  --logo-h: 14mm;
+  --logo-max-w: 63mm;
+  --addr-fs: 8.5pt;
+  --sig-h: 12mm;
 }
 </style>
 <style id="usg-justify-kill">p, li, td, th, div, span, .organ-body, .ob-body, .pbody { text-align: left !important; hyphens: none !important; word-spacing: normal !important; letter-spacing: normal !important; }</style><style id="usg-study-center">.study,.study .name,.machine{text-align:center !important;}.thanks{text-align:left !important;}</style><style id="usg-sig-fit">.signature-block,.sig-wrap,.sig-pin{position:static !important;bottom:auto !important;right:auto !important;transform:none !important;}</style></head><body>

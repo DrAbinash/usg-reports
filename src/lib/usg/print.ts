@@ -507,11 +507,11 @@ const CLASSIC_CSS = `
   .sig .name { font-weight: 700; font-size: 11pt; }
   .sig .sub { font-size: 9pt; font-weight: 600; }
 
-  .declaration { margin-top: 10px; font-size: 8pt; font-weight: 600; border: 1px solid #000; padding: 6px 10px; text-align: left; }
+  .declaration { margin-top: 7px; font-size: 7pt; font-weight: 600; border: 1px solid #000; border-radius: 3px; padding: 3px 9px; text-align: left; line-height: 1.25; }
 
-  .pcpndt { margin-top: 10px; border: 1.5px solid #000; padding: 8px 12px; page-break-inside: avoid; }
-  .pcpndt-title { font-size: 9pt; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; margin-bottom: 4px; }
-  .pcpndt p { font-size: 8.5pt; font-weight: 600; text-align: left; line-height: 1.55; }
+  .pcpndt { margin-top: 7px; border: 1.2px solid #000; border-radius: 4px; padding: 3px 9px; page-break-inside: avoid; line-height: 1.2; }
+  .pcpndt-title { font-size: 7.5pt; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 1px; }
+  .pcpndt p { font-size: 7.5pt; font-weight: 600; text-align: left; line-height: 1.25; }
 
   .footer { margin-top: 10px; border-top: 1.5px solid #000; padding-top: 5px; font-size: 8pt; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
   /* Verification QR rides the signature row, pinned to its left edge. */
@@ -1073,11 +1073,6 @@ export function buildUsgReportHtml(
 .strip-row .label { font-size: 8.5pt; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
 .strip-row .value { font-size: 9.5pt; font-weight: 500; text-align: right; }
 .strip-row .field:first-child .value { text-align: left; }
-
-/* Honour size dials */
-.top-bar .logo-block img { height: var(--logo-h, 14mm); }
-.top-bar .logo-block .hospital-name { font-size: var(--name-fs, 15pt); }
-.top-bar .contact-block { font-size: var(--addr-fs, 8.5pt); }
 </style>${PRINT_CSS}</head>
 <body>
 ${watermark}
@@ -1145,16 +1140,15 @@ body {
   padding: 8mm 10mm 4mm 10mm;
 }
 .top-bar .logo-block { display: flex; align-items: center; gap: 8px; }
-.top-bar .logo-block img { height: 14mm; width: auto; }
+.top-bar .logo-block img { height: var(--logo-h, 14mm); width: auto; max-width: var(--logo-max-w, 62mm); object-fit: contain; }
 .top-bar .logo-block .logo-fallback {
-  height: 14mm; width: 14mm; border-radius: 50%;
+  height: var(--logo-h, 14mm); width: var(--logo-h, 14mm); border-radius: 50%;
   background: linear-gradient(135deg, #0ea5e9, #6366f1);
   color: #fff; font-size: 8pt; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
 }
-.top-bar .logo-block .hospital-name { font-size: 15pt; font-weight: 800; color: #1e3a5f; line-height: 1.1; }
 .top-bar .logo-block .tagline { font-size: 8pt; color: #64748b; font-style: italic; }
-.top-bar .contact-block { text-align: right; font-size: 8.5pt; color: #475569; line-height: 1.4; }
+.top-bar .contact-block { text-align: right; font-size: var(--addr-fs, 8.5pt); color: #475569; line-height: 1.4; }
 .top-bar .contact-block .line { display: flex; align-items: center; gap: 4px; justify-content: flex-end; }
 .top-bar.center .logo-block { order: 2; }
 .top-bar.center .contact-block { order: 1; }
@@ -1339,7 +1333,7 @@ body {
 .signature-block .sig-qual { font-size: 8pt; color: #64748b; }
 .signature-block .sig-reg { font-size: 7.5pt; color: #94a3b8; }
 .signature-block .sig-img {
-  max-height: 12mm; width: auto;
+  max-height: var(--sig-h, 12mm); width: auto;
   margin-bottom: -2mm;
 }
 
@@ -1506,6 +1500,14 @@ function buildSidebarReportHtml(
   // Top bar class based on logo/address positions
   const topBarClass = logoPos === "center" ? "center" : logoPos === "right" ? "right" : "";
 
+  // The sidebar template hard-coded its own letterhead sizes, so the Settings
+  // dials never reached it. Its bases already equal the schema defaults
+  // (14mm logo · 8.5pt address), so those apply directly; the signature base is
+  // 12mm against a 26mm default, so that one stays a delta from its own base.
+  const logoMm = clampNum(settings.usgLogoSizeMm, 8, 30, 14);
+  const addrPt = clampNum(settings.usgAddressSizePt, 6, 12, 8.5);
+  const sigMm = Math.max(6, Math.round(12 + (clampNum(settings.usgSignatureSizeMm, 12, 40, 26) - 26)));
+
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>${esc(resolved.title || "USG Report")}</title>
 <style>
@@ -1515,6 +1517,10 @@ ${SIDEBAR_CSS}
   --body-fs: ${settings.usgPrintFontSize ?? 10}pt;
   --body-lh: ${settings.usgPrintLineHeight ?? 1.45};
   --sidebar-w: ${images.length > 2 ? "65mm" : "55mm"};
+  --logo-h: ${logoMm}mm;
+  --logo-max-w: ${Math.min(70, Math.round(logoMm * 4.5))}mm;
+  --addr-fs: ${addrPt}pt;
+  --sig-h: ${sigMm}mm;
 }
 </style>
 ${PRINT_CSS}</head><body>

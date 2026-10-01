@@ -615,7 +615,7 @@ export function SettingsView() {
           <Field label="Declaration (optional)" hint="Boxed legal line under the signature, e.g. the PC-PNDT declaration. Leave blank to omit.">
             <Textarea value={s.usgDeclarationLine ?? ""} onChange={(e) => set("usgDeclarationLine", e.target.value)} rows={2} className="text-[12px]" />
           </Field>
-          <Field label="Print style" hint="Premium = digital gradient letterhead (logo fills the white slot; address stacked right). Classic = plain B/W. Premium Sidebar = two-column with images. Pre-printed letterpad = omit digital masthead and reserve top space for your physical A4 letterpad.">
+          <Field label="Print style" hint={'Premium = digital gradient letterhead (logo fills the white slot; address stacked right). Simple = plain B/W — this is the style the stored value and the code still call "classic". Premium Sidebar = two-column with images. Pre-printed letterpad = omit digital masthead and reserve top space for your physical A4 letterpad.'}>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
@@ -640,7 +640,7 @@ export function SettingsView() {
                     : "border-border bg-panel text-muted-foreground hover:border-rose-200",
                 )}
               >
-                Classic
+                Simple
                 <span className="block text-[10px] font-normal text-faint">Plain B/W serif · ink saver</span>
               </button>
               <button

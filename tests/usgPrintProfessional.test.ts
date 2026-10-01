@@ -291,6 +291,60 @@ describe("sidebar template fixes", () => {
   });
 });
 
+describe("every template gets the same polish", () => {
+  test("classic carries the QR on its signature row and the thinned bands", () => {
+    const html = buildUsgReportHtml({ ...BASE, usgPrintStyle: "classic" } as never, PATIENT, resolve(initialState("ob"), lookup, "Antenatal scan."), [], QR);
+    const sig = html.slice(html.indexOf('class="sig-block"'), html.indexOf('class="footer"'));
+    expect(sig).toContain('class="qr"');
+    expect(sig).toContain("scan to verify");
+    expect(html).toContain(".pcpndt p { font-size: 7.5pt");
+    expect(html).toContain(".declaration { margin-top: 7px; font-size: 7pt");
+  });
+
+  test("classic keeps print-color-adjust so the logo plate is not a grey box", () => {
+    const html = buildUsgReportHtml({ ...BASE, usgPrintStyle: "classic" } as never, PATIENT, wa(), [], null);
+    expect(html).toMatch(/\* \{[^}]*print-color-adjust: exact/);
+  });
+
+  test("the sidebar template honours the logo, address and signature dials", () => {
+    const at = (over: Record<string, number>) => buildUsgReportHtml(
+      { ...BASE, usgPrintStyle: "premium_sidebar", ...over } as never,
+      PATIENT,
+      wa(),
+      [],
+      null,
+    );
+    const dflt = at({});
+    // Bases equal the schema defaults, so an untouched row renders unchanged.
+    expect(dflt).toContain("--logo-h: 14mm");
+    expect(dflt).toContain("--addr-fs: 8.5pt");
+    expect(dflt).toContain("--sig-h: 12mm");
+    expect(at({ usgLogoSizeMm: 24 })).toContain("--logo-h: 24mm");
+    expect(at({ usgAddressSizePt: 11 })).toContain("--addr-fs: 11pt");
+    // Signature is a delta from the template's own 12mm base, not the raw dial.
+    expect(at({ usgSignatureSizeMm: 36 })).toContain("--sig-h: 22mm");
+  });
+
+  test("the sidebar CSS consumes those vars instead of hard-coded sizes", () => {
+    const html = buildUsgReportHtml(
+      { ...BASE, usgPrintStyle: "premium_sidebar" } as never,
+      PATIENT,
+      wa(),
+      [],
+      null,
+    );
+    expect(html).toContain(".top-bar .logo-block img { height: var(--logo-h, 14mm)");
+    expect(html).toContain("max-height: var(--sig-h, 12mm)");
+    // The wordmark element is gone from this template, so its rule went with it.
+    expect(html).not.toContain(".hospital-name");
+  });
+
+  test("the single-column sheet no longer carries rules for classes only the sidebar has", () => {
+    const html = buildUsgReportHtml(BASE as never, PATIENT, wa(), [], null);
+    expect(html).not.toContain(".top-bar .logo-block img");
+  });
+});
+
 describe("QR toggle persists like the other print checkboxes", () => {
   test("string and boolean forms both store, and it defaults true on a fresh row", async () => {
     const fresh = await getSettings();

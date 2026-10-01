@@ -306,6 +306,13 @@ describe("every template gets the same polish", () => {
     expect(html).toMatch(/\* \{[^}]*print-color-adjust: exact/);
   });
 
+  test("classic stacks the masthead contact lines instead of running them on", () => {
+    const html = buildUsgReportHtml({ ...BASE, usgPrintStyle: "classic" } as never, PATIENT, wa(), [], null);
+    expect(html).toContain(".masthead-addr .line { display: block; }");
+    // The four contact spans are still emitted as separate lines of markup.
+    expect(html).toMatch(/<span class="line">Subhash Chowk[^<]*<\/span><span class="line">/);
+  });
+
   test("the sidebar template honours the logo, address and signature dials", () => {
     const at = (over: Record<string, number>) => buildUsgReportHtml(
       { ...BASE, usgPrintStyle: "premium_sidebar", ...over } as never,

@@ -451,6 +451,9 @@ const CLASSIC_CSS = `
   .masthead-mid { text-align: center; }
   .masthead .hospital { font-size: 17pt; font-weight: 700; letter-spacing: 2px; line-height: 1.2; text-transform: uppercase; }
   .masthead-addr { text-align: center; max-width: none; margin: 3px auto 0; font-size: 9pt; opacity: 1; }
+  /* Without this the contact spans concatenate into one run-on line — premium
+     has the rule, classic never did. */
+  .masthead-addr .line { display: block; }
   .masthead .brand { display: none; }
   .letterpad-reserve { height: 38mm; }
 

@@ -1090,18 +1090,18 @@ export function SettingsView() {
             </Field>
 
             <Field
-              label="Tailscale endpoint"
-              hint="Outside-hospital address over your tailnet, e.g. https://ohif-viewer.<tailnet>.ts.net. Left blank it is never guessed — AUTO simply skips it. Needs the OHIF_TAILSCALE_URL environment value or a saved URL."
+              label="Canonical endpoint"
+              hint="The stable HTTPS front door for the viewer — the same address CARE ERP opens, e.g. https://ohif.yourdomain.com. This is the route an https studio page can embed, and AUTO uses it as soon as the LAN viewer proves unembeddable. A path beginning with / is proxied same-origin by our own web server instead (needs the /ohif Caddy route and OHIF built with PUBLIC_URL=/ohif). Set OHIF_CUSTOM_URL, or use this field."
             >
-              <Input value={s.ohifTailscaleUrl ?? ""} onChange={(e) => set("ohifTailscaleUrl", e.target.value)} placeholder="https://….<tailnet>.ts.net"
+              <Input value={s.ohifCustomUrl ?? ""} onChange={(e) => set("ohifCustomUrl", e.target.value)} placeholder="https://ohif.example  ·  /ohif"
                 className="h-9 border-border bg-panel text-[12.5px] font-mono" />
             </Field>
 
             <Field
-              label="Custom / canonical endpoint (optional)"
-              hint="A stable front door for the viewer. A path beginning with / is proxied same-origin by our own web server, which is how an HTTPS studio shows an HTTP-only LAN viewer — the browser blocks that iframe otherwise. Set OHIF_CUSTOM_URL, or the /ohif route on Caddy, then use this field."
+              label="Tailscale endpoint (optional)"
+              hint="A tailnet-only address, e.g. https://ohif-viewer.<tailnet>.ts.net. It resolves only for machines inside the tailnet, so the studio server and any browser without a Tailscale client both report it unreachable — prefer the canonical endpoint above unless every reading machine is a member. Left blank it is never guessed; AUTO simply skips it."
             >
-              <Input value={s.ohifCustomUrl ?? ""} onChange={(e) => set("ohifCustomUrl", e.target.value)} placeholder="/ohif  ·  https://ohif.example"
+              <Input value={s.ohifTailscaleUrl ?? ""} onChange={(e) => set("ohifTailscaleUrl", e.target.value)} placeholder="https://….<tailnet>.ts.net"
                 className="h-9 border-border bg-panel text-[12.5px] font-mono" />
             </Field>
 

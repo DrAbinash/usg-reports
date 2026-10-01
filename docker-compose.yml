@@ -32,15 +32,23 @@ services:
       # -> Integrations -> OHIF Viewer is the source of truth and a saved
       # value always wins, so endpoints never require a code change.
       - OHIF_LAN_URL=${OHIF_LAN_URL:-}
-      # The clinic's tailnet OHIF, served over HTTPS by the care-pacs
-      # `tailscale-ohif` sidecar (tailscale serve → 443 → http://ohif:80).
-      # HTTPS is what makes it embeddable from an HTTPS studio page; the plain
-      # http://<tailnet-IP>:3010 form is not, so it is never the default here.
-      # Override in .env to move the viewer — no code change is needed.
-      - OHIF_TAILSCALE_URL=${OHIF_TAILSCALE_URL:-https://ohif-viewer.tail7005c0.ts.net}
-      # Canonical/same-origin endpoint, e.g. /ohif when the Caddy proxy route is
-      # enabled (see Caddyfile). Never guessed when unset.
-      - OHIF_CUSTOM_URL=${OHIF_CUSTOM_URL:-}
+      # The clinic's canonical HTTPS viewer origin — the same front door CARE ERP
+      # embeds (see care-on-synology1 networkDefaults.ts resolveOhifBrowserBaseUrl).
+      # It is a hostname-level reverse proxy, so OHIF keeps its root-path build
+      # (no PUBLIC_URL=/ohif rebuild) and its relative /dicom-web data source
+      # resolves same-origin over TLS: one origin serves the app and the pixels,
+      # which is what makes it embeddable in an https studio page.
+      # Override in .env to move the viewer — no code change is needed. A
+      # same-origin path (e.g. /ohif) is valid here too, when the Caddy proxy
+      # route is enabled (see Caddyfile) and OHIF is rebuilt with PUBLIC_URL.
+      - OHIF_CUSTOM_URL=${OHIF_CUSTOM_URL:-https://ohif.caredeoghar.com}
+      # The tailnet OHIF, served by the care-pacs `tailscale-ohif` sidecar
+      # (tailscale serve → 443 → http://ohif:80). Shipped empty on purpose: a
+      # .ts.net name only resolves inside the tailnet (MagicDNS), so it answers
+      # for neither the studio container nor a browser that has no Tailscale
+      # client, and AUTO then finds no HTTPS route. Set it here, or in Settings,
+      # only on machines that are actually tailnet members.
+      - OHIF_TAILSCALE_URL=${OHIF_TAILSCALE_URL:-}
       # auto | lan | tailscale | custom  (change it in Settings to persist it)
       - OHIF_MODE=${OHIF_MODE:-auto}
       # AUTO probe budget: a dead LAN must never stall the reporting workspace.

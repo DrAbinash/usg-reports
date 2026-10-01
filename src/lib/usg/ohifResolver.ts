@@ -14,7 +14,7 @@
  *
  * The browser that asked may pass its own scheme (pageProtocol). AUTO then
  * keeps walking past a candidate that is reachable but which that page cannot
- * frame — an https page and a plain-http LAN viewer — so the HTTPS Tailscale
+ * frame — an https page and a plain-http LAN viewer — so the HTTPS canonical
  * endpoint is still found. Reachability is still measured only here, on the
  * server; the scheme is not a measurement, just a rule the browser already
  * enforces.
@@ -279,8 +279,8 @@ async function probeOne(
  *                      correct for the server, wrong for a browser, because an
  *                      https page cannot frame a plain-http viewer. When this
  *                      is https the walk keeps going past a reachable-but-
- *                      unembeddable endpoint so an HTTPS route (the ts.net
- *                      Tailscale viewer, or a same-origin path) is still found,
+ *                      unembeddable endpoint so an HTTPS route (the clinic's
+ *                      canonical viewer, or a same-origin path) is still found,
  *                      and the skipped one is reported as blocked rather than
  *                      as a success. Left undefined, reachability alone decides
  *                      — the pre-existing server-only contract.
@@ -353,7 +353,7 @@ export async function resolveOhifStatus(
     } else if (blockedByPage) {
       reason =
         `${LABELS[blockedByPage.key]} is reachable but cannot be embedded in an https page — it is plain http. ` +
-        `Point Settings → Integrations → OHIF Viewer at an HTTPS route (the Tailscale ts.net address, or a same-origin path).`;
+        `Point Settings → Integrations → OHIF Viewer at an HTTPS endpoint (the clinic's canonical viewer address, the same one CARE ERP uses, or a same-origin path).`;
       if (failures.length) reason += ` (${failures.join("; ")})`;
     } else if (failures.length) {
       reason = `no configured viewer reachable (${failures.join("; ")})`;

@@ -6,7 +6,7 @@ import { loadAllPathologies, loadNormalOverrides } from "@/lib/usg/server";
 import { buildUsgReportHtml, formatUsgSerial, toUsgPrintSettings } from "@/lib/usg/print";
 import { audit } from "@/lib/usg/audit";
 import { payloadInputFor, qrDataUrlFor } from "@/lib/usg/qrServer";
-import { finalizeReport } from "@/lib/usg/careClient";
+import { careFinalizeEnabled, finalizeReport } from "@/lib/usg/careClient";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -107,42 +107,52 @@ export async function POST(req: Request, ctx: Ctx) {
   // (REPORT_FINAL + patient_reports + billing link) right away. Failures are
   // non-blocking — the sync route retries every run until the ERP accepts,
   // surfacing its own message (e.g. PCPNDT Form F 409) in the worklist banner.
-  let careSync: "none" | "sent" | "queued" = "none";
+  //
+  // CARE_FINALIZE_ENABLED=0 skips the ERP call entirely (see careClient): the
+  // order is still marked REPORTED locally, which is workflow state, not a
+  // claim about the ERP. careSyncedAt is left NULL on purpose — that column
+  // means "the ERP accepted our finalize" and must never be stamped without
+  // an acceptance.
+  let careSync: "none" | "sent" | "queued" | "disabled" = "none";
   const order = await db.usgCareOrder.findFirst({ where: { reportId: id } });
   if (order) {
     await db.usgCareOrder.update({ where: { id: order.id }, data: { status: "REPORTED" } });
-    const r = await finalizeReport({
-      accessionNumber: order.accessionNumber,
-      worklistId: order.careWorklistId,
-      reportText: {
-        technique: updated.technique ?? "",
-        findings: updated.findings ?? "",
-        impression: updated.impression ?? "",
-        recommendation: "",
-      },
-      radiologistName: settings.usgDoctorName || "USG Studio",
-      radiologistRegNumber: settings.usgDoctorRegNo || undefined,
-      finalizedAt: (updated.finalizedAt ?? new Date()).toISOString(),
-    });
-    if (r.ok) {
-      careSync = "sent";
-      await db.usgCareOrder.update({ where: { id: order.id }, data: { careSyncedAt: new Date() } });
-      await audit({
-        action: "worklist.careSync",
-        reportId: id,
-        serialNo,
-        patientName: updated.patientName,
-        detail: `ERP accepted finalize for ${order.accessionNumber ?? `WL ${order.careWorklistId ?? "?"}`}`,
-      });
+    if (!careFinalizeEnabled()) {
+      careSync = "disabled";
     } else {
-      careSync = "queued";
-      await audit({
-        action: "worklist.careSyncQueued",
-        reportId: id,
-        serialNo,
-        patientName: updated.patientName,
-        detail: `ERP finalize queued (${r.error}) — retries on every worklist sync`,
+      const r = await finalizeReport({
+        accessionNumber: order.accessionNumber,
+        worklistId: order.careWorklistId,
+        reportText: {
+          technique: updated.technique ?? "",
+          findings: updated.findings ?? "",
+          impression: updated.impression ?? "",
+          recommendation: "",
+        },
+        radiologistName: settings.usgDoctorName || "USG Studio",
+        radiologistRegNumber: settings.usgDoctorRegNo || undefined,
+        finalizedAt: (updated.finalizedAt ?? new Date()).toISOString(),
       });
+      if (r.ok) {
+        careSync = "sent";
+        await db.usgCareOrder.update({ where: { id: order.id }, data: { careSyncedAt: new Date() } });
+        await audit({
+          action: "worklist.careSync",
+          reportId: id,
+          serialNo,
+          patientName: updated.patientName,
+          detail: `ERP accepted finalize for ${order.accessionNumber ?? `WL ${order.careWorklistId ?? "?"}`}`,
+        });
+      } else {
+        careSync = "queued";
+        await audit({
+          action: "worklist.careSyncQueued",
+          reportId: id,
+          serialNo,
+          patientName: updated.patientName,
+          detail: `ERP finalize queued (${r.error}) — retries on every worklist sync`,
+        });
+      }
     }
   }
 

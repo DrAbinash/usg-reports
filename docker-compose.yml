@@ -24,6 +24,21 @@ services:
       - CLINIC_LAN_HOST=${CLINIC_LAN_HOST:-}
       - CARE_API_BASE=${CARE_API_BASE:-}
       - CARE_API_KEY=${CARE_API_KEY:-}
+
+      # CARE write-back — OFF by design in this deployment (2026-10-02).
+      # The Studio is the record of truth for USG reports: same-day printing,
+      # no ERP copy. The ERP's /finalize refuses any worklist row that is not
+      # match_score GREEN / APPROVED, and a study ingested from Orthanc cannot
+      # reach GREEN (accession arrives blank, and the modality-minted
+      # PatientID is not the patient's UHID) — so every attempt was rejected
+      # 409 and retried forever. Set to 1 to send finalizes again; do NOT
+      # relax the ERP gate instead.
+      - CARE_FINALIZE_ENABLED=${CARE_FINALIZE_ENABLED:-0}
+      # Read-only paid/unpaid badge refresh, keyed by accession. Pointless for
+      # blank-accession rows, so it is off too. Reads that DO matter —
+      # worklist?status=all and the Orthanc study pull — stay enabled.
+      - CARE_BILLING_POLL_ENABLED=${CARE_BILLING_POLL_ENABLED:-0}
+
       - ORTHANC_URL=${ORTHANC_URL:-}
       - ORTHANC_USERNAME=${ORTHANC_USERNAME:-}
       - ORTHANC_PASSWORD=${ORTHANC_PASSWORD:-}
@@ -52,6 +67,12 @@ services:
 
     volumes:
       - ./data/db:/app/data/db
+      # The nightly full-clinic backup (Settings → Data "Automatic nightly
+      # backup", src/lib/usg/backupServer.ts) writes data/backups/usg-auto-*.json
+      # under /app. Without this mount those files live only in the container's
+      # writable layer and are destroyed by `docker compose up --build`, so the
+      # rotation looks healthy on screen and keeps nothing.
+      - ./data/backups:/app/data/backups
 
     deploy:
       resources:

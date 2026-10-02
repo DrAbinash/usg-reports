@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { requireSession, getActiveClinicId } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
-import { fetchBillingStatus, fetchWorklist, finalizeReport } from "@/lib/usg/careClient";
+import { careBillingPollEnabled, careFinalizeEnabled, fetchBillingStatus, fetchWorklist, finalizeReport } from "@/lib/usg/careClient";
 import { listRecentUltrasoundStudies, listStudies } from "@/lib/usg/orthancClient";
 import {
   attachOrthancStudies,
@@ -128,23 +128,25 @@ export async function POST(req: NextRequest) {
   // 4a. Billing badge refresh for open rows (accession-keyed — blank
   // accessions have no billing join on the ERP side either; fail-soft).
   if (careOk) {
-    const open = await db.usgCareOrder.findMany({
-      where: { status: { in: ["PENDING", "REPORTING"] }, billingStatus: { not: null }, accessionNumber: { not: null } },
-      select: { accessionNumber: true },
-      take: 40,
-    });
-    const accessions = open.map((o) => o.accessionNumber).filter((a): a is string => !!a);
-    if (accessions.length) {
-      const r = await fetchBillingStatus(accessions);
-      if (r.ok) {
-        for (const [accession, status] of Object.entries(r.data)) {
-          await db.usgCareOrder.updateMany({
-            where: { accessionNumber: accession },
-            data: { billingStatus: status, billingUpdatedAt: new Date() },
-          });
+    if (careBillingPollEnabled()) {
+      const open = await db.usgCareOrder.findMany({
+        where: { status: { in: ["PENDING", "REPORTING"] }, billingStatus: { not: null }, accessionNumber: { not: null } },
+        select: { accessionNumber: true },
+        take: 40,
+      });
+      const accessions = open.map((o) => o.accessionNumber).filter((a): a is string => !!a);
+      if (accessions.length) {
+        const r = await fetchBillingStatus(accessions);
+        if (r.ok) {
+          for (const [accession, status] of Object.entries(r.data)) {
+            await db.usgCareOrder.updateMany({
+              where: { accessionNumber: accession },
+              data: { billingStatus: status, billingUpdatedAt: new Date() },
+            });
+          }
         }
+        // Billing failure is never the worklist's problem — no lastError.
       }
-      // Billing failure is never the worklist's problem — no lastError.
     }
 
     // v6.15 — refresh DRAFT report demographics from the bill-desk order when
@@ -178,39 +180,47 @@ export async function POST(req: NextRequest) {
     // 3b. Retry pending CARE finalizes. The ERP resolves the order by
     // worklistId first (accession second), so blank-accession orders
     // finalize correctly; we always send both when we have them.
-    const pending = await db.usgCareOrder.findMany({
-      where: { status: "REPORTED", careSyncedAt: null, reportId: { not: null } },
-      take: 10,
-    });
-    for (const p of pending) {
-      const rep = p.reportId ? await db.usgReport.findUnique({ where: { id: p.reportId } }) : null;
-      if (!rep) continue;
-      const r = await finalizeReport({
-        accessionNumber: p.accessionNumber,
-        worklistId: p.careWorklistId,
-        reportText: {
-          technique: rep.technique ?? "",
-          findings: rep.findings ?? "",
-          impression: rep.impression ?? "",
-          recommendation: "",
-        },
-        radiologistName: s.usgDoctorName || "USG Studio",
-        radiologistRegNumber: s.usgDoctorRegNo || undefined,
-        finalizedAt: (rep.finalizedAt ?? new Date()).toISOString(),
+    //
+    // CARE_FINALIZE_ENABLED=0 (this deployment) skips the whole queue: the
+    // Studio is the record of truth for USG, and the ERP refuses these rows
+    // 409 because a PACS-ingested study can never reach match_score GREEN.
+    // Rows stay careSyncedAt = NULL, which with the flag off means "never
+    // sent, by policy" — it is never stamped with a fake acceptance time.
+    if (careFinalizeEnabled()) {
+      const pending = await db.usgCareOrder.findMany({
+        where: { status: "REPORTED", careSyncedAt: null, reportId: { not: null } },
+        take: 10,
       });
-      if (r.ok) {
-        await db.usgCareOrder.update({ where: { id: p.id }, data: { careSyncedAt: new Date() } });
-        await audit({
-          action: "worklist.careSync",
-          reportId: p.reportId ?? undefined,
-          patientName: p.patientName,
-          detail: `ERP accepted finalize for ${p.accessionNumber ?? `WL ${p.careWorklistId ?? "?"}`}`,
+      for (const p of pending) {
+        const rep = p.reportId ? await db.usgReport.findUnique({ where: { id: p.reportId } }) : null;
+        if (!rep) continue;
+        const r = await finalizeReport({
+          accessionNumber: p.accessionNumber,
+          worklistId: p.careWorklistId,
+          reportText: {
+            technique: rep.technique ?? "",
+            findings: rep.findings ?? "",
+            impression: rep.impression ?? "",
+            recommendation: "",
+          },
+          radiologistName: s.usgDoctorName || "USG Studio",
+          radiologistRegNumber: s.usgDoctorRegNo || undefined,
+          finalizedAt: (rep.finalizedAt ?? new Date()).toISOString(),
         });
+        if (r.ok) {
+          await db.usgCareOrder.update({ where: { id: p.id }, data: { careSyncedAt: new Date() } });
+          await audit({
+            action: "worklist.careSync",
+            reportId: p.reportId ?? undefined,
+            patientName: p.patientName,
+            detail: `ERP accepted finalize for ${p.accessionNumber ?? `WL ${p.careWorklistId ?? "?"}`}`,
+          });
+        }
       }
-    }
-    const stillPending = await db.usgCareOrder.count({ where: { clinicId, status: "REPORTED", careSyncedAt: null } });
-    if (stillPending === 0 && lastError && /finalize|pcpndt|match center/i.test(lastError)) {
-      lastError = null; // the last blocking finalize flushed
+      const stillPending = await db.usgCareOrder.count({ where: { clinicId, status: "REPORTED", careSyncedAt: null } });
+      if (stillPending === 0 && lastError && /finalize|pcpndt|match center/i.test(lastError)) {
+        lastError = null; // the last blocking finalize flushed
+      }
     }
   }
 

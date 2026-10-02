@@ -21,6 +21,40 @@ export type CareResult<T> = { ok: true; data: T } | { ok: false; error: string }
 
 const TIMEOUT_MS = 10_000;
 
+/**
+ * `0 | false | off | no` (case-insensitive) in an env var disables it.
+ * Anything else — including unset — leaves the feature enabled, so an
+ * deployment that never touches the flag behaves exactly as before.
+ */
+function envFlagDisabled(name: string): boolean {
+  return /^(0|false|off|no)$/i.test((process.env[name] ?? "").trim());
+}
+
+/**
+ * POST /finalize — the only write the Studio makes to the ERP.
+ *
+ * Disabled by policy on 2026-10-02 (CARE_FINALIZE_ENABLED=0): the Studio is
+ * the single record of truth for USG reports. The ERP refuses this call with
+ * 409 unless the worklist row is match_score GREEN or match_decision
+ * APPROVED, and a study ingested from Orthanc cannot reach GREEN — accession
+ * arrives blank and the modality-minted PatientID is not the patient's UHID,
+ * which are the only two signals weighted heavily enough to clear 75 points.
+ * Every attempt was therefore rejected and retried forever, so the write-back
+ * is cut rather than the gate relaxed.
+ */
+export function careFinalizeEnabled(): boolean {
+  return !envFlagDisabled("CARE_FINALIZE_ENABLED");
+}
+
+/**
+ * GET /billing-status — read-only paid/unpaid badge refresh, keyed by
+ * accession. Disabled with the same default because blank-accession rows have
+ * no billing join on the ERP side either.
+ */
+export function careBillingPollEnabled(): boolean {
+  return !envFlagDisabled("CARE_BILLING_POLL_ENABLED");
+}
+
 async function careFetch<T>(path: string, init?: RequestInit): Promise<CareResult<T>> {
   const s = await getSettings();
   // v6.14: only the base URL is required — the API key is optional during trial.

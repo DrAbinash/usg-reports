@@ -94,6 +94,27 @@ export function decideImport(n: NormalizedCareRow): ImportDecision {
   return { kind: "import" };
 }
 
+/**
+ * A sync watermark only means something if this Studio still holds the rows it
+ * was built from. Clearing the clinical tables while `UsgSyncState` survives
+ * leaves `lastSyncAt` pointing past every order CARE has, and the incremental
+ * pull then answers zero rows forever with HTTP 200 and no error to notice.
+ *
+ * So: no locally stored orders means no watermark. The next sync becomes a full
+ * pull and the backlog reappears on its own. `localOrders` is the count of
+ * UsgCareOrder rows — what this sync itself writes. Not patients: a UsgPatient
+ * row only appears once a report is saved, so a freshly pulled Studio would
+ * otherwise stay on the full-pull path forever.
+ */
+export function shouldPullIncrementally(opts: {
+  fullRequested: boolean;
+  hasWatermark: boolean;
+  localOrders: number;
+}): boolean {
+  if (opts.fullRequested) return false;
+  return opts.hasWatermark && opts.localOrders > 0;
+}
+
 // ── pure Orthanc matching ───────────────────────────────────────────────────
 
 export type OrthancMatch =

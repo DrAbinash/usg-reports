@@ -158,11 +158,12 @@ export type FetchWorklistOpts = {
 /**
  * Largest page the ERP will serve (its WORKLIST_INCREMENTAL_MAX_LIMIT).
  *
- * A full pull asks for `limit=`, not nothing: the ERP's legacy no-parameter
- * path is capped at 500 rows ordered by `updated_at DESC`, and Postgres sorts
- * NULLs first on DESC — so a big backlog loses rows silently, and loses the
- * newest ones first. Sending `limit=` selects the paginated path instead:
- * `ORDER BY id ASC` with a keyset cursor the loop below follows to the end.
+ * A backfill asks for `limit=` rather than for nothing. The ERP's
+ * no-parameter path is a hard 500-row cap ordered by `updated_at DESC` with
+ * no truncation flag — so a rebuild silently imports the 500 most recently
+ * touched orders and the rest of the backlog never arrives. Sending `limit=`
+ * selects the ERP's paginated path instead (`ORDER BY id ASC` plus a keyset
+ * cursor), which the loop below already follows until the backlog runs out.
  */
 const BACKFILL_PAGE_SIZE = 500;
 

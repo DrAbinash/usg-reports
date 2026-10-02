@@ -42,10 +42,10 @@ describe("worklist sync watermark gate", () => {
 });
 
 /**
- * The ERP's no-parameter legacy worklist is capped at 500 rows and ordered by
- * updated_at DESC — NULLs first in Postgres — so a backfill asked that way
- * loses rows silently. `limit=` selects the paginated path (ORDER BY id ASC
- * with a keyset cursor the client follows) instead.
+ * The ERP's no-parameter legacy worklist is a hard 500-row cap with no
+ * truncation flag, so a backfill asked that way comes back silently short.
+ * `limit=` selects the paginated path (ORDER BY id ASC with a keyset cursor
+ * the client follows) instead.
  */
 describe("worklist query path", () => {
   it("asks for the paginated path on a full/backfill pull", () => {

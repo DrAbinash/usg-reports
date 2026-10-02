@@ -151,9 +151,28 @@ export type CareWorklistItem = {
 export type FetchWorklistOpts = {
   /** ISO timestamp — return only rows updated after this (incremental sync). */
   since?: string | null;
-  /** When true, ignore `since` and pull the full worklist. */
+  /** When true, ignore `since` and pull the whole backlog, paged. */
   full?: boolean;
 };
+
+/**
+ * Largest page the ERP will serve (its WORKLIST_INCREMENTAL_MAX_LIMIT).
+ *
+ * A full pull asks for `limit=`, not nothing: the ERP's legacy no-parameter
+ * path is capped at 500 rows ordered by `updated_at DESC`, and Postgres sorts
+ * NULLs first on DESC — so a big backlog loses rows silently, and loses the
+ * newest ones first. Sending `limit=` selects the paginated path instead:
+ * `ORDER BY id ASC` with a keyset cursor the loop below follows to the end.
+ */
+const BACKFILL_PAGE_SIZE = 500;
+
+/** Pure so the path choice is testable without a network. */
+export function worklistQueryPath(opts?: FetchWorklistOpts): string {
+  let path = "/api/internal/reporting-studio/worklist?status=all";
+  if (opts?.full) return `${path}&limit=${BACKFILL_PAGE_SIZE}`;
+  if (opts?.since) path += `&since=${encodeURIComponent(opts.since)}`;
+  return path;
+}
 
 export async function fetchWorklist(opts?: FetchWorklistOpts) {
   // v6.14: fetch ALL statuses, not just pending. The ERP's ?status=pending
@@ -163,10 +182,7 @@ export async function fetchWorklist(opts?: FetchWorklistOpts) {
   // rows are frozen (never updated), PENDING rows are imported/updated.
   // v6.19: optional ?since= for incremental sync — first boot or ?full=1
   // still does a full pull.
-  let path = "/api/internal/reporting-studio/worklist?status=all";
-  if (opts?.since && !opts?.full) {
-    path += `&since=${encodeURIComponent(opts.since)}`;
-  }
+  const path = worklistQueryPath(opts);
   const r = await careFetch<any>(path);
   if (!r.ok) return r;
   // v6.21 shape-tolerant: bare array (legacy) | { rows, meta } (audit suite) |

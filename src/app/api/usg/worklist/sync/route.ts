@@ -11,7 +11,7 @@ import {
   emptySyncStats,
   importCareRows,
   importOrthancOrphans,
-  shouldPullIncrementally,
+  worklistPullMode,
 } from "@/lib/usg/careSync";
 import { audit } from "@/lib/usg/audit";
 
@@ -60,14 +60,14 @@ export async function POST(req: NextRequest) {
     const priorSync = await db.usgSyncState.findUnique({ where: { clinicId } });
     const watermark = priorSync?.lastSyncAt ?? null;
     const localOrders = await db.usgCareOrder.count({ where: { clinicId } });
-    let since: string | undefined;
-    if (shouldPullIncrementally({ fullRequested: fullSync, hasWatermark: !!watermark, localOrders })) {
-      since = new Date(watermark!.getTime() - SINCE_BUFFER_MS).toISOString();
-      incremental = true;
-    } else if (!fullSync && watermark && localOrders === 0) {
-      console.log("[sync] watermark ignored — lastSyncAt survived but this Studio holds no orders; doing a full pull");
+    const mode = worklistPullMode({ fullRequested: fullSync, hasWatermark: !!watermark, localOrders });
+    incremental = mode === "incremental";
+    if (!incremental && watermark && !fullSync) {
+      console.log("[sync] watermark ignored — lastSyncAt survived but this Studio holds no orders; backfilling");
     }
-    const r = await fetchWorklist({ since, full: fullSync });
+    const r = incremental
+      ? await fetchWorklist({ since: new Date(watermark!.getTime() - SINCE_BUFFER_MS).toISOString() })
+      : await fetchWorklist({ full: true });
     console.log('[sync] care fetch:', r.ok ? ('ok rows=' + ((r.data as any[])?.length ?? 0)) : r.error);
     if (r.ok) {
       careOk = true;

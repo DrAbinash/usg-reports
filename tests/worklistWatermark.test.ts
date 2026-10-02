@@ -1,42 +1,70 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { shouldPullIncrementally } from "../src/lib/usg/careSync";
+import { worklistPullMode } from "../src/lib/usg/careSync";
+import { worklistQueryPath } from "../src/lib/usg/careClient";
 
 /**
  * The watermark bug this guards against: the Studio's clinical tables were
  * cleared while UsgSyncState.lastSyncAt survived, so every sync asked CARE for
  * "rows updated since <recent>" and got zero — a 200 OK with an empty worklist,
- * forever. An emptied Studio must not trust a watermark.
+ * forever. An emptied Studio must not trust its watermark.
  */
 describe("worklist sync watermark gate", () => {
-  it("does a full pull on a first-ever sync (no watermark)", () => {
-    expect(
-      shouldPullIncrementally({ fullRequested: false, hasWatermark: false, localOrders: 0 }),
-    ).toBe(false);
+  it("backfills on a first-ever sync (no watermark, no orders)", () => {
+    expect(worklistPullMode({ fullRequested: false, hasWatermark: false, localOrders: 0 })).toBe(
+      "backfill",
+    );
   });
 
-  it("does a full pull with local orders but no watermark yet", () => {
-    expect(
-      shouldPullIncrementally({ fullRequested: false, hasWatermark: false, localOrders: 900 }),
-    ).toBe(false);
+  it("backfills when orders exist but no watermark has been recorded yet", () => {
+    expect(worklistPullMode({ fullRequested: false, hasWatermark: false, localOrders: 900 })).toBe(
+      "backfill",
+    );
   });
 
-  it("uses the watermark when this Studio holds the orders it was built from", () => {
-    expect(
-      shouldPullIncrementally({ fullRequested: false, hasWatermark: true, localOrders: 41 }),
-    ).toBe(true);
+  it("uses the watermark when this Studio still holds the orders it was built from", () => {
+    expect(worklistPullMode({ fullRequested: false, hasWatermark: true, localOrders: 41 })).toBe(
+      "incremental",
+    );
   });
 
   it("ignores a surviving watermark when every local order is gone", () => {
-    expect(
-      shouldPullIncrementally({ fullRequested: false, hasWatermark: true, localOrders: 0 }),
-    ).toBe(false);
+    expect(worklistPullMode({ fullRequested: false, hasWatermark: true, localOrders: 0 })).toBe(
+      "backfill",
+    );
   });
 
   it("still honours an explicit full sync over a populated database", () => {
-    expect(
-      shouldPullIncrementally({ fullRequested: true, hasWatermark: true, localOrders: 41 }),
-    ).toBe(false);
+    expect(worklistPullMode({ fullRequested: true, hasWatermark: true, localOrders: 41 })).toBe(
+      "backfill",
+    );
+  });
+});
+
+/**
+ * The ERP's no-parameter legacy worklist is capped at 500 rows and ordered by
+ * updated_at DESC — NULLs first in Postgres — so a backfill asked that way
+ * loses rows silently. `limit=` selects the paginated path (ORDER BY id ASC
+ * with a keyset cursor the client follows) instead.
+ */
+describe("worklist query path", () => {
+  it("asks for the paginated path on a full/backfill pull", () => {
+    const path = worklistQueryPath({ full: true });
+    expect(path).toContain("status=all");
+    expect(path).toMatch(/limit=\d+/);
+    expect(path).not.toContain("since=");
+  });
+
+  it("keeps a surviving watermark off a full pull", () => {
+    expect(worklistQueryPath({ full: true, since: "2026-10-02T00:00:00.000Z" })).not.toContain(
+      "since=",
+    );
+  });
+
+  it("sends only the watermark on an incremental pull", () => {
+    const path = worklistQueryPath({ since: "2026-10-02T00:00:00.000Z" });
+    expect(path).toContain("since=2026-10-02T00%3A00%3A00.000Z");
+    expect(path).not.toContain("limit=");
   });
 });
 
@@ -45,7 +73,7 @@ describe("sync route wires the gate", () => {
 
   it("counts locally stored orders before deciding to trust the watermark", () => {
     expect(route).toMatch(/db\.usgCareOrder\.count\(/);
-    expect(route).toMatch(/shouldPullIncrementally\(\{/);
+    expect(route).toMatch(/worklistPullMode\(\{/);
   });
 
   it("no longer trusts lastSyncAt on its own", () => {

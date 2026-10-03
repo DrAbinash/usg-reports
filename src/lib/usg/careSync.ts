@@ -94,6 +94,29 @@ export function decideImport(n: NormalizedCareRow): ImportDecision {
   return { kind: "import" };
 }
 
+export type WorklistPullMode = "incremental" | "backfill";
+
+/**
+ * A sync watermark only means something if this Studio still holds the rows it
+ * was built from. Clearing the clinical tables while `UsgSyncState` survives
+ * leaves `lastSyncAt` pointing past every order CARE has, and the incremental
+ * pull then answers zero rows forever with HTTP 200 and no error to notice.
+ *
+ * So a Studio with no stored orders always backfills, and only a Studio that
+ * still holds the watermark's own rows may use it. `localOrders` counts
+ * UsgCareOrder rows — what this sync itself writes. Not patients: a UsgPatient
+ * row only appears once a report is saved, so counting patients would keep a
+ * freshly pulled Studio backfilling forever.
+ */
+export function worklistPullMode(opts: {
+  fullRequested: boolean;
+  hasWatermark: boolean;
+  localOrders: number;
+}): WorklistPullMode {
+  if (opts.fullRequested) return "backfill";
+  return opts.hasWatermark && opts.localOrders > 0 ? "incremental" : "backfill";
+}
+
 // ── pure Orthanc matching ───────────────────────────────────────────────────
 
 export type OrthancMatch =

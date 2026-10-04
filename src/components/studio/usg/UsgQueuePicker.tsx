@@ -91,6 +91,20 @@ export function UsgQueuePicker({ compact = false, className, currentReportId }: 
     refetchOnWindowFocus: true,
   });
 
+  // The workstation clock is not authoritative. dates.ts documents why — a PC
+  // set to the wrong year silently empties the "Today" filter — and the worklist
+  // waits for the server's clinicToday because of it, but this picker seeded
+  // itself from the browser, so on a mis-set machine it showed "No studies in
+  // range" for a clinic full of patients. Adopt the server's date as soon as it
+  // is heard, and only while the range is still the one we guessed with, so a
+  // date the doctor chose himself is never overwritten.
+  const serverToday = (worklistQ.data as { clinicToday?: string } | undefined)?.clinicToday;
+  useEffect(() => {
+    if (!serverToday || serverToday === today) return;
+    setFrom((f) => (f === today ? serverToday : f));
+    setTo((t) => (t === today ? serverToday : t));
+  }, [serverToday, today]);
+
   const orders = useMemo(
     () => (worklistQ.data?.orders ?? []).filter((o) => !o.ignored),
     [worklistQ.data],

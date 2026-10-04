@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { Toaster } from "@/components/ui/toaster";
+import { Toaster } from "@/components/ui/sonner";
 import { Providers } from "./providers";
 
 const geistSans = Geist({
@@ -35,7 +35,10 @@ export default function RootLayout({
       >
         <Providers>
           {children}
-          <Toaster />
+          {/* richColors + closeButton: a green success and a red failure must not
+              look alike to someone mid-report, and a toast that can be dismissed
+              cannot cover the impression field it is reporting on. */}
+          <Toaster position="top-right" richColors closeButton />
         </Providers>
       </body>
     </html>

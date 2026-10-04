@@ -41,6 +41,24 @@ export const BACKUP_SETTINGS_KEYS = [
   "pcpndtCentreName",
   "pcpndtRegistrationNo",
   "pcpndtPlace",
+  // Layout and identity choices the Settings screen offers. These were absent,
+  // so a restore that advertised "the studio is yours again" silently reset the
+  // logo/address placement, the print font, the login screen and every feature
+  // toggle back to their defaults.
+  "loginTheme",
+  "loginBgUrl",
+  "usgDoctorBirthday",
+  "usgSidebarPosition",
+  "usgLogoPosition",
+  "usgAddressPosition",
+  "usgPrintFontFamily",
+  "usgFormFEnabled",
+  "enableCriticalComm",
+  "enableFollowUps",
+  "enableAiDraft",
+  "enableBirads",
+  "enableDicomSr",
+  "whatsappRouting",
 ] as const;
 
 export type BackupSettings = Partial<Record<(typeof BACKUP_SETTINGS_KEYS)[number], string | boolean | number>>;

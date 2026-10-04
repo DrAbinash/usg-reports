@@ -262,13 +262,19 @@ export function SettingsView() {
   };
 
   const loadAudit = useCallback(async () => {
-    const res = await fetch("/api/usg/audit?limit=150");
-    if (res.ok) setAuditEntries(((await res.json()).entries ?? []) as typeof auditEntries);
+    const res = await fetch("/api/usg/audit?limit=150").catch(() => null);
+    if (res?.ok) setAuditEntries(((await res.json()).entries ?? []) as typeof auditEntries);
+    // Without this the panel keeps its initial "Nothing recorded yet" copy, so
+    // an outage reads as an empty audit trail.
+    else toast.error("Could not load the audit trail — showing it as empty is not the same as it being empty");
   }, []);
 
   const loadBackupStatus = useCallback(async () => {
-    const res = await fetch("/api/usg/backup?mode=status");
-    if (res.ok) setBackupStatus(await res.json());
+    const res = await fetch("/api/usg/backup?mode=status").catch(() => null);
+    if (res?.ok) setBackupStatus(await res.json());
+    // Same trap: a failed read showed an empty backup list, which looks like
+    // "no backups exist" to anyone checking whether their data is safe.
+    else toast.error("Could not read backup status");
   }, []);
 
   useEffect(() => {
@@ -315,11 +321,19 @@ export function SettingsView() {
     if (careKey.trim()) body.careApiKey = careKey.trim();
     if (orthancPass.trim()) body.orthancPassword = orthancPass.trim();
     if (geminiKey.trim()) body.geminiApiKey = geminiKey.trim();
-    const r = await fetch("/api/settings", {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    }).then((res) => res.json());
+    let r: { settings?: typeof s };
+    try {
+      r = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }).then((res) => res.json());
+    } catch {
+      // A dropped request rejected unhandled, so Save appeared to do nothing at
+      // all and there was no way to tell the clinic why the settings stuck.
+      toast.error("Could not save settings — the studio could not reach the server");
+      return;
+    }
     if (r.settings) {
       toast.success("Settings saved");
       setS(r.settings);
@@ -373,15 +387,21 @@ export function SettingsView() {
   };
 
   const changePin = async () => {
-    const r = await fetch("/api/auth/pin", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(pin),
-    }).then((res) => res.json());
+    let r: { ok?: boolean; error?: string };
+    try {
+      r = await fetch("/api/auth/pin", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(pin),
+      }).then((res) => res.json());
+    } catch {
+      toast.error("Could not change the PIN — the studio could not reach the server");
+      return;
+    }
     if (r.ok) {
       toast.success("PIN changed");
       setPin({ current: "", next: "" });
-    } else toast.error(r.error);
+    } else toast.error(r.error ?? "Could not change the PIN");
   };
 
   /** Downscale the picked photo to ≤1920px wide JPEG data-URL, then save. */
@@ -1549,7 +1569,10 @@ function DoctorImportSection() {
 
   const handleDelete = async (id: string) => {
     try {
-      await fetch(`/api/usg/doctors/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/usg/doctors/${id}`, { method: "DELETE" });
+      // A 500 used to fall through to "Doctor removed", so the list looked
+      // unchanged while the message claimed success.
+      if (!res.ok) throw new Error("server rejected the delete");
       await loadDoctors();
       toast.success("Doctor removed");
     } catch {

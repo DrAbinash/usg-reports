@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { CalendarDays, Check, ChevronDown, Loader2, Maximize2, Minimize2, Phone, Settings2, Zap } from "lucide-react";
-import { MessageCircle, FileCheck2 as FileCheck2Icon, ScanLine, Link2 } from "lucide-react";
+import { MessageCircle, FileCheck2 as FileCheck2Icon, ScanLine, Link2, Link2Off } from "lucide-react";
 import type { UsgComposerState, UsgPathologyDef, UsgResolved, UsgStudyDef } from "@/lib/usg/types";
 import { USG_SEX_CHILD } from "@/lib/usg/types";
 import { USG_STUDIES, STUDY_GROUPS, getStudy, type NormalOverrides } from "@/lib/usg/studies";
@@ -673,19 +673,44 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
               </Select>
             </div>
             {isFinal ? (
-              <Button size="sm" variant="outline" disabled={busy !== ""}
-                onClick={() => {
-                  const id = savedIdRef.current ?? report?.id;
-                  if (!id) return;
-                  void shareReportWhatsapp(id).then((r) => {
-                    if (r === "failed") toast.error("Could not create share link");
-                    else if (r === "copied") { /* toast already shown */ }
-                    else if (r === "opened" || r === "doctor_prompt") toast.success("WhatsApp share opened");
-                  });
-                }}
-                title="Share via WhatsApp — secure 7-day link" className="h-8 border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100">
-                <MessageCircle className="h-3.5 w-3.5" />
-              </Button>
+              <>
+                <Button size="sm" variant="outline" disabled={busy !== ""}
+                  onClick={() => {
+                    const id = savedIdRef.current ?? report?.id;
+                    if (!id) return;
+                    void shareReportWhatsapp(id).then((r) => {
+                      if (r === "failed") toast.error("Could not create share link");
+                      else if (r === "copied") { /* toast already shown */ }
+                      else if (r === "opened" || r === "doctor_prompt") toast.success("WhatsApp share opened");
+                    });
+                  }}
+                  title="Share via WhatsApp — secure 7-day link" className="h-8 border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100">
+                  <MessageCircle className="h-3.5 w-3.5" />
+                </Button>
+                <Button size="sm" variant="outline" disabled={busy !== ""}
+                  onClick={() => {
+                    const id = savedIdRef.current ?? report?.id;
+                    if (!id) return;
+                    // A link already sent to a patient's (or a wrong) phone cannot
+                    // be recalled from there — this is the only way back, so it
+                    // says exactly what will stop working.
+                    if (!window.confirm(
+                      "Withdraw every share link for this report?\n\nLinks already sent stop working immediately. Sharing again creates a new one.",
+                    )) return;
+                    void fetch(`/api/usg/reports/${id}/share/revoke`, { method: "POST" })
+                      .then(async (r) => {
+                        if (r.ok) toast.success("Share links withdrawn — any link already sent is now dead");
+                        else {
+                          const body = await r.json().catch(() => ({}) as { error?: string });
+                          toast.error(body.error ?? "Could not withdraw the links");
+                        }
+                      })
+                      .catch(() => toast.error("Could not withdraw the links — the studio could not be reached"));
+                  }}
+                  title="Withdraw all share links for this report" className="h-8 border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100">
+                  <Link2Off className="h-3.5 w-3.5" />
+                </Button>
+              </>
             ) : null}
           </div>
 

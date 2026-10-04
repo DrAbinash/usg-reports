@@ -3,7 +3,7 @@
  *  Shown when CARE is down, or when the CARE worklist is empty so unlinked
  *  PACS studies stay reachable for draft reporting. */
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useStudio } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { WifiOff, Activity, RefreshCw } from "lucide-react";
 import { buildOhifViewerUrl, fetchOhifStatus, pickOhifEndpoint } from "@/lib/usg/ohifLaunch";
@@ -15,7 +15,7 @@ type PacsRow = {
 };
 
 export function UsgPacsQueue() {
-  const router = useRouter();
+  const openComposer = useStudio((s) => s.openComposer);
   const [rows, setRows] = useState<PacsRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -61,7 +61,10 @@ export function UsgPacsQueue() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(row),
       });
-      if (r.ok) router.push(`/studio/usg/${(await r.json()).reportId}`);
+      // There is no /studio/usg/[id] route — this is a single-page studio, so
+      // pushing that path 404s and the draft is orphaned. Open it through the
+      // store, exactly as the worklist and the queue picker do.
+      if (r.ok) openComposer((await r.json()).reportId as string);
     } catch { /* ignore */ } finally { setBusy(null); }
   };
 

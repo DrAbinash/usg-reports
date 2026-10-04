@@ -381,6 +381,11 @@ export async function persistReport(
       id = (await res.json()).report.id as string;
       deps.savedIdRef.current = id;
     }
+    // Attach this report's stills BEFORE the sheet is frozen. Finalize renders
+    // reportHtml from the images stored server-side, so anything still pending
+    // at that point was missing from the signed print — while the PDF, built
+    // afterwards from the same report, showed them.
+    if (id) await flushPendingImages(id, deps.pendingImages, deps.setPendingImages, deps.setImages);
     if (status === "finalize" && id) {
       const res = await fetch(`/api/usg/reports/${id}/finalize`, { method: "POST" });
       if (!res.ok) throw new Error("Finalize failed");
@@ -400,7 +405,6 @@ export async function persistReport(
       toast.success("Draft saved");
     }
     deps.onSaved();
-    if (id) await flushPendingImages(id, deps.pendingImages, deps.setPendingImages, deps.setImages);
     return id;
   } catch (e) {
     toast.error(e instanceof Error ? e.message : "Save failed");

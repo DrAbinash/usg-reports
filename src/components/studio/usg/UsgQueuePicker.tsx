@@ -311,7 +311,9 @@ export function UsgQueuePicker({ compact = false, className, currentReportId }: 
             : worklistQ.isLoading
               ? "Loading studies…"
               : studies.length === 0
-                ? "No studies in range"
+                ? from && to
+                  ? `Nothing between ${from} and ${to} — widen the dates or press Sync`
+                  : "No studies loaded — press Sync"
                 : `Select study (${studies.length})`}
         </option>
         {studies.map((o) => {
@@ -322,9 +324,13 @@ export function UsgQueuePicker({ compact = false, className, currentReportId }: 
             <option key={o.id} value={o.id} disabled={!!open}>
               {o.patientName}
               {" · "}
+              {/* Age/sex and phone are the only reliable way to tell two "Rina
+                  Kumari" rows apart before the study is open. */}
+              {o.patientAge || o.patientSex ? `${o.patientAge || "?"}${o.patientSex === "M" ? "M" : o.patientSex === "F" ? "F" : ""} · ` : ""}
               {o.testName || "USG"}
               {time ? ` · ${time}` : ""}
               {acc ? ` · ${acc}` : ""}
+              {o.patientPhone ? ` · ${o.patientPhone}` : ""}
               {" · "}
               {open ? "OPEN" : statusLabel(o)}
             </option>

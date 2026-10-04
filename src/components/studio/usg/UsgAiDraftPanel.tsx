@@ -23,6 +23,9 @@ import type { AiDraftOrganSuggestion, AiDraftSkeleton } from "@/lib/usg/aiDraft"
 
 export type UsgAiDraftPanelProps = {
   reportId: string | null;
+  /** Save the current draft on demand and return its id. AI drafts against a
+   *  saved report, so an unsaved one used to leave the button dead. */
+  ensureSaved?: () => Promise<string | null>;
   /** Optional clinical indication sent with the draft request. */
   clinicalIndication?: string;
   /** Technique paragraph (defaults to report technique on the server). */
@@ -55,6 +58,7 @@ function findingLabel(s: AiDraftOrganSuggestion): string {
 
 export function UsgAiDraftPanel({
   reportId,
+  ensureSaved,
   clinicalIndication: indicationProp,
   technique,
   togglePathology,
@@ -73,8 +77,9 @@ export function UsgAiDraftPanel({
   const skeleton = result?.ok ? result.skeleton : undefined;
 
   const generate = async () => {
-    if (!reportId) {
-      toast.error("Save the draft first — AI needs a report id");
+    const rid = reportId ?? (await ensureSaved?.()) ?? null;
+    if (!rid) {
+      toast.error("This draft could not be saved, so AI has nothing to read yet");
       return;
     }
     setLoading(true);
@@ -86,7 +91,7 @@ export function UsgAiDraftPanel({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          reportId,
+          reportId: rid,
           clinicalIndication: indication.trim() || undefined,
           technique: technique?.trim() || undefined,
         }),
@@ -231,7 +236,7 @@ export function UsgAiDraftPanel({
               disabled={loading}
             />
             <div className="flex justify-end">
-              <Button variant="outline" size="sm" onClick={() => void generate()} disabled={loading || !reportId}>
+              <Button variant="outline" size="sm" onClick={() => void generate()} disabled={loading}>
                 {loading ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />}
                 {result ? "Re-draft" : "Draft skeleton"}
               </Button>

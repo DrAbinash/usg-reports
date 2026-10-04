@@ -709,6 +709,13 @@ export function ComposerDialogs(p: {
       {settings.enableAiDraft !== false ? (
         <UsgAiDraftPanel
           reportId={savedIdRef.current ?? report?.id ?? null}
+          ensureSaved={async () => {
+            // Draft against a report that does not exist yet: save it here rather
+            // than refusing and making the doctor go and press Save first.
+            const existing = savedIdRef.current ?? report?.id ?? null;
+            if (existing) return existing;
+            return await persist("");
+          }}
           technique={technique}
           togglePathology={togglePathology}
           organHasPathology={(organKey) => {

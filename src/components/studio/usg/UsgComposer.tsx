@@ -300,6 +300,10 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
       }),
   });
   const pullFromMachine = async () => {
+    // The machine's measurements are matched against a report row, so an unsaved
+    // draft had no id to pull with — and the answer used to be a toast telling
+    // the doctor to go and press Save himself. Save, then pull.
+    if (!savedIdRef.current && !report?.id) await persistRef.current?.("");
     await pullMutation.mutateAsync();
   };
   const lookup = useMemo(() => makeLookup(pathologies), [pathologies]);

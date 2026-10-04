@@ -69,19 +69,19 @@ function TriadBadge({
       )}
     >
       {line.legacy ? (
-        <span className="shrink-0 rounded bg-amber-200/80 px-1 text-[8px] font-bold uppercase tracking-wide text-amber-800">
+        <span className="shrink-0 rounded bg-amber-200/80 px-1 text-[9px] font-bold uppercase tracking-wide text-amber-800">
           legacy
         </span>
       ) : null}
       {line.addendum ? (
-        <span className="shrink-0 rounded bg-sky-200/80 px-1 text-[8px] font-bold uppercase tracking-wide text-sky-800">
+        <span className="shrink-0 rounded bg-sky-200/80 px-1 text-[9px] font-bold uppercase tracking-wide text-sky-800">
           manual
         </span>
       ) : null}
       {line.legacy && !disabled && !editing ? (
         <button
           type="button"
-          className="shrink-0 rounded bg-amber-600 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-white hover:bg-amber-700"
+          className="shrink-0 rounded bg-amber-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white hover:bg-amber-700"
           title="Convert legacy override via the edit path"
           onClick={() => {
             setDraft(line.text);
@@ -140,7 +140,7 @@ function TriadBadge({
           {line.pathologyKey && onSaveDefault ? (
             <button
               type="button"
-              className="rounded px-1 text-[8px] font-bold uppercase tracking-wide text-violet-700 hover:bg-white/80"
+              className="rounded px-1 text-[9px] font-bold uppercase tracking-wide text-violet-700 hover:bg-white/80"
               title="Save as my clinic default"
               onClick={() => onSaveDefault(line.pathologyKey, line.text)}
             >
@@ -150,7 +150,7 @@ function TriadBadge({
           {line.pathologyKey && line.edited && onResetDefault ? (
             <button
               type="button"
-              className="rounded px-1 text-[8px] font-bold uppercase tracking-wide text-muted-foreground hover:bg-white/80"
+              className="rounded px-1 text-[9px] font-bold uppercase tracking-wide text-muted-foreground hover:bg-white/80"
               title="Clear clinic default"
               onClick={() => onResetDefault(line.pathologyKey)}
             >

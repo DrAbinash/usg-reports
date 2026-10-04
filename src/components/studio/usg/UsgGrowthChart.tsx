@@ -101,12 +101,12 @@ function GrowthChartSvg({ chart }: { chart: GrowthChart }) {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: "auto" }}>
       {/* Y axis labels */}
-      <text x="2" y={margin.top + 5} className="fill-muted-foreground text-[7px]">{maxVal}</text>
-      <text x="2" y={H - margin.bottom - 2} className="fill-muted-foreground text-[7px]">{minVal}</text>
+      <text x="2" y={margin.top + 5} className="fill-muted-foreground text-[9px]">{maxVal}</text>
+      <text x="2" y={H - margin.bottom - 2} className="fill-muted-foreground text-[9px]">{minVal}</text>
 
       {/* X axis labels */}
-      <text x={margin.left} y={H - 3} className="fill-muted-foreground text-[7px]">{minGa}wk</text>
-      <text x={W - margin.right - 10} y={H - 3} className="fill-muted-foreground text-[7px]">{maxGa}wk</text>
+      <text x={margin.left} y={H - 3} className="fill-muted-foreground text-[9px]">{minGa}wk</text>
+      <text x={W - margin.right - 10} y={H - 3} className="fill-muted-foreground text-[9px]">{maxGa}wk</text>
 
       {/* Grid */}
       <line x1={margin.left} y1={margin.top} x2={margin.left} y2={H - margin.bottom} stroke="hsl(var(--border))" strokeWidth="0.5" />
@@ -134,7 +134,7 @@ function GrowthChartSvg({ chart }: { chart: GrowthChart }) {
             <text
               x={xScale(p.gaWeeks) + 4}
               y={yScale(p.value) - 4}
-              className="fill-foreground text-[7px] font-bold"
+              className="fill-foreground text-[9px] font-bold"
             >
               {p.percentile}%
             </text>
@@ -145,11 +145,11 @@ function GrowthChartSvg({ chart }: { chart: GrowthChart }) {
       {/* Legend */}
       <g transform={`translate(${W - 60}, ${margin.top + 2})`}>
         <line x1="0" y1="2" x2="8" y2="2" stroke="#a78bfa" strokeWidth="1.2" />
-        <text x="10" y="4" className="fill-muted-foreground text-[6px]">50th</text>
+        <text x="10" y="4" className="fill-muted-foreground text-[9px]">50th</text>
         <line x1="0" y1="8" x2="8" y2="8" stroke="#fcd34d" strokeWidth="0.8" strokeDasharray="2,2" />
-        <text x="10" y="10" className="fill-muted-foreground text-[6px]">10/90th</text>
+        <text x="10" y="10" className="fill-muted-foreground text-[9px]">10/90th</text>
         <line x1="0" y1="14" x2="8" y2="14" stroke="#fca5a5" strokeWidth="0.8" strokeDasharray="2,2" />
-        <text x="10" y="16" className="fill-muted-foreground text-[6px]">3/97th</text>
+        <text x="10" y="16" className="fill-muted-foreground text-[9px]">3/97th</text>
       </g>
     </svg>
   );

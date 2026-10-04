@@ -4,7 +4,7 @@ import { makeLookup, normaliseState, resolve } from "@/lib/usg/composer";
 import { loadAllPathologies, loadNormalOverrides } from "@/lib/usg/server";
 import { buildUsgReportPdf } from "@/lib/usg/pdf";
 import { formatUsgSerial, toUsgPrintSettings } from "@/lib/usg/print";
-import { verifyShareToken } from "@/lib/usg/secureShare";
+import { isShareRevoked, verifyShareToken } from "@/lib/usg/secureShare";
 
 type Ctx = { params: Promise<{ token: string }> };
 
@@ -34,6 +34,9 @@ export async function GET(_req: Request, ctx: Ctx) {
   });
   if (!report || report.status !== "FINALIZED") {
     return Response.json({ error: "Report not available" }, { status: 404 });
+  }
+  if (isShareRevoked(verified, report.shareRevokedAt)) {
+    return Response.json({ error: "This link has been withdrawn by the clinic" }, { status: 410 });
   }
 
   const settings = await getSettings();

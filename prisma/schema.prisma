@@ -274,6 +274,14 @@ model UsgReport {
    * it with whatever the clinic's Settings happen to say today.
    */
   printSettingsJson String?
+  /**
+   * Revocation cutoff for share links. Tokens are stateless HMAC, so a link
+   * once sent could never be taken back — a leaked WhatsApp URL kept serving
+   * the report for the rest of its 7 days. Setting this to "now" invalidates
+   * every link minted before it; the next share mints a newer token that
+   * survives.
+   */
+  shareRevokedAt DateTime?
   finalizedAt   DateTime?
 
   // v6.9 — Follow-up reminders. When the radiologist sets followUpDate,

@@ -10,15 +10,39 @@ import {
   planWhatsappShare,
   shareUrlForToken,
   verifyShareToken,
+  isShareRevoked,
 } from "@/lib/usg/secureShare";
 
 const SECRET = "test-share-secret-for-unit-tests-only";
 
 describe("share token generation / validation", () => {
-  it("valid token round-trips reportId", () => {
+  it("valid token round-trips reportId and its issue time", () => {
     const token = createShareToken("rep_abc123", { secret: SECRET, now: 1_700_000_000_000 });
     const v = verifyShareToken(token, { secret: SECRET, now: 1_700_000_000_000 });
-    expect(v).toEqual({ reportId: "rep_abc123", exp: 1_700_000_000_000 + 7 * 24 * 60 * 60 * 1000 });
+    expect(v).toEqual({
+      reportId: "rep_abc123",
+      exp: 1_700_000_000_000 + 7 * 24 * 60 * 60 * 1000,
+      // iat is what makes a stateless token revocable — see isShareRevoked.
+      iat: 1_700_000_000_000,
+    });
+  });
+
+  it("isShareRevoked treats the cutoff as 'everything minted at or before it'", () => {
+    const cutoff = new Date(1_700_000_500_000);
+    expect(isShareRevoked({ iat: 1_700_000_000_000 }, cutoff)).toBe(true);
+    expect(isShareRevoked({ iat: 1_700_000_500_000 }, cutoff)).toBe(true);
+    expect(isShareRevoked({ iat: 1_700_001_000_000 }, cutoff)).toBe(false);
+  });
+
+  it("no cutoff means nothing is revoked", () => {
+    expect(isShareRevoked({ iat: 1_700_000_000_000 }, null)).toBe(false);
+    expect(isShareRevoked({}, undefined)).toBe(false);
+  });
+
+  it("a legacy token with no issue time dies with the first revocation", () => {
+    // Tokens minted before iat existed cannot be dated, so a leaked one must not
+    // survive the click meant to withdraw it.
+    expect(isShareRevoked({}, new Date(1_700_000_500_000))).toBe(true);
   });
 
   it("rejects tampered token", () => {

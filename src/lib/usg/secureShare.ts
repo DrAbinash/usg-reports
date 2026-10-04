@@ -41,14 +41,16 @@ export function createShareToken(
   const now = opts?.now ?? Date.now();
   const ttl = opts?.ttlMs ?? SHARE_TTL_MS;
   const exp = now + ttl;
-  const body = Buffer.from(JSON.stringify({ reportId, exp }), "utf8").toString("base64url");
+  // iat is what makes revocation possible: without an issue time there is no
+  // way to tell a link minted before "Revoke" from one minted after it.
+  const body = Buffer.from(JSON.stringify({ reportId, exp, iat: now }), "utf8").toString("base64url");
   const sig = createHmac("sha256", opts?.secret ?? shareSigningSecret())
     .update(body)
     .digest("base64url");
   return `${body}.${sig}`;
 }
 
-export type ShareTokenOk = { reportId: string; exp: number };
+export type ShareTokenOk = { reportId: string; exp: number; iat?: number };
 export type ShareTokenErr = { error: "invalid" | "expired" };
 
 /** Validate a share token. Never throws. */
@@ -77,15 +79,36 @@ export function verifyShareToken(
     const claims = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as {
       reportId?: unknown;
       exp?: unknown;
+      iat?: unknown;
     };
     if (typeof claims.reportId !== "string" || !claims.reportId) return { error: "invalid" };
     if (typeof claims.exp !== "number" || !Number.isFinite(claims.exp)) return { error: "invalid" };
     const now = opts?.now ?? Date.now();
     if (claims.exp < now) return { error: "expired" };
-    return { reportId: claims.reportId, exp: claims.exp };
+    // Optional: a token minted before revocation existed carries no issue time.
+    const iat = typeof claims.iat === "number" && Number.isFinite(claims.iat) ? claims.iat : undefined;
+    return { reportId: claims.reportId, exp: claims.exp, ...(iat != null ? { iat } : {}) };
   } catch {
     return { error: "invalid" };
   }
+}
+
+/**
+ * Has this link been revoked?
+ *
+ * A report's shareRevokedAt is a cutoff, not a token list: every link minted at
+ * or before it is dead, and anything minted afterwards still works. Tokens
+ * minted before iat existed carry no issue time, so they are treated as the
+ * oldest possible grant and die with the first revocation — which is exactly
+ * what pressing "Revoke" on a leaked WhatsApp link has to mean.
+ */
+export function isShareRevoked(
+  claims: { iat?: number },
+  revokedAt: Date | null | undefined,
+): boolean {
+  if (!revokedAt) return false;
+  if (claims.iat == null) return true;
+  return claims.iat <= revokedAt.getTime();
 }
 
 /** Digits-only E.164-ish phone for wa.me (10-digit India → prepend 91). */

@@ -4,7 +4,7 @@ import { getSettings } from "@/lib/settings";
 import { makeLookup, normaliseState, resolve } from "@/lib/usg/composer";
 import { loadAllPathologies, loadNormalOverrides } from "@/lib/usg/server";
 import { buildUsgReportHtml, formatUsgSerial, toUsgPrintSettings } from "@/lib/usg/print";
-import { verifyShareToken } from "@/lib/usg/secureShare";
+import { isShareRevoked, verifyShareToken } from "@/lib/usg/secureShare";
 import { Download, Link2Off } from "lucide-react";
 
 type PageProps = { params: Promise<{ token: string }> };
@@ -20,12 +20,14 @@ function fmtDate(d: Date | null | undefined): string {
   return new Date(date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-function ExpiredView({ reason }: { reason: "expired" | "invalid" | "missing" }) {
-  const title = reason === "expired" ? "Link Expired" : "Link Unavailable";
+function ExpiredView({ reason }: { reason: "expired" | "invalid" | "missing" | "revoked" }) {
+  const title = reason === "expired" ? "Link Expired" : reason === "revoked" ? "Link Withdrawn" : "Link Unavailable";
   const body =
     reason === "expired"
       ? "This secure report link has expired (valid for 7 days). Please ask the clinic to share again."
-      : "This secure report link is invalid or the report is no longer available.";
+      : reason === "revoked"
+        ? "The clinic has withdrawn this report link. Please ask them to share it again."
+        : "This secure report link is invalid or the report is no longer available.";
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-rose-50 via-white to-violet-50 p-6">
       <meta name="robots" content="noindex, nofollow" />
@@ -54,6 +56,11 @@ export default async function ShareReportPage({ params }: PageProps) {
   });
   if (!report || report.status !== "FINALIZED") {
     return <ExpiredView reason="missing" />;
+  }
+  // The clinic withdrew this link. Expiry alone was never enough: a WhatsApp
+  // URL sent to the wrong number stayed live for the rest of its seven days.
+  if (isShareRevoked(verified, report.shareRevokedAt)) {
+    return <ExpiredView reason="revoked" />;
   }
 
   const settings = await getSettings();

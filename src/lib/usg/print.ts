@@ -140,6 +140,30 @@ export type UsgPrintPatient = {
 
 /** Map HospitalSettings (or any settings bag) onto UsgPrintSettings so every
  *  layout dial (logo size, sidebar position, …) reaches the HTML/PDF builders. */
+/**
+ * Read back the print settings frozen with a finalized report.
+ *
+ * Returns null for drafts, for rows finalized before the snapshot existed, and
+ * for a payload that no longer looks like the whitelisted shape — every case
+ * falls back to the live settings rather than failing the download. Passing the
+ * parsed blob back through toUsgPrintSettings() is deliberate: it is the same
+ * whitelist that produced the snapshot, so an old or hand-edited value can only
+ * ever supply printable identity, never a secret or an unexpected field.
+ */
+export function frozenPrintSettingsOf(
+  json: string | null | undefined,
+): UsgPrintSettings | null {
+  if (!json) return null;
+  try {
+    const parsed = JSON.parse(json) as unknown;
+    // An array is an object to typeof, but it is not a snapshot.
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    return toUsgPrintSettings(parsed as Record<string, unknown>);
+  } catch {
+    return null;
+  }
+}
+
 export function toUsgPrintSettings(s: Record<string, unknown> | UsgPrintSettings): UsgPrintSettings {
   const r = s as Record<string, unknown>;
   const bool = (v: unknown, d = true) => (typeof v === "boolean" ? v : d);

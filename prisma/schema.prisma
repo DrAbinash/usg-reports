@@ -266,6 +266,14 @@ model UsgReport {
 
   status        String    @default("DRAFT") // DRAFT | FINALIZED
   reportHtml    String?   // frozen snapshot at finalize
+  /**
+   * The letterhead and layout dials this report was actually signed with,
+   * written at finalize alongside reportHtml. toUsgPrintSettings() is a
+   * whitelist of printable identity — it never contains a key or a PIN.
+   * Lets the PDF reproduce the sheet that was filed instead of re-rendering
+   * it with whatever the clinic's Settings happen to say today.
+   */
+  printSettingsJson String?
   finalizedAt   DateTime?
 
   // v6.9 — Follow-up reminders. When the radiologist sets followUpDate,

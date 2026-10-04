@@ -4,7 +4,7 @@ import { getSettings } from "@/lib/settings";
 import { makeLookup, normaliseState, resolve } from "@/lib/usg/composer";
 import { loadAllPathologies, loadNormalOverrides } from "@/lib/usg/server";
 import { buildUsgReportPdf } from "@/lib/usg/pdf";
-import { formatUsgSerial, toUsgPrintSettings } from "@/lib/usg/print";
+import { formatUsgSerial, frozenPrintSettingsOf, toUsgPrintSettings } from "@/lib/usg/print";
 import { payloadInputFor, qrPngFor } from "@/lib/usg/qrServer";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -48,8 +48,14 @@ export async function GET(req: Request, ctx: Ctx) {
   const input = payloadInputFor(report);
   const qrPng = await qrPngFor(input, originOf(req));
 
+  // A finalized report downloads with the letterhead and layout dials it was
+  // signed with, not today's. Until now the PDF was rebuilt from live Settings
+  // while printing served the frozen sheet, so changing the clinic font, paper
+  // or logo silently restyled every report already filed — two different
+  // documents under one register number.
+  const frozen = frozenPrintSettingsOf(report.printSettingsJson);
   const bytes = await buildUsgReportPdf({
-    settings: toUsgPrintSettings({
+    settings: frozen ?? toUsgPrintSettings({
       ...(settings as unknown as Record<string, unknown>),
       studioId: (settings as { clinicId?: string }).clinicId ?? "default",
     }),

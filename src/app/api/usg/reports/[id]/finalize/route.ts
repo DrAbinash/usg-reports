@@ -61,11 +61,15 @@ export async function POST(req: Request, ctx: Ctx) {
     reqHost ? `${origin}://${reqHost}` : null,
   );
 
+  // The sheet is rendered from this object, so storing it is what lets the PDF
+  // and any later reprint reproduce the document that was actually signed.
+  const printSettings = toUsgPrintSettings({
+    ...(settings as unknown as Record<string, unknown>),
+    studioId: (settings as { clinicId?: string }).clinicId ?? "default",
+  });
+
   const html = buildUsgReportHtml(
-    toUsgPrintSettings({
-      ...(settings as unknown as Record<string, unknown>),
-      studioId: (settings as { clinicId?: string }).clinicId ?? "default",
-    }),
+    printSettings,
     {
       name: report.patientName,
       age: report.patientAge,
@@ -88,6 +92,7 @@ export async function POST(req: Request, ctx: Ctx) {
     data: {
       status: "FINALIZED",
       reportHtml: html,
+      printSettingsJson: JSON.stringify(printSettings),
       finalizedAt: new Date(),
       serialNo,
       studyTitle: resolved.title,

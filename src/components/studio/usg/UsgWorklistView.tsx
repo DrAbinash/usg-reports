@@ -469,11 +469,17 @@ export function UsgWorklistView() {
   };
 
   const ignore = async (order: Order) => {
-    await fetch(`/api/usg/worklist/${order.id}/ignore`, {
+    const res = await fetch(`/api/usg/worklist/${order.id}/ignore`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ ignore: !order.ignored }),
-    });
+    }).catch(() => null);
+    // The list refetches regardless, so a rejected toggle used to put the row
+    // back exactly as it was with no reason attached — indistinguishable from a
+    // click that has not landed yet.
+    if (!res?.ok) {
+      toast.error(res ? `Could not change this study's status (${res.status})` : "Could not reach the studio");
+    }
     load();
   };
 

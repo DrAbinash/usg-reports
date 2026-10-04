@@ -74,6 +74,11 @@ export function UsgTemplateBar({ onApply, currentStateJson, currentStudyKey }: U
       if (res.ok) {
         toast.success("Template deleted");
         await invalidate();
+      } else {
+        // A rejected delete used to be silent — the row stayed and nothing said
+        // why, which reads exactly like a double-click that has not landed yet.
+        const body = await res.json().catch(() => ({}) as { error?: string });
+        toast.error(body.error ?? `Could not delete this template (${res.status})`);
       }
     } catch {
       toast.error("Delete failed");

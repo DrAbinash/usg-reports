@@ -108,7 +108,10 @@ export function UsgOrganCard({ def, state, pathologies, preferNoSizeChips, norma
   );
 
   const isKidneySlot = def.key === "kidney_rt" || def.key === "kidney_lt";
-  const visible = showAll ? sortedPathologies : sortedPathologies.slice(0, 6);
+  // Nine chips show because nine digit hotkeys exist (ComposerToolbar slices the
+  // same list to 9). At six, keys 7-8-9 silently toggled chips that were not on
+  // screen — the finding appeared in the report with nothing to click to undo it.
+  const visible = showAll ? sortedPathologies : sortedPathologies.slice(0, 9);
 
   // Reset target: the merged wording of the current selection (or normal).
   const selectedText = selected.length ? selected.map((p) => p.text).join("\n\n") : def.normal;

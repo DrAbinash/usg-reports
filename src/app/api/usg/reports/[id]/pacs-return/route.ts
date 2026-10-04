@@ -12,6 +12,7 @@ import { getStudy } from "@/lib/usg/studies";
 import { USG_PATHOLOGIES_ALL } from "@/lib/usg/pathologies";
 import { checkEligibility, uploadToOrthanc, type PacsReturnPayload } from "@/lib/usg/pacsReturn";
 import { audit } from "@/lib/usg/audit";
+import { getSettings } from "@/lib/settings";
 
 export async function POST(
   _req: NextRequest,
@@ -86,11 +87,18 @@ export async function POST(
     reportSerial: report.serialNo ? `USG-${String(report.serialNo).padStart(4, "0")}` : report.id,
   };
 
+  // PC-PNDT compliance is a claim about this clinic's registration, not a
+  // constant to assert. The same number prints in the declaration block on the
+  // sheet, so claiming compliance while it is unset would return a report that
+  // cannot lawfully be returned.
+  const settings = await getSettings();
+  const pcpndtRegistered = Boolean(settings.pcpndtRegistrationNo?.trim());
+
   const eligibility = checkEligibility({
     status: report.status === "FINALIZED" ? "finalized" : "draft",
     studyInstanceUid,
     patientName: payload.patientName,
-    pcpndtCompliant: true,
+    pcpndtCompliant: pcpndtRegistered,
   });
 
   if (!eligibility.eligible) {

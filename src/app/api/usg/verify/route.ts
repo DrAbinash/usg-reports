@@ -19,9 +19,14 @@ export async function GET(req: Request) {
     return Response.json({ valid: false, reason: "signature mismatch" });
   }
 
-  // The signed fields must also match a live register row.
+  // The signed fields must also match a live register row. Status is not part of
+  // the match: the serial is only ever issued at finalize and is never
+  // renumbered, so a report that was reopened (status back to DRAFT) still
+  // proves the sheet in the patient's hand was genuinely issued here. Refusing
+  // on FINALIZED made every already-printed sheet read "no such register entry"
+  // the moment the doctor reopened the report to amend it.
   const report = await db.usgReport.findFirst({
-    where: { serialNo: result.serialNo, status: "FINALIZED" },
+    where: { serialNo: result.serialNo },
   });
   if (!report) {
     return Response.json({ valid: false, reason: "no such register entry" });

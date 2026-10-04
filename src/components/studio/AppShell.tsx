@@ -53,6 +53,10 @@ export function AppShell() {
     composerPickStudy,
     activeReportId,
   } = useStudio();
+  // Pending Settings edits, published by the Settings screen. The header stays
+  // pinned while the tab's own Save button scrolls off the bottom of a long
+  // form, so the reminder has to live here.
+  const settingsUnsaved = useStudio((st) => st.settingsUnsaved);
   const router = useRouter();
   const queryClient = useQueryClient();
   const composing = !!composerStrip;
@@ -261,6 +265,14 @@ export function AppShell() {
                 >
                   <n.icon className="h-3.5 w-3.5" />
                   <span>{n.label}</span>
+                  {n.id === "settings" && settingsUnsaved > 0 ? (
+                    <span
+                      className="inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-amber-400 px-1 text-[9.5px] font-black leading-none text-amber-950"
+                      title={`${settingsUnsaved} unsaved change${settingsUnsaved === 1 ? "" : "s"} — switching away now throws them away`}
+                    >
+                      {settingsUnsaved}
+                    </span>
+                  ) : null}
                 </button>
               );
             })}
@@ -303,11 +315,17 @@ export function AppShell() {
                   onClick={() => setView(n.id)}
                   title={n.label}
                   className={cn(
-                    "inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors",
+                    "relative inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors",
                     view === n.id ? "bg-rose-100 text-rose-700" : "text-slate-500 hover:bg-muted hover:text-foreground",
                   )}
                 >
                   <n.icon className="h-3.5 w-3.5" />
+                  {n.id === "settings" && settingsUnsaved > 0 ? (
+                    <span
+                      className="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-card"
+                      title={`${settingsUnsaved} unsaved change${settingsUnsaved === 1 ? "" : "s"} in Settings`}
+                    />
+                  ) : null}
                 </button>
               ))}
             </nav>

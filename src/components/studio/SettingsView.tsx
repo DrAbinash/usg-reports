@@ -23,6 +23,7 @@ import {
 } from "@/lib/usg/ohifLaunch";
 import type { OhifTestResult } from "@/lib/usg/ohifResolver";
 import { auditLabel } from "@/lib/usg/auditShared";
+import { useStudio } from "@/lib/store";
 import { UsgClinicsAdmin } from "./usg/UsgClinicsAdmin";
 
 /** Per-endpoint status lights for the OHIF card. "blocked" is the one that used
@@ -85,6 +86,58 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
       <Label className="text-[12px] font-semibold text-foreground">{label}</Label>
       {children}
       {hint ? <p className="text-[11px] leading-relaxed text-faint">{hint}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * How many fields on this screen differ from what the server holds.
+ *
+ * Compared as strings because the print controls write numbers and booleans
+ * into fields the API returns as strings — a raw !== would report "unsaved" on
+ * a font size that was never touched. The `*Set` flags describe whether a
+ * secret exists, which no input here can change, so they would only ever be
+ * noise in a count the doctor is meant to act on.
+ */
+function countUnsaved(s: Settings | null, loaded: Settings | null): number {
+  if (!s || !loaded) return 0;
+  const a = s as unknown as Record<string, unknown>;
+  const b = loaded as unknown as Record<string, unknown>;
+  let n = 0;
+  for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    if (k.endsWith("Set")) continue;
+    if (String(a[k] ?? "") !== String(b[k] ?? "")) n += 1;
+  }
+  return n;
+}
+
+/**
+ * The pending-edits badge. Every Save button on this screen writes the whole
+ * settings blob, so the count is for the screen rather than the tab — and
+ * pressing any one of those buttons clears it.
+ */
+function UnsavedPill({ n }: { n: number }) {
+  if (n <= 0) return null;
+  return (
+    <span
+      className="inline-flex h-6 items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2 text-[11px] font-bold text-amber-900"
+      title="Changes you have not saved yet. Any Save button on this screen writes them all."
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden />
+      {n} unsaved change{n === 1 ? "" : "s"}
+    </span>
+  );
+}
+
+/**
+ * A Save button with that badge beside it, so pending work is visible from
+ * whichever tab the doctor happens to be standing in.
+ */
+function SaveRow({ n, children }: { n: number; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
+      <UnsavedPill n={n} />
+      {children}
     </div>
   );
 }
@@ -212,6 +265,28 @@ export function SettingsView() {
     ohif?: OhifTestResult;
   } | null>(null);
 
+  // ── Unsaved changes ──────────────────────────────────────────────────────
+  // This screen edits a local copy of the settings and writes it only when a
+  // Save button is clicked. Leaving Settings unmounts it — AppShell renders the
+  // view only while it is selected — which used to discard every typed edit in
+  // silence. The diff against the loaded snapshot is published to the store for
+  // the nav guard, and beforeunload covers a refresh or a closed tab.
+  const loadedRef = useRef<Settings | null>(null);
+  const unsaved = countUnsaved(s, loadedRef.current);
+  const setSettingsUnsaved = useStudio((st) => st.setSettingsUnsaved);
+  useEffect(() => {
+    setSettingsUnsaved(unsaved);
+  }, [unsaved, setSettingsUnsaved]);
+  useEffect(() => {
+    if (unsaved === 0) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [unsaved]);
+
   // OHIF: where the studio would actually open a study right now.
   const [ohifStatus, setOhifStatus] = useState<OhifStatus | null>(null);
   const loadOhifStatus = useCallback(async (force = false) => {
@@ -279,7 +354,12 @@ export function SettingsView() {
 
   useEffect(() => {
     fetch("/api/settings").then((r) => r.json()).then((d) => {
+      loadedRef.current = d.settings ?? null;
       setS(d.settings);
+    }).catch(() => {
+      // Without this the screen sat on "Loading settings…" forever with no
+      // explanation when the server was unreachable.
+      toast.error("Could not load Settings");
     });
   }, []);
 
@@ -297,21 +377,28 @@ export function SettingsView() {
   // immediately (no Save button click needed) so the toggle reflects
   // the persisted state on next page reload.
   const setBool = async (k: keyof Settings, v: boolean) => {
+    const before = s;
     setS({ ...s, [k]: v } as Settings);
     try {
-      const r = await fetch("/api/settings", {
+      const res = await fetch("/api/settings", {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ [k]: v }),
-      }).then((res) => res.json());
-      if (r.settings) {
+      });
+      const r = await res.json().catch(() => null);
+      if (res.ok && r?.settings) {
         toast.success(v ? "Feature enabled" : "Feature disabled");
-        setS(r.settings);
+        // Adopt only the key this toggle owns. Taking the whole returned blob
+        // — as this used to — threw away whatever else on the screen had been
+        // typed but not saved, with nothing on screen to explain the blanks.
+        loadedRef.current = { ...(loadedRef.current ?? s), [k]: v } as Settings;
       } else {
-        toast.error("Could not save toggle");
+        setS(before);
+        toast.error("Could not save that switch — it is back as it was");
       }
     } catch {
-      toast.error("Could not save toggle — network error");
+      setS(before);
+      toast.error("Could not save that switch — the studio could not reach the server");
     }
   };
 
@@ -336,6 +423,7 @@ export function SettingsView() {
     }
     if (r.settings) {
       toast.success("Settings saved");
+      loadedRef.current = r.settings;
       setS(r.settings);
       setCareKey("");
       setOrthancPass("");
@@ -349,6 +437,13 @@ export function SettingsView() {
 
   /** Restore a studio personalisation backup — settings + custom findings. */
   const restoreBackup = async (file: File) => {
+    // A restore rewrites this whole screen from the file, so anything typed and
+    // not yet saved goes with it. That has to be said before the click, not
+    // discovered in the empty boxes afterwards.
+    if (unsaved > 0 && !window.confirm(
+      `You have ${unsaved} unsaved change${unsaved === 1 ? "" : "s"} on this screen.\n\n` +
+        "Restoring a backup replaces what is shown here, and those changes are lost.\n\nRestore anyway?",
+    )) return;
     setRestoring(true);
     try {
       const text = await file.text();
@@ -376,6 +471,7 @@ export function SettingsView() {
       // Reload settings so the restored values show immediately.
       const fresh = await fetch("/api/settings").then((r) => r.json());
       if (fresh.settings) {
+        loadedRef.current = fresh.settings;
         setS(fresh.settings);
       }
     } catch (e) {
@@ -402,6 +498,22 @@ export function SettingsView() {
       toast.success("PIN changed");
       setPin({ current: "", next: "" });
     } else toast.error(r.error ?? "Could not change the PIN");
+  };
+
+  /**
+   * The logo, signature and background uploads PUT the whole settings blob, so
+   * they also carry whatever else on the screen is still pending. Adopt what the
+   * server now holds (the screen genuinely is saved) and say out loud that the
+   * other edits went in with the picture — a click on "Upload" should not be a
+   * way to save a half-typed clinic address by accident.
+   */
+  const adoptWholeScreenSave = (saved: Settings | null | undefined): string => {
+    if (!saved) return "";
+    loadedRef.current = saved;
+    setS(saved);
+    return unsaved > 0
+      ? ` — along with your ${unsaved} other unsaved change${unsaved === 1 ? "" : "s"}`
+      : "";
   };
 
   /** Downscale the picked photo to ≤1920px wide JPEG data-URL, then save. */
@@ -431,13 +543,18 @@ export function SettingsView() {
       setS((prev) => (prev ? { ...prev, loginBgUrl: dataUrl } : prev));
       // Save immediately — the background is meant to be quick to try.
       const body: Record<string, string> = { ...(s as unknown as Record<string, string>), loginBgUrl: dataUrl };
-      const r = await fetch("/api/settings", {
+      const res = await fetch("/api/settings", {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
-      }).then((res) => res.json());
-      if (r.settings) toast.success("Login background saved — lock the studio to see it");
-      else toast.error("Could not save background");
+      });
+      const r = await res.json().catch(() => null);
+      if (res.ok && r?.settings) {
+        const carried = adoptWholeScreenSave(r.settings);
+        toast.success(`Login background saved — lock the studio to see it${carried}`);
+      } else {
+        toast.error("Could not save background");
+      }
     } catch {
       toast.error("Could not process that image");
     } finally {
@@ -447,14 +564,28 @@ export function SettingsView() {
   };
 
   const removeBg = async () => {
-    setS((prev) => (prev ? { ...prev, loginBgUrl: "" } : prev));
     const body: Record<string, string> = { ...(s as unknown as Record<string, string>), loginBgUrl: "" };
-    await fetch("/api/settings", {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    toast.success("Background removed — gradient theme shows instead");
+    setS((prev) => (prev ? { ...prev, loginBgUrl: "" } : prev));
+    let res: Response;
+    let r: { settings?: Settings } | null;
+    try {
+      res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      r = await res.json().catch(() => null);
+    } catch {
+      toast.error("Could not remove the background — the studio could not reach the server");
+      return;
+    }
+    // This used to toast success whether or not the write landed.
+    if (!res.ok || !r?.settings) {
+      toast.error("Could not remove the background");
+      return;
+    }
+    const carried = adoptWholeScreenSave(r.settings);
+    toast.success(`Background removed — gradient theme shows instead${carried}`);
   };
 
   // ── v6.2 letter-pad logo + scanned signature uploads (file → PNG data-URL).
@@ -468,13 +599,18 @@ export function SettingsView() {
       const key = which === "logo" ? "logoUrl" : "usgSignatureUrl";
       setS((prev) => (prev ? { ...prev, [key]: dataUrl } : prev));
       const body: Record<string, string> = { ...(s as unknown as Record<string, string>), [key]: dataUrl };
-      const r = await fetch("/api/settings", {
+      const res = await fetch("/api/settings", {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
-      }).then((res) => res.json());
-      if (r.settings) toast.success(which === "logo" ? "Letter-pad logo saved — it prints on the next report" : "Signature saved — it prints over the name line");
-      else toast.error("Could not save image");
+      });
+      const r = await res.json().catch(() => null);
+      if (res.ok && r?.settings) {
+        const carried = adoptWholeScreenSave(r.settings);
+        toast.success(
+          (which === "logo" ? "Letter-pad logo saved — it prints on the next report" : "Signature saved — it prints over the name line") + carried,
+        );
+      } else toast.error("Could not save image");
     } catch {
       toast.error("Could not process that image (PNG / JPG / WebP)");
     } finally {
@@ -571,7 +707,9 @@ export function SettingsView() {
             </div>
           </div>
 
-          <Button onClick={save} className="h-9 text-[12.5px]">Save appearance</Button>
+          <SaveRow n={unsaved}>
+            <Button onClick={save} className="h-9 text-[12.5px]">Save appearance</Button>
+          </SaveRow>
         </TabsContent>
 
         <TabsContent value="hospital" className="mt-4 space-y-4 rounded-xl border border-border bg-card p-5">
@@ -619,7 +757,9 @@ export function SettingsView() {
           <Field label="Footer text" hint="Printed at the bottom of each report (e.g. Kindly correlate clinically.).">
             <Input value={s.footerMessage} onChange={(e) => set("footerMessage", e.target.value)} className="h-9 text-[13px]" />
           </Field>
-          <Button onClick={save} className="h-9 text-[12.5px]">Save clinic branding</Button>
+          <SaveRow n={unsaved}>
+            <Button onClick={save} className="h-9 text-[12.5px]">Save clinic branding</Button>
+          </SaveRow>
         </TabsContent>
 
         <TabsContent value="usg" className="mt-4 space-y-4 rounded-xl border border-border bg-card p-5">
@@ -998,7 +1138,9 @@ export function SettingsView() {
             </div>
           </div>
 
-          <Button onClick={save} className="h-9 text-[12.5px]">Save</Button>
+          <SaveRow n={unsaved}>
+            <Button onClick={save} className="h-9 text-[12.5px]">Save</Button>
+          </SaveRow>
         </TabsContent>
 
         <TabsContent value="integrations" className="mt-4 space-y-6 rounded-xl border border-border bg-card p-5">
@@ -1256,11 +1398,11 @@ export function SettingsView() {
             </p>
           </section>
 
-          <div className="flex justify-end border-t border-border pt-4">
+          <SaveRow n={unsaved}>
             <Button onClick={() => void save()} className="h-9 gap-2 text-[13px]">
               <Check className="h-4 w-4" /> Save settings
             </Button>
-          </div>
+          </SaveRow>
         </TabsContent>
 
         <TabsContent value="security" className="mt-4 space-y-4 rounded-xl border border-border bg-card p-5">
@@ -1344,8 +1486,12 @@ export function SettingsView() {
                     if (res.ok) {
                       toast.success(v ? "Nightly backups enabled" : "Nightly backups off");
                       await loadBackupStatus();
-                      const fresh = await fetch("/api/settings").then((r) => r.json());
-                      if (fresh.settings) setS(fresh.settings);
+                      // Keep only this key in sync, on both sides of the diff.
+                      // Re-reading the whole settings object from the server —
+                      // what this did before — wiped every edit typed in another
+                      // tab, with the screen just showing empty boxes.
+                      setS((prev) => (prev ? { ...prev, usgAutoBackup: v } : prev));
+                      loadedRef.current = { ...(loadedRef.current ?? s), usgAutoBackup: v } as Settings;
                     } else {
                       toast.error("Could not change the nightly backup setting");
                     }
@@ -1471,20 +1617,28 @@ export function SettingsView() {
                 value={s?.whatsappRouting || "patient_only"}
                 onChange={(e) => {
                   const v = e.target.value;
+                  const before = s;
                   setS({ ...s, whatsappRouting: v } as Settings);
                   void fetch("/api/settings", {
                     method: "PUT",
                     headers: { "content-type": "application/json" },
                     body: JSON.stringify({ whatsappRouting: v }),
                   })
-                    .then((r) => r.json())
-                    .then((d) => {
-                      if (d.settings) {
-                        toast.success("WhatsApp routing saved");
-                        setS(d.settings);
-                      } else toast.error("Could not save routing");
+                    .then(async (res) => ({ ok: res.ok, d: await res.json().catch(() => null) }))
+                    .then(({ ok, d }) => {
+                      if (!ok || !d?.settings) {
+                        throw new Error("Could not save routing");
+                      }
+                      toast.success("WhatsApp routing saved");
+                      // Only this key. Adopting the server's whole settings
+                      // object — as this did — wiped edits typed in the other
+                      // tabs while looking like it had only changed this box.
+                      loadedRef.current = { ...(loadedRef.current ?? s), whatsappRouting: v } as Settings;
                     })
-                    .catch(() => toast.error("Could not save routing"));
+                    .catch(() => {
+                      setS(before);
+                      toast.error("Could not save routing — it is back as it was");
+                    });
                 }}
               >
                 <option value="patient_only">Patient only</option>

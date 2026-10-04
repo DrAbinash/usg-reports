@@ -153,9 +153,16 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     // Billing wins for drafts when a procedure maps cleanly.
     if (billedStudyKey) return billedStudyKey;
     if (report?.studyKey && getStudy(report.studyKey)) return report.studyKey;
-    // No billed row — DICOM / last-used / classic default.
-    if (lastStudyKey && getStudy(lastStudyKey)) return lastStudyKey;
-    return "wa-female";
+    // No billed row — DICOM / last-used / classic default. Inheriting the last
+    // study type is for a genuinely blank new report only: a report that already
+    // carries a key which resolves to nothing (a PACS-only draft is stored as
+    // "usg-generic") must not open under the previous patient's procedure, so it
+    // stays on the blank canvas and makes the format an explicit choice.
+    if (!report?.studyKey) {
+      if (lastStudyKey && getStudy(lastStudyKey)) return lastStudyKey;
+      return "wa-female";
+    }
+    return "";
   })();
 
   const initial = useMemo(() => {

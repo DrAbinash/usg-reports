@@ -17,7 +17,7 @@ import type { UsgComposerState, UsgPathologyDef, UsgResolved, UsgStudyDef } from
 import { USG_SEX_CHILD } from "@/lib/usg/types";
 import { USG_STUDIES, STUDY_GROUPS, getStudy, type NormalOverrides } from "@/lib/usg/studies";
 import { isObStudyKey } from "@/lib/usg/orderStudy";
-import { pathologiesForOrgan, selectedPathologies, setOrganVar, sortPathologiesForChips, switchStudy } from "@/lib/usg/composer";
+import { pathologiesForOrgan, selectedPathologies, setOrganText, setOrganVar, sortPathologiesForChips, switchStudy } from "@/lib/usg/composer";
 import {
   applyRushNormalStudy,
   applyRushPreset,
@@ -401,6 +401,31 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
     billedBanner,
   } = p;
 
+  // Where a calculator result should land: the organ card the doctor was last
+  // in. The cards already carry data-organ-idx for the Space focus-advance, so
+  // this reads that same fact rather than inventing a second source of truth.
+  const calcTargetIdx = useRef(0);
+  useEffect(() => {
+    const onFocusIn = (e: FocusEvent) => {
+      const card = (e.target as HTMLElement | null)?.closest?.("[data-organ-idx]");
+      const raw = card?.getAttribute?.("data-organ-idx");
+      if (raw) calcTargetIdx.current = Number(raw) || 0;
+    };
+    document.addEventListener("focusin", onFocusIn);
+    return () => document.removeEventListener("focusin", onFocusIn);
+  }, []);
+
+  /** Append a computed line to that organ's finding. Returns its label. */
+  const insertCalc = (text: string): string | null => {
+    if (isFinal) return null;
+    const def = study.organs[calcTargetIdx.current] ?? study.organs[0];
+    if (!def) return null;
+    const organState = state.organs.find((o) => o.organ === def.key);
+    const base = organState?.text?.trim() ?? "";
+    setState(setOrganText(state, def.key, base ? `${base}\n\n${text}` : text));
+    return def.label;
+  };
+
   const applyAllNormalMacro = () => {
     if (isFinal) return;
     const prev = state;
@@ -721,7 +746,7 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
               <Settings2 className="h-2.5 w-2.5" /> Technique
               <ChevronDown className={cn("h-2.5 w-2.5 transition-transform", showTechnique && "rotate-180")} />
             </button>
-            <UsgCalculators />
+            <UsgCalculators onInsert={insertCalc} />
             {isPregnancyStudy && (
               <div className="flex items-center gap-1">
                 <Label className="flex items-center gap-0.5 text-[9px] font-bold uppercase text-rose-600">

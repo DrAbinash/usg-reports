@@ -83,7 +83,18 @@ function TripleInput({
   );
 }
 
-export function UsgCalculators() {
+export function UsgCalculators({ onInsert }: { onInsert?: (text: string) => string | null } = {}) {
+  // One click does both jobs: the value still goes to the clipboard, and when
+  // the composer hands us a target it also lands in the finding you are working
+  // on. Copy-only meant every calculation ended in a click away and a paste.
+  const copy = (text: string, what: string) => {
+    const target = onInsert?.(text) ?? null;
+    void navigator.clipboard?.writeText(text).then(
+      () => toast.success(target ? `${what} copied — added to ${target}` : `${what} copied`),
+      () => toast.error("Clipboard unavailable"),
+    );
+  };
+
   // Ellipsoid (ovary / mass)
   const [ov, setOv] = useState<[string, string, string]>(["", "", ""]);
   const [ovLabel, setOvLabel] = useState("Right ovary");

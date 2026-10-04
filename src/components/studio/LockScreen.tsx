@@ -369,9 +369,6 @@ export function LockScreen({ onUnlock }: { onUnlock: () => void }) {
             <ImageIcon className="h-3 w-3" />
             Personalise this screen — Settings → Appearance
           </p>
-          <p className="rounded-full bg-white/60 px-3 py-1.5 text-[11px] font-medium text-slate-500 ring-1 ring-white/70 dark:bg-white/10 dark:text-slate-300 dark:ring-white/15">
-            Demo PIN: <span className="font-mono font-bold" style={{ color: theme.soft }}>123456</span> — change in Settings
-          </p>
         </div>
       </LockCard>
     </div>

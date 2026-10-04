@@ -339,6 +339,18 @@ export function SettingsView() {
     try {
       const text = await file.text();
       const json = JSON.parse(text);
+      // A clinic backup replaces patients, reports and stills — the only restore
+      // that can overwrite work done after the file was written, and it used to
+      // fire straight from a single file-picker click over live records.
+      if (json?.format === "usg-clinic-backup") {
+        const go = window.confirm(
+          "This is a FULL CLINIC backup.\n\nRestoring it replaces the patients, reports and images contained in the file, and it cannot be undone.\n\nRestore now?",
+        );
+        if (!go) {
+          toast.message("Restore cancelled — nothing was changed");
+          return;
+        }
+      }
       const res = await fetch("/api/usg/backup/restore", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

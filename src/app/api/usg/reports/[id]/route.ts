@@ -122,6 +122,15 @@ export async function DELETE(_req: Request, ctx: Ctx) {
   const { id } = await ctx.params;
   const existing = await getReportForActiveClinic(id);
   if (!existing) return Response.json({ error: "Not found" }, { status: 404 });
+  // The UI has promised this 409 since it was written; the server never
+  // enforced it, so one mis-click destroyed a signed register entry along with
+  // its stills. Reopen first — that keeps the serial and the old snapshot.
+  if (existing.status === "FINALIZED") {
+    return Response.json(
+      { error: "Finalized reports cannot be deleted. Reopen it first — the register number is kept." },
+      { status: 409 },
+    );
+  }
   await db.usgReport.delete({ where: { id } });
   await audit({
     action: "report.delete",

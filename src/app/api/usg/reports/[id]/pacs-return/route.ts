@@ -49,14 +49,24 @@ export async function POST(
     return NextResponse.json({ error: "Unknown study type" }, { status: 400 });
   }
 
-  // Look up the care order to get StudyInstanceUID + AccessionNumber
+  // The order that produced THIS report. Matching on patientName used to pick
+  // the newest order sharing the name, so two patients with the same name sent
+  // the SR onto the wrong study — and careSync.ts deliberately identifies
+  // orders by UID / accession / worklist / bill number and never by name.
   const careOrder = await db.usgCareOrder.findFirst({
-    where: { patientName: report.patientName },
+    where: { reportId: report.id },
     orderBy: { createdAt: "desc" },
   });
 
-  const studyInstanceUid = careOrder?.studyInstanceUid ?? null;
-  const accessionNumber = careOrder?.accessionNumber ?? null;
+  if (!careOrder) {
+    return NextResponse.json(
+      { error: "This report is not linked to a CARE order, so its study cannot be identified. Return it from the worklist row instead." },
+      { status: 409 },
+    );
+  }
+
+  const studyInstanceUid = careOrder.studyInstanceUid ?? null;
+  const accessionNumber = careOrder.accessionNumber ?? null;
 
   const resolved = resolve(state, makeLookup(USG_PATHOLOGIES_ALL), study.technique);
 
@@ -132,9 +142,10 @@ export async function GET(
     return NextResponse.json({ error: "Report not found" }, { status: 404 });
   }
 
-  // Look up the care order for StudyInstanceUID
+  // Same identity rule as the POST above: the order that produced this report,
+  // never "the newest order carrying this patient's name".
   const careOrder = await db.usgCareOrder.findFirst({
-    where: { patientName: report.patientName },
+    where: { reportId: id },
     orderBy: { createdAt: "desc" },
     select: { studyInstanceUid: true },
   });

@@ -148,7 +148,7 @@ export async function probeViewer(
   }
   if (head.ok) return finish({ reachable: true, status: head.status }, false);
 
-  if (head.status === 403 || head.status === 405 || head.status === 501) {
+  if (head.status === 401 || head.status === 403 || head.status === 405 || head.status === 501) {
     let get: Response;
     try {
       get = await fetchWithTimeout(url, "GET", getMs);
@@ -157,6 +157,15 @@ export async function probeViewer(
     }
     if (get.ok) {
       return finish({ reachable: true, status: get.status, error: undefined }, false);
+    }
+    // A 401/403 is an answer. The origin resolved, TLS worked and a server
+    // replied — the viewer is up and simply wants a sign-in. Calling that
+    // "unreachable" made AUTO abandon a healthy HTTPS route and fall back to
+    // the plain-http LAN viewer, which the page then could not frame at all:
+    // switching on Cloudflare Access in front of OHIF would have looked like
+    // the viewer breaking. Report it reachable, and say what it wants.
+    if (get.status === 401 || get.status === 403) {
+      return finish({ reachable: true, status: get.status, error: `${label} is up but needs sign-in (${get.status})` }, false);
     }
     return finish({ reachable: false, status: get.status, error: `${label} responded ${get.status}` }, false);
   }

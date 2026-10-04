@@ -253,12 +253,23 @@ export function UsgWorklistView() {
 
   const range = dateRange();
 
+  // The search box drives a server query now, so debounce it — otherwise every
+  // keystroke is a round trip. Below two characters the server ignores it and
+  // the local filter handles the list, which keeps single-letter typing instant.
+  const [serverQ, setServerQ] = useState("");
+  useEffect(() => {
+    const needle = q.trim();
+    const t = setTimeout(() => setServerQ(needle.length >= 2 ? needle : ""), 300);
+    return () => clearTimeout(t);
+  }, [q]);
+
   const worklistQ = useQuery({
-    queryKey: ["usg", "worklist", range.from, range.to, clinicToday ?? "pending-day"],
+    queryKey: ["usg", "worklist", range.from, range.to, serverQ, clinicToday ?? "pending-day"],
     queryFn: async (): Promise<WorklistResponse> => {
       const qs = new URLSearchParams();
       if (range.from) qs.set("from", range.from);
       if (range.to) qs.set("to", range.to);
+      if (serverQ) qs.set("q", serverQ);
       const url = qs.toString() ? `/api/usg/worklist?${qs}` : "/api/usg/worklist";
       const r = await fetch(url);
       if (!r.ok) throw new Error(`worklist ${r.status}`);
@@ -468,18 +479,24 @@ export function UsgWorklistView() {
 
   const orders = data?.orders ?? [];
   const shown = useMemo(() => {
+    // When the server honoured ?q= it searched every date and every field
+    // (phone, bill number, Study UID included). Filtering the response again by
+    // name here would only throw away those extra matches.
+    if ((data as { search?: { q: string } | null } | null | undefined)?.search) return orders;
     const needle = q.trim().toLowerCase();
     if (!needle) return orders;
     return orders.filter(
       (o) =>
         o.patientName.toLowerCase().includes(needle) ||
+        (o.patientPhone ?? "").toLowerCase().includes(needle) ||
+        (o.billNumber ?? "").toLowerCase().includes(needle) ||
         (o.accessionNumber ?? "").toLowerCase().includes(needle) ||
         (o.careWorklistId ?? "").toLowerCase().includes(needle) ||
         (o.testName ?? "").toLowerCase().includes(needle) ||
         (o.testCode ?? "").toLowerCase().includes(needle) ||
         (o.referringDoctor ?? "").toLowerCase().includes(needle),
     );
-  }, [orders, q]);
+  }, [orders, q, data]);
 
   const pending = shown.filter((o) => !o.ignored && (o.status === "PENDING" || o.status === "REPORTING"));
   const reported = shown.filter((o) => !o.ignored && o.status === "REPORTED");

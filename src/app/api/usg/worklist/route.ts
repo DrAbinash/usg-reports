@@ -53,9 +53,32 @@ export async function GET(req: Request) {
   // v6.14: date range filter — ?from=YYYY-MM-DD&to=YYYY-MM-DD
   const fromParam = url.searchParams.get("from");
   const toParam = url.searchParams.get("to");
-  const dateFiltered = !!(fromParam || toParam);
+  // ?q= searches the order table itself. Until now search was a client-side
+  // filter over whatever page the browser already held, so a patient outside
+  // the 500 rows or the visible date range simply did not exist — and phone,
+  // bill number and Study UID were never looked at at all.
+  const q = (url.searchParams.get("q") ?? "").trim();
+  const searching = q.length >= 2;
+  // An active search drops the date filter: typing a name to find the man who
+  // scanned yesterday must not be answered with an empty list because the
+  // worklist defaults to "Today".
+  const dateFiltered = !searching && !!(fromParam || toParam);
 
   const where: Prisma.UsgCareOrderWhereInput = { clinicId };
+
+  if (searching) {
+    where.OR = [
+      { patientName: { contains: q } },
+      { patientPhone: { contains: q } },
+      { billNumber: { contains: q } },
+      { accessionNumber: { contains: q } },
+      { careWorklistId: { contains: q } },
+      { studyInstanceUid: { contains: q } },
+      { testName: { contains: q } },
+      { testCode: { contains: q } },
+      { referringDoctor: { contains: q } },
+    ];
+  }
 
   if (dateFiltered) {
     const studyDateFilter: Prisma.DateTimeFilter = {};
@@ -73,7 +96,8 @@ export async function GET(req: Request) {
   const orders = await db.usgCareOrder.findMany({
     where,
     orderBy: { studyDate: "desc" },
-    take: 500,
+    // A search is bounded by relevance, not by the browse page size.
+    take: searching ? 200 : 500,
   });
 
   const items: WorklistOrderDto[] = orders.map((o) => ({
@@ -133,6 +157,9 @@ export async function GET(req: Request) {
     usgFormFEnabled: !!s.usgFormFEnabled,
     // v6.14: echo the applied date range so the UI can show it
     dateRange: { from: fromParam, to: toParam },
+    /** Set when ?q= was honoured server-side — the UI stops filtering locally
+     *  and can say the search covered every date, not just the visible range. */
+    search: searching ? { q, acrossAllDates: true } : null,
     /** Server/clinic calendar day in Asia/Kolkata — use for Today/Yesterday presets. */
     clinicToday,
     pendingOpenTotal,

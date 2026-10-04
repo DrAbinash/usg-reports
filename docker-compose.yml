@@ -73,6 +73,12 @@ services:
       - OHIF_PROBE_FAIL_CACHE_MS=${OHIF_PROBE_FAIL_CACHE_MS:-15000}
       - INTEGRATION_DEFAULTS=${INTEGRATION_DEFAULTS:-on}
 
+      # Frozen-sheet PDF renderer — the `chrome` service below. A finalized
+      # report's PDF is its stored HTML printed by real Chromium, so the file
+      # matches the paper for every print style. Leave it unset (or drop the
+      # service) and PDFs fall back to the studio's own vector generator.
+      - CHROME_PDF_URL=${CHROME_PDF_URL:-http://chrome:3000}
+
     volumes:
       - ./data/db:/app/data/db
       # The nightly full-clinic backup (Settings → Data "Automatic nightly
@@ -108,3 +114,32 @@ services:
       resources:
         limits:
           memory: 96M
+
+  # Headless Chromium that prints a finalized report's frozen HTML to PDF.
+  #
+  # Deliberately its own container: one print job wants several hundred
+  # megabytes and the studio is capped at 512M, so sharing a cgroup would let a
+  # large report OOM the app the clinic reports in all day. Multi-arch image, so
+  # it runs on the ARM Synology.
+  #
+  # No published ports — the studio reaches it over this compose network only,
+  # and it never renders anything but documents the studio hands it. The studio
+  # does NOT depend_on it: if this service is absent or down, PDFs fall back to
+  # the built-in vector generator instead of failing.
+  chrome:
+    image: chromedp/headless-shell:latest
+    container_name: usg-reporting-chrome
+    restart: unless-stopped
+    # Chromium's own sandbox needs user namespaces the NAS does not grant this
+    # container; it is isolated by network and by having nothing to read.
+    command: ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"]
+    # /dev/shm is where Chromium spills render buffers; the 64M docker default
+    # makes large image-heavy reports crash the tab mid-print.
+    shm_size: "1g"
+    expose:
+      - "3000"
+
+    deploy:
+      resources:
+        limits:
+          memory: 768M

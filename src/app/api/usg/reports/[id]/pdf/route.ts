@@ -4,6 +4,7 @@ import { getSettings } from "@/lib/settings";
 import { makeLookup, normaliseState, resolve } from "@/lib/usg/composer";
 import { loadAllPathologies, loadNormalOverrides } from "@/lib/usg/server";
 import { buildUsgReportPdf } from "@/lib/usg/pdf";
+import { browserPdfAvailable, renderHtmlToPdf } from "@/lib/usg/pdfRenderHtml";
 import { formatUsgSerial, frozenPrintSettingsOf, toUsgPrintSettings } from "@/lib/usg/print";
 import { payloadInputFor, qrPngFor } from "@/lib/usg/qrServer";
 
@@ -54,6 +55,37 @@ export async function GET(req: Request, ctx: Ctx) {
   // or logo silently restyled every report already filed — two different
   // documents under one register number.
   const frozen = frozenPrintSettingsOf(report.printSettingsJson);
+  const filename =
+    report.serialNo != null
+      ? `${formatUsgSerial(report.serialNo)}-${report.patientName.replace(/[^a-z0-9]+/gi, "-").slice(0, 30)}.pdf`
+      : `usg-draft-${report.id.slice(0, 8)}.pdf`;
+  // `download=1` → attachment so the sticky PDF button saves a file;
+  // otherwise inline for open-in-tab / verify links.
+  const disposition = wantDownload ? "attachment" : "inline";
+  const asPdf = (body: Uint8Array): Response =>
+    new Response(body as unknown as BodyInit, {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `${disposition}; filename="${filename}"`,
+        "Cache-Control": "no-store",
+      },
+    });
+
+  // A finalized report downloads as the sheet that was actually signed: its
+  // frozen HTML, through the same engine the browser printed with. The vector
+  // generator below cannot reproduce every print style — premium_sidebar has no
+  // PDF layout at all — so where a renderer exists this is the only PDF that
+  // matches the paper. If it is missing or fails, fall through rather than
+  // deny the doctor a download over an optional service.
+  const frozenHtml = report.reportHtml?.trim() ?? "";
+  if (frozenHtml && browserPdfAvailable()) {
+    try {
+      return asPdf(await renderHtmlToPdf(frozenHtml));
+    } catch {
+      // the vector generator below is the fallback, not an error
+    }
+  }
+
   const bytes = await buildUsgReportPdf({
     settings: frozen ?? toUsgPrintSettings({
       ...(settings as unknown as Record<string, unknown>),
@@ -73,21 +105,7 @@ export async function GET(req: Request, ctx: Ctx) {
     qrPng,
   });
 
-  const filename =
-    report.serialNo != null
-      ? `${formatUsgSerial(report.serialNo)}-${report.patientName.replace(/[^a-z0-9]+/gi, "-").slice(0, 30)}.pdf`
-      : `usg-draft-${report.id.slice(0, 8)}.pdf`;
-
-  // `download=1` → attachment so the sticky PDF button saves a file;
-  // otherwise inline for open-in-tab / verify links.
-  const disposition = wantDownload ? "attachment" : "inline";
-  return new Response(bytes as unknown as BodyInit, {
-    headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `${disposition}; filename="${filename}"`,
-      "Cache-Control": "no-store",
-    },
-  });
+  return asPdf(bytes);
 }
 
 function safeParse(raw: string): unknown {

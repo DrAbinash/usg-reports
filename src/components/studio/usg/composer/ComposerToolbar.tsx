@@ -246,6 +246,26 @@ function toolbarEqual(a: ComposerToolbarProps, b: ComposerToolbarProps): boolean
 }
 
 
+/**
+ * One-shot undo for the whole-report macros.
+ *
+ * The composer has no general undo, and these macros rewrite every organ (and
+ * clear the written impression), so a mistimed `n` used to destroy a report in
+ * progress with nothing to go back to. Undo therefore rides on the toast, held
+ * long enough to reach for Ctrl+Z.
+ */
+function announceMacro<T>(message: string, undoTo: T | undefined, setState: (next: T) => void): void {
+  if (undoTo === undefined) {
+    toast.success(message);
+    return;
+  }
+  const prev = undoTo;
+  toast.success(message, {
+    duration: 8_000,
+    action: { label: "Undo", onClick: () => setState(prev) },
+  });
+}
+
 /** Global composer hotkeys — Space focus-advance, N rush-normal, Ctrl+S/P/Enter, 1-9 chips. */
 export function ComposerHotkeys(props: {
   isFinal: boolean;
@@ -267,6 +287,7 @@ export function ComposerHotkeys(props: {
     isFinal, study, state, setState, pathologies, focusedOrganIdx, setFocusedOrganIdx,
     setQualityOpen, setPickerOpen, persistRef, printRefFn, finalizeFastRef, togglePathologyRef, busyRef,
   } = props;
+
   const rushNormalRef = useRef<() => void>(() => {});
   rushNormalRef.current = () => {
     if (isFinal) return;
@@ -276,11 +297,13 @@ export function ComposerHotkeys(props: {
         toast.error("This study needs measurements — use organ cards");
         return;
       }
+      const prev = state;
       setState(next);
-      toast.success("NP · no sizes — ready to print");
+      announceMacro("NP · no sizes — ready to print", prev, setState);
     } else {
+      const prev = state;
       setState((s) => markAllNormal(s, study));
-      toast.success("All organs set to normal");
+      announceMacro("All organs set to normal", prev, setState);
     }
   };
   useEffect(() => {
@@ -380,6 +403,7 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
 
   const applyAllNormalMacro = () => {
     if (isFinal) return;
+    const prev = state;
     let applied = 0;
     for (const def of study.organs) {
       if (isGridOrgan(def)) continue;
@@ -387,11 +411,17 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
       const organState = state.organs.find((o) => o.organ === def.key);
       if (!organState) continue;
       if (selectedPathologies(organState).length > 0) continue;
+      // "Blank" now means blank. Hand-typed wording is marked custom, and an
+      // organ that already carries text is the doctor's — the old loop cleared
+      // both on every organ, so one click on a fresh study rewrote all 13
+      // findings and reported "13 organ(s)" of work it never needed to do.
+      if (organState.custom) continue;
+      if (organState.text?.trim()) continue;
       togglePathology(def.key, null);
       applied += 1;
     }
-    if (applied > 0) toast.success(`Fill blank organs — ${applied} organ(s)`);
-    else toast.message("Abnormals preserved — nothing left to set normal");
+    if (applied > 0) announceMacro(`Filled ${applied} blank organ(s) with normal text`, prev, setState);
+    else toast.message("No blank organs to fill — abnormals and your own wording are untouched");
   };
 
   const pickStudy = (k: string) => {
@@ -729,11 +759,14 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
             try {
               const prior = JSON.parse(diffSource.stateJson) as UsgComposerState;
               const { state: next, filledCount } = copyForwardMeasurements(state, prior);
+              const prev = state;
               setState(next);
-              toast.success(
+              announceMacro(
                 filledCount > 0
                   ? `Filled ${filledCount} empty measurement slot(s) from prior scan`
                   : "No empty slots to fill — already complete",
+                prev,
+                setState,
               );
             } catch {
               toast.error("Could not read prior scan state");
@@ -787,8 +820,9 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
                   toast.error("This study needs measurements — use organ cards");
                   return;
                 }
+                const prev = state;
                 setState(next);
-                toast.success("NP · no sizes — ready to print");
+                announceMacro("NP · no sizes — ready to print", prev, setState);
               }}
             >
               <Zap className="mr-1 h-3.5 w-3.5" />
@@ -807,8 +841,9 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
                     toast.error("This study needs measurements — use organ cards");
                     return;
                   }
+                  const prev = state;
                   setState(next);
-                  toast.success("NP + Fatty Gr I · no size — ready to print");
+                  announceMacro("NP + Fatty Gr I · no size — ready to print", prev, setState);
                 }}
               >
                 + Fatty
@@ -823,8 +858,9 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
             className="h-7 shrink-0 border-emerald-400 bg-emerald-100 px-2 text-[11px] font-bold text-emerald-950 hover:bg-emerald-200"
             title="Clear all pathologies back to measured normals"
             onClick={() => {
+              const prev = state;
               setState((s) => markAllNormal(s, study));
-              toast.success("All organs set to normal");
+              announceMacro("All organs set to normal", prev, setState);
             }}
           >
             <Zap className="mr-1 h-3.5 w-3.5" />
@@ -836,7 +872,7 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
           size="sm"
           variant="outline"
           className="h-7 shrink-0 border-emerald-600 bg-emerald-600 px-2.5 text-[11px] font-bold text-white hover:bg-emerald-700"
-          title="Fill every unset organ with its normal finding (leaves abnormals untouched)"
+          title="Fill the organs you left empty with their normal finding — never touches abnormals or wording you typed"
           onClick={applyAllNormalMacro}
         >
           <Check className="mr-1 h-3.5 w-3.5" />

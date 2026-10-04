@@ -246,7 +246,20 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const captionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // for restore; a debounced autosave keeps the snapshot fresh.
-  const dKey = useMemo(() => draftKey(report?.id ?? null), [report]);
+  // The key must identify THIS study. Every unsaved report used to share
+  // "usg-draft:new", so opening patient B offered "Restore" on patient A's
+  // snapshot — a draft that reads as help is a wrong-patient hazard. Resolved
+  // once per mount so typing the name cannot orphan the snapshot mid-report:
+  // a billed study keys on its order (a reload still finds it), an anonymous
+  // walk-in gets a per-mount id instead of the shared one.
+  const draftIdRef = useRef<string | null>(null);
+  if (!draftIdRef.current) {
+    const named = `${patientName}|${patientPhone}|${scanDate}`;
+    draftIdRef.current =
+      report?.id ?? order?.id ??
+      (named === "||" ? `mount:${Math.random().toString(36).slice(2)}` : `new:${named}`);
+  }
+  const dKey = draftKey(draftIdRef.current);
   const [restoreSnap, setRestoreSnap] = useState<DraftSnapshot | null>(null);
   const [lastAutosave, setLastAutosave] = useState<number | null>(null);
   const dirtyRef = useRef(false);

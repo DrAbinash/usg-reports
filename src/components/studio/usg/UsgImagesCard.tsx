@@ -241,6 +241,14 @@ export function UsgImagesCard({
             if (files.length) readFiles(files, handleAdd);
           }}
           tabIndex={0}
+          onKeyDown={(e) => {
+            // It is a button in every way but the tag: reachable by Tab, but
+            // without this, Enter and Space did nothing.
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              fileRef.current?.click();
+            }
+          }}
           className={cn(
             "flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed px-3 py-3 text-[11.5px] font-medium transition-colors",
             dragOver ? "border-sky-400 bg-sky-50 text-sky-700" : "border-border bg-panel text-muted-foreground hover:border-sky-300 hover:text-sky-700",

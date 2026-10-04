@@ -341,6 +341,28 @@ export function LockScreen({ onUnlock }: { onUnlock: () => void }) {
     setError("");
   };
 
+  // The keypad was buttons only, so typing the PIN on the keyboard did nothing —
+  // in a studio unlocked dozens of times a day that means reaching for the mouse
+  // every single time. Digits enter, Backspace deletes, Escape starts over.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (/^[0-9]$/.test(e.key)) {
+        e.preventDefault();
+        push(e.key);
+      } else if (e.key === "Backspace") {
+        e.preventDefault();
+        back();
+      } else if (e.key === "Escape") {
+        setPin("");
+        setError("");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pin, trust]);
+
   return (
     <div className="relative flex min-h-screen items-center justify-center p-4">
       <style>{KEYFRAME_STYLE}</style>

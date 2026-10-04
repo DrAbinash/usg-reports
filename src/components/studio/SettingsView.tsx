@@ -1018,8 +1018,8 @@ export function SettingsView() {
               <Input value={s.careApiBase} onChange={(e) => set("careApiBase", e.target.value)} placeholder="http://172.16.1.139:8888"
                 className="h-9 border-border bg-panel text-[12.5px] font-mono" />
             </Field>
-            <Field label="API key" hint="The same static key the ERP holds in REPORTING_STUDIO_API_KEY. Write-only — a saved key shows as a green badge, never its value.">
-              <Input value={careKey} onChange={(e) => setCareKey(e.target.value)} placeholder={s.careApiKeySet ? "saved — type to replace" : "openssl rand -hex 24 style key"}
+            <Field label="API key" hint="The same key CARE ERP holds for this studio. Write-only — a saved key shows as a green badge, never its value.">
+              <Input value={careKey} onChange={(e) => setCareKey(e.target.value)} placeholder={s.careApiKeySet ? "saved — type to replace" : "the long key from CARE ERP"}
                 type="password" className="h-9 border-border bg-panel text-[12.5px] font-mono" />
             </Field>
             <div className="flex items-center gap-2">
@@ -1115,7 +1115,7 @@ export function SettingsView() {
 
             <Field
               label="LAN endpoint"
-              hint="In-hospital address, e.g. http://172.16.1.139:3010. Blank falls back to the clinic LAN host + port 3010, then to the OHIF_LAN_URL environment default."
+              hint="In-hospital address, e.g. http://172.16.1.139:3010. Leave blank to use the clinic LAN host on port 3010 automatically."
             >
               <Input value={s.ohifLanUrl ?? ""} onChange={(e) => set("ohifLanUrl", e.target.value)} placeholder="http://172.16.1.139:3010"
                 className="h-9 border-border bg-panel text-[12.5px] font-mono" />
@@ -1123,7 +1123,7 @@ export function SettingsView() {
 
             <Field
               label="Canonical endpoint"
-              hint="The stable HTTPS front door for the viewer — the same address CARE ERP opens, e.g. https://ohif.yourdomain.com. This is the route an https studio page can embed, and AUTO uses it as soon as the LAN viewer proves unembeddable. A path beginning with / is proxied same-origin by our own web server instead (needs the /ohif Caddy route and OHIF built with PUBLIC_URL=/ohif). Set OHIF_CUSTOM_URL, or use this field."
+              hint="The stable HTTPS front door for the viewer — the same address CARE ERP opens, e.g. https://ohif.yourdomain.com. This is the route an https studio page can embed, and AUTO uses it as soon as the LAN viewer proves unembeddable. A path beginning with / is served through this studio's own web server instead, if one is set up for it."
             >
               <Input value={s.ohifCustomUrl ?? ""} onChange={(e) => set("ohifCustomUrl", e.target.value)} placeholder="https://ohif.example  ·  /ohif"
                 className="h-9 border-border bg-panel text-[12.5px] font-mono" />
@@ -1320,7 +1320,7 @@ export function SettingsView() {
               </Button>
             </div>
             <p className="text-[10.5px] text-sky-600">
-              Restoring is idempotent — reports and patients are matched by id, nothing outside the file is deleted,
+              Restoring is safe to repeat — reports and patients are matched by id, nothing outside the file is deleted,
               and a register-number clash skips that report rather than renumbering anything.
             </p>
           </div>
@@ -1454,9 +1454,9 @@ export function SettingsView() {
             </p>
             <FeatureToggle field="enableCriticalComm" label="Critical Findings Communication Log" hint="PCPNDT/NMC legal record of referring-physician contact" value={!!s?.enableCriticalComm} onToggle={(v) => setBool("enableCriticalComm", v)} />
             <FeatureToggle field="enableFollowUps" label="Follow-up Reminders" hint="Dashboard widget + per-report followUpDate" value={!!s?.enableFollowUps} onToggle={(v) => setBool("enableFollowUps", v)} />
-            <FeatureToggle field="enableAiDraft" label="AI Draft (Ollama)" hint="Local AI findings-draft assistant (requires OLLAMA_URL)" value={!!s?.enableAiDraft} onToggle={(v) => setBool("enableAiDraft", v)} />
+            <FeatureToggle field="enableAiDraft" label="AI Draft" hint="Drafts findings from the images on the machine's own AI service. Needs that service running on the server." value={!!s?.enableAiDraft} onToggle={(v) => setBool("enableAiDraft", v)} />
             <FeatureToggle field="enableBirads" label="BI-RADS structured reporting" hint="Breast study BI-RADS assessment picker" value={!!s?.enableBirads} onToggle={(v) => setBool("enableBirads", v)} />
-            <FeatureToggle field="enableDicomSr" label="DICOM SR PDF attachment" hint="Reserved — embed SR XML in PDF (future)" value={!!s?.enableDicomSr} onToggle={(v) => setBool("enableDicomSr", v)} />
+            <FeatureToggle field="enableDicomSr" label="DICOM SR PDF attachment" hint="Not used yet — switching this on changes nothing today." value={!!s?.enableDicomSr} onToggle={(v) => setBool("enableDicomSr", v)} />
 
             <div className="rounded-lg border border-border bg-white p-2.5">
               <Label htmlFor="whatsappRouting" className="text-[12px] font-semibold text-foreground">

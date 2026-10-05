@@ -74,7 +74,14 @@ export const LOGIN_THEMES: Record<LoginThemeName, Theme> = {
 const resolveTheme = (name?: string | null): Theme =>
   LOGIN_THEMES[(name ?? "aurora") as LoginThemeName] ?? LOGIN_THEMES.aurora;
 
-type Branding = { theme?: string | null; bgUrl?: string | null; appTitle?: string | null; hospitalName?: string | null };
+type Branding = {
+  theme?: string | null;
+  bgUrl?: string | null;
+  appTitle?: string | null;
+  hospitalName?: string | null;
+  /** The studio is still on the seeded demo PIN, so setup is being re-run. */
+  demoPin?: boolean;
+};
 
 /** Fetch pre-auth branding (theme + uploaded background photo). */
 function useLoginBranding(): Branding {
@@ -82,7 +89,7 @@ function useLoginBranding(): Branding {
   useEffect(() => {
     fetch("/api/auth/state")
       .then((r) => r.json())
-      .then((d) => setB(d.loginBranding ?? {}))
+      .then((d) => setB({ ...(d.loginBranding ?? {}), demoPin: d.demoPin === true }))
       .catch(() => {});
   }, []);
   return b;
@@ -281,10 +288,14 @@ export function SetupScreen({ onDone }: { onDone: () => void }) {
         <StudioMark accent={theme.accent} title={branding.appTitle || branding.hospitalName || "USG Studio"} subtitle={branding.hospitalName ? `Sonography · ${branding.hospitalName}` : "Sonography reporting"} />
         <div className="mt-6 flex items-center gap-2">
           <ShieldCheck className="h-4 w-4" style={{ color: theme.soft }} />
-          <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">Welcome — set your PIN</span>
+          <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+            {branding.demoPin ? "Replace the demo PIN" : "Welcome — set your PIN"}
+          </span>
         </div>
         <p className="mt-1.5 text-[12px] leading-relaxed text-slate-500 dark:text-slate-300">
-          This studio belongs to one sonologist. Your 6-digit PIN unlocks it on this device.
+          {branding.demoPin
+            ? "This studio is still unlocked by the built-in demo PIN, which anyone could guess. Choose your own 6-digit PIN — it replaces the demo one immediately."
+            : "This studio belongs to one sonologist. Your 6-digit PIN unlocks it on this device."}
         </p>
         <div className="mt-6 flex flex-col items-center gap-5">
           <PinDots length={(stage === "first" ? pin : confirm).length} error={!!error} accent={theme.accent} />

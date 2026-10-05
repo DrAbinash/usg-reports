@@ -54,9 +54,13 @@ describe("the demo PIN cannot be the lock on patient records", () => {
     expect(read("src/components/studio/LockScreen.tsx")).not.toMatch(/Demo PIN/);
   });
 
-  it("auth/state treats the still-seeded demo PIN as setup pending", () => {
-    const src = read("src/app/api/auth/state/route.ts");
-    expect(src).toMatch(/verifyPin\(DEMO_PIN, settings\.pinHash\)/);
+  it("auth/state and auth/setup share one demo-PIN rule", () => {
+    expect(read("src/lib/pinPolicy.ts")).toMatch(/verifyPin\(DEMO_PIN, pinHash\)/);
+    expect(read("src/app/api/auth/state/route.ts")).toMatch(/isPinSetupOutstanding\(settings\.pinHash\)/);
+    // The two routes once disagreed: state showed the setup screen for a
+    // studio still on the demo PIN while setup refused to write over any PIN,
+    // so nobody could get in or set a new one.
+    expect(read("src/app/api/auth/setup/route.ts")).toMatch(/if \(!isPinSetupOutstanding\(s\.pinHash\)\)/);
   });
 
   it("the demo PIN lives in one place", () => {

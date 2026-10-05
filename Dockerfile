@@ -67,6 +67,10 @@ COPY scripts/usg-v4-cleanup.mjs ./scripts/usg-v4-cleanup.mjs
 # v6.1 worklist-identity helper — run by the entrypoint AFTER `db push`
 # (blank accessionNumber "" → NULL + duplicate-identity diagnostics).
 COPY scripts/usg-v7-null-accession.mjs ./scripts/usg-v7-null-accession.mjs
+# Forgotten-PIN recovery — NOT run by the entrypoint. It is the operator's
+# escape hatch, so it has to ship inside the image: the container is the only
+# place the studio database exists.
+COPY scripts/pin-reset.mjs ./scripts/pin-reset.mjs
 
 # Entrypoint: prepare DB, then start the standalone server
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh

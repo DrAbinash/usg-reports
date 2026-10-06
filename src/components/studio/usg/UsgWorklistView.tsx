@@ -214,6 +214,7 @@ function OrderRow({
 
 export function UsgWorklistView() {
   const { openComposer } = useStudio();
+  const view = useStudio((s) => s.view);
   const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState(false);
   const [q, setQ] = useState("");
@@ -402,9 +403,14 @@ export function UsgWorklistView() {
     }
   }, [load]);
 
-  // Auto-pull from CARE: on mount, every 2 min while this view is open, and on tab focus.
+  // Auto-pull from CARE only while the worklist is actually on screen.
+  // AppShell keeps this view mounted-but-hidden while the composer is open, so
+  // an unguarded interval ran every sync — hundreds of Orthanc calls and
+  // thousands of SQLite writes — underneath the doctor who was typing, and the
+  // click to open a study queued behind them. Returning to the list catches up.
   useEffect(() => {
-    void sync({ silent: true });
+    if (view !== "worklist") return;
+    if (Date.now() - lastAutoSyncAt.current > AUTO_SYNC_INTERVAL_MS) void sync({ silent: true });
     const timer = setInterval(() => { void sync({ silent: true }); }, AUTO_SYNC_INTERVAL_MS);
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
@@ -416,7 +422,7 @@ export function UsgWorklistView() {
       clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [sync]);
+  }, [sync, view]);
 
   const startReport = async (order: Order, opts?: { rush?: boolean; preset?: "fatty-g1" }) => {
     const r = await fetch(`/api/usg/worklist/${order.id}/start`, {

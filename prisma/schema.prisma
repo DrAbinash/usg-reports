@@ -461,6 +461,10 @@ model UsgCareOrder {
   @@index([clinicId])
   @@index([clinicId, status])
   @@index([studyDate])
+  // The worklist list and the prefetch both resolve "which report was started
+  // from this order", and the orphan prune reads it as a guard — unindexed,
+  // that is a full scan of UsgCareOrder per row.
+  @@index([reportId])
   // v6.1 — deterministic identity lookups (plain, NOT unique: legacy
   // duplicates must never fail a NAS boot; resolution is oldest-first).
   @@index([careWorklistId])
@@ -508,6 +512,10 @@ model UsgSyncState {
   id            String    @id @default("singleton")
   clinicId      String    @default("default")
   lastSyncAt    DateTime?
+  /** When the last bounded repair pull ran (see DEEP_PULL_INTERVAL_MS). */
+  lastDeepPullAt DateTime?
+  /** Syncs whose CARE rows failed to write, holding lastSyncAt in place. */
+  cursorHoldCount Int     @default(0)
   lastCareOk    Boolean   @default(false)
   lastOrthancOk Boolean   @default(false)
   lastError     String?

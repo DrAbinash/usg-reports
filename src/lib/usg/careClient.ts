@@ -175,6 +175,19 @@ export function worklistQueryPath(opts?: FetchWorklistOpts): string {
   return path;
 }
 
+/**
+ * CARE's own clock at serve time, from either envelope shape:
+ * the incremental `{ serverTime }` (epoch ms) or the audit-meta
+ * `{ meta: { syncedAt } }` (ISO). Null when the ERP did not say — the caller
+ * must then fall back to its own clock rather than assume one was reported.
+ */
+export function servedAtFromPayload(data: any): number | null {
+  const raw = data?.serverTime ?? data?.meta?.syncedAt;
+  if (raw == null) return null;
+  const ms = typeof raw === "number" ? raw : Date.parse(String(raw));
+  return Number.isFinite(ms) ? ms : null;
+}
+
 export async function fetchWorklist(opts?: FetchWorklistOpts) {
   // v6.14: fetch ALL statuses, not just pending. The ERP's ?status=pending
   // only returned new orders; the doctor needs to see reported/completed
@@ -192,6 +205,12 @@ export async function fetchWorklist(opts?: FetchWorklistOpts) {
   let list: CareWorklistItem[] = Array.isArray(r.data)
     ? r.data
     : (r.data?.rows ?? r.data?.orders ?? []);
+  // The LOWEST serve stamp across the whole pull. The sync cursor may only
+  // advance to a moment CARE has provably covered: a page fetched later can
+  // carry rows that changed after an earlier page's stamp, so taking the last
+  // stamp instead of the first would move the watermark past rows that were
+  // never served — and a row behind the watermark never comes back.
+  let servedThroughAt = servedAtFromPayload(r.data);
   // Follow the cursor while the ERP signals more pages (incremental path).
   let cursor: string | null = Array.isArray(r.data) ? null : (r.data?.nextCursor ?? null);
   let pages = 0;
@@ -200,10 +219,12 @@ export async function fetchWorklist(opts?: FetchWorklistOpts) {
     if (!nr.ok) break;
     const chunk: CareWorklistItem[] = Array.isArray(nr.data) ? nr.data : (nr.data?.orders ?? []);
     list = list.concat(chunk);
+    const t = servedAtFromPayload(nr.data);
+    if (t != null) servedThroughAt = servedThroughAt == null ? t : Math.min(servedThroughAt, t);
     cursor = nr.data?.nextCursor ?? null;
     pages += 1;
   }
-  return { ok: true as const, data: list };
+  return { ok: true as const, data: list, servedThroughAt };
 }
 
 export type FinalizePayload = {

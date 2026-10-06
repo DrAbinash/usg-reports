@@ -30,6 +30,7 @@ import {
 } from "@/lib/usg/careSync";
 import type { CareWorklistItem } from "@/lib/usg/careClient";
 import type { OrthancStudy, OrthancUsStudyRow } from "@/lib/usg/orthancClient";
+import { addCalendarDaysYmd, clinicTodayIST } from "@/lib/usg/dates";
 
 // ── fixtures ────────────────────────────────────────────────────────────────
 
@@ -336,7 +337,12 @@ describe("J · REPORTED state is never reset by resync", () => {
 // ── K · Orthanc orphans (unlinked PACS US → Studio worklist) ────────────────
 
 describe("K · Orthanc orphan import (unlinked PACS US)", () => {
-  const orphan = (uid: string, name = "Alfi Parween"): OrthancUsStudyRow => ({
+  // The orphan fallback is bounded to the last ORPHAN_MAX_AGE_DAYS days, so the
+  // fixtures are written relative to the clinic's today, never as a fixed date
+  // that silently ages out of the window.
+  const recentYmd = addCalendarDaysYmd(clinicTodayIST(), -1);
+  const staleYmd = addCalendarDaysYmd(clinicTodayIST(), -10);
+  const orphan = (uid: string, name = "Alfi Parween", studyDate = recentYmd): OrthancUsStudyRow => ({
     studyInstanceUid: uid,
     accessionNumber: null,
     patientName: name,
@@ -344,8 +350,42 @@ describe("K · Orthanc orphan import (unlinked PACS US)", () => {
     patientAge: "28",
     referringDoctor: "",
     testName: "USG Study",
-    studyDate: "2026-09-28",
+    studyDate,
     studyTime: "090500",
+  });
+
+  test("a study older than the fallback window never reaches the worklist", async () => {
+    const stats = await importOrthancOrphans([orphan("1.2.840.orphan.old", "Ancient Patient", staleYmd)]);
+    expect(stats.importedFromOrthanc).toBe(0);
+    expect(stats.skippedTooOld).toBe(1);
+    expect(await db.usgCareOrder.count({ where: { studyInstanceUid: "1.2.840.orphan.old" } })).toBe(0);
+  });
+
+  test("a patient who already has a CARE row that day is not given a second, emptier one", async () => {
+    await importCareRows([
+      {
+        worklistId: "9801",
+        accessionNumber: "",
+        patientName: "Alfi Parween",
+        modality: "US",
+        studyInstanceUid: "1.2.840.orphan.billed",
+        studyDate: recentYmd,
+        referringDoctor: "Dr Neha Priya",
+        testName: "USG Whole Abdomen",
+        billNumber: "B-9801",
+      },
+    ]);
+    // DICOM arrives as LAST^FIRST; the sorted-token key must still recognise it.
+    const stats = await importOrthancOrphans([orphan("1.2.840.orphan.dup", "PARWEEN ALFI")]);
+    expect(stats.importedFromOrthanc).toBe(0);
+    expect(stats.skippedBilledRowExists).toBe(1);
+    // Exactly one row for her that day — and it is the bill-linked one, which
+    // is the only copy carrying a referring doctor and a catalogued test name.
+    const rows = await db.usgCareOrder.findMany({
+      where: { patientName: { contains: "parween" } },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.careWorklistId).toBe("9801");
   });
 
   test("unmatched Orthanc US becomes a PENDING worklist order", async () => {

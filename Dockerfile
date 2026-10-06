@@ -71,6 +71,9 @@ COPY scripts/usg-v7-null-accession.mjs ./scripts/usg-v7-null-accession.mjs
 # escape hatch, so it has to ship inside the image: the container is the only
 # place the studio database exists.
 COPY scripts/pin-reset.mjs ./scripts/pin-reset.mjs
+# Operator-run worklist maintenance — also not run by the entrypoint, and dry
+# run by default; --execute to delete.
+COPY scripts/usg-prune-orthanc-orphans.mjs ./scripts/usg-prune-orthanc-orphans.mjs
 
 # Entrypoint: prepare DB, then start the standalone server
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh

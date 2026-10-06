@@ -66,37 +66,6 @@ export type OrthancUsStudyRow = {
   studyTime: string | null;
 };
 
-/**
- * List studies with their MainDicomTags (AccessionNumber, StudyInstanceUID).
- *
- * 1. GET /studies            → array of study IDs (no metadata)
- * 2. GET /studies/{id}       → full study resource incl. MainDicomTags
- *
- * Studies are fetched with bounded concurrency (6); a study that fails to
- * resolve is skipped so one bad row can never fail the whole sync.
- */
-const STUDY_CONCURRENCY = 6;
-
-export async function listStudies(): Promise<OrthancResult<OrthancStudy[]>> {
-  const ids = await orthancFetch<string[]>("/studies");
-  if (!ids.ok) return ids;
-  if (!Array.isArray(ids.data)) {
-    return { ok: false, error: "Orthanc /studies returned an unexpected response" };
-  }
-  const out: OrthancStudy[] = [];
-  let next = 0;
-  const worker = async () => {
-    while (next < ids.data.length) {
-      const id = String(ids.data[next++]);
-      const r = await orthancFetch<OrthancStudy>(`/studies/${encodeURIComponent(id)}`);
-      if (r.ok && r.data?.ID && r.data.MainDicomTags) out.push(r.data);
-    }
-  };
-  const workers = Array.from({ length: Math.min(STUDY_CONCURRENCY, ids.data.length) }, worker);
-  await Promise.all(workers);
-  return { ok: true, data: out };
-}
-
 export function testOrthanc() {
   return orthancFetch<{ Name?: string; Version?: string; DatabaseVersion?: number; StorageAreaName?: string }>("/system");
 }

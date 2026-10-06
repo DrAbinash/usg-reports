@@ -30,6 +30,19 @@ if [ ! -x "$PRISMA" ]; then
   PRISMA="node ./node_modules/prisma/build/index.js"
 fi
 
+# Regenerate the client from THIS image's schema before anything touches the
+# database. A generated client that lags its schema rejects every write with
+# "Unknown argument" while reads keep working — so the studio looks healthy,
+# the sync logs HTTP 200, and the worklist silently stops growing. `db push
+# --skip-generate` below deliberately does not regenerate, so this is the one
+# step that can catch a stale client baked into an image by a reused build
+# layer. Cost is about a second on boot.
+echo "[studio] Regenerating Prisma client from prisma/schema.prisma…"
+if ! $PRISMA generate; then
+  echo "[studio] WARNING: prisma generate failed — the client in node_modules may" >&2
+  echo "[studio] not match prisma/schema.prisma, which breaks every insert." >&2
+fi
+
 n=0
 until $PRISMA db push --skip-generate; do
   n=$((n + 1))

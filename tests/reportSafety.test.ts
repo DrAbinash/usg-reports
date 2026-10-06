@@ -78,3 +78,18 @@ describe("a full clinic restore is not one click", () => {
     expect(restore![1]).toMatch(/window\.confirm/);
   });
 });
+
+describe("an image cannot ship a client that contradicts its schema", () => {
+  const sh = read("docker-entrypoint.sh");
+  const generateAt = sh.search(/\$PRISMA generate/);
+  const pushAt = sh.search(/db push --skip-generate/);
+
+  it("regenerates the Prisma client before the first database write", () => {
+    // `db push --skip-generate` never regenerates, so an image whose generated
+    // client predates prisma/schema.prisma rejects every insert with
+    // "Unknown argument" while reads, login and the sync banner all keep
+    // working. NAS-verified: 1369 of 1374 ultrasound studies lost this way.
+    expect(generateAt, "entrypoint never runs prisma generate").toBeGreaterThan(-1);
+    expect(pushAt, "entrypoint never runs db push").toBeGreaterThan(generateAt);
+  });
+});

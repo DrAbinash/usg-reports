@@ -152,6 +152,38 @@ idempotent and runs before the schema push; the entrypoint still refuses
 destructive prisma changes as a final guard). Real MRI/CT reports were
 never stored here — they belong to the mri-reports deployment.
 
+### If the worklist fills up with "Self/Walk-in · USG Study"
+
+Every order on the worklist is bill-desk truth joined to a scan, so the
+referring doctor and the test name only exist on rows CARE sent. Rows that came
+from Orthanc alone carry neither — they read `Self/Walk-in` and `USG Study`, and
+the composer cannot pick a format from a title like that. A whole clinic day can
+appear as 1,300 of these against a handful of real rows.
+
+Two things cause it, and both are now bounded in code:
+
+1. **The sync cursor outran the writes.** A Studio whose `UsgCareOrder` inserts
+   are failing still moves `lastSyncAt` forward, so CARE never serves those rows
+   again — a gap no error message shows. The cursor now advances only to CARE's
+   own serve clock, and only when every row landed; otherwise it holds and the
+   rows arrive on the next cycle (after ten held cycles it advances and says so
+   in the banner).
+2. **The Orthanc fallback swept the archive.** It now imports studies from the
+   last three days only, and never a second row for a patient who already has a
+   CARE row on that scanning day.
+
+To clear a list that is already flooded (dry run first, it prints the counts):
+
+```
+docker exec -w /app usg-reporting-studio node scripts/usg-prune-orthanc-orphans.mjs
+docker exec -w /app usg-reporting-studio node scripts/usg-prune-orthanc-orphans.mjs --execute
+```
+
+It deletes only rows CARE never sent and that no report or Form F points at.
+Then press **Deep sync** in the worklist: it re-reads the backlog page by page
+and brings the bill-desk rows — with doctors and test names — back. Every 20
+hours the ordinary sync does a bounded version of this on its own.
+
 ### Print
 
 Always tick **“Background graphics”** in the print dialog — that switch

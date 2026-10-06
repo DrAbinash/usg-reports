@@ -36,6 +36,7 @@ import {
 } from "./careClient";
 import type { OrthancStudy, OrthancUsStudyRow } from "./orthancClient";
 import { UNNAMED_STUDY_PLACEHOLDER } from "./billedStudyType";
+import { addCalendarDaysYmd, clinicTodayIST } from "./dates";
 
 // ── pure row normalisation ──────────────────────────────────────────────────
 
@@ -95,6 +96,91 @@ export function decideImport(n: NormalizedCareRow): ImportDecision {
 }
 
 export type WorklistPullMode = "incremental" | "backfill";
+
+/**
+ * How often the Studio re-reads a bounded slice of CARE's backlog regardless of
+ * what the watermark believes. A watermark hole is silent — CARE simply stops
+ * returning rows it has already served — so anything lost to a rejected write,
+ * or to a bill linked only after the study arrived, stays invisible until
+ * something asks again.
+ */
+export const DEEP_PULL_INTERVAL_MS = 20 * 60 * 60 * 1000;
+/** How far a repair pull reaches back: a clinic weekend, in a few pages. */
+export const DEEP_PULL_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+/**
+ * Consecutive failed-write cycles the watermark is held for before it is
+ * allowed to move. Holding costs a repeated pull; holding forever costs the
+ * whole worklist the moment one row is permanently unwritable.
+ */
+export const MAX_CURSOR_HOLDS = 10;
+
+export type CarePullRequest = { full: boolean; since: string | null; deep: boolean };
+
+/**
+ * Pure pull-window decision.
+ *   backfill    — ?full=1, or no usable watermark (first boot / cleared tables)
+ *   repair      — watermark is usable but the deep pull is overdue
+ *   incremental — watermark minus the clock-skew buffer
+ */
+export function planWorklistPull(opts: {
+  mode: WorklistPullMode;
+  watermark: Date | null;
+  bufferMs: number;
+  lastDeepPullAt: Date | null;
+  nowMs: number;
+  deepIntervalMs?: number;
+  deepWindowMs?: number;
+}): CarePullRequest {
+  if (opts.mode === "backfill") return { full: true, since: null, deep: true };
+  const deepDue =
+    !opts.lastDeepPullAt ||
+    opts.nowMs - opts.lastDeepPullAt.getTime() > (opts.deepIntervalMs ?? DEEP_PULL_INTERVAL_MS);
+  if (deepDue) {
+    return { full: false, since: new Date(opts.nowMs - (opts.deepWindowMs ?? DEEP_PULL_WINDOW_MS)).toISOString(), deep: true };
+  }
+  return {
+    full: false,
+    since: new Date((opts.watermark?.getTime() ?? opts.nowMs) - opts.bufferMs).toISOString(),
+    deep: false,
+  };
+}
+
+export type CareCursorPlan =
+  | { action: "advance"; at: Date; holds: number; gaveUpAfterHolds: boolean }
+  | { action: "hold"; holds: number };
+
+/**
+ * The watermark is a promise: CARE has served everything that changed up to
+ * this instant. It may only move when every row of this pull actually landed.
+ *
+ * Why this exists, measured 2026-10-06: the Studio's generated Prisma client
+ * lagged its schema for four days and rejected every `UsgCareOrder` write, while
+ * the sync stamped `lastSyncAt: new Date()` regardless. Those bill-desk orders
+ * were served once, lost, and parked behind the watermark for good — the Studio
+ * held 3 CARE rows against 1,381 Orthanc rows, and the worklist read
+ * "Self/Walk-in" for the whole clinic.
+ *
+ * `servedThroughAt` is CARE's clock at serve time. Stamping the Studio's own
+ * clock instead lets a fast machine skip rows CARE has not sent yet.
+ */
+export function planCareCursor(opts: {
+  servedThroughAt: number | null;
+  writeFailures: number;
+  holds: number;
+  nowMs: number;
+  maxHolds?: number;
+}): CareCursorPlan {
+  const max = opts.maxHolds ?? MAX_CURSOR_HOLDS;
+  if (opts.writeFailures > 0 && opts.holds < max) {
+    return { action: "hold", holds: opts.holds + 1 };
+  }
+  return {
+    action: "advance",
+    at: new Date(opts.servedThroughAt ?? opts.nowMs),
+    holds: 0,
+    gaveUpAfterHolds: opts.writeFailures > 0,
+  };
+}
 
 /**
  * A sync watermark only means something if this Studio still holds the rows it
@@ -230,6 +316,10 @@ export type OrphanImportStats = {
   alreadyPresent: number;
   skippedNoName: number;
   skippedNoUid: number;
+  /** A bill-desk order for this patient on this day already represents them. */
+  skippedBilledRowExists: number;
+  /** Older than {@link ORPHAN_MAX_AGE_DAYS} — archive history, not today's list. */
+  skippedTooOld: number;
   errors: number;
   /** Safe per-row diagnostics — study UID tail + reason, never patient data. */
   skippedReasons: string[];
@@ -241,9 +331,40 @@ export const emptyOrphanImportStats = (): OrphanImportStats => ({
   alreadyPresent: 0,
   skippedNoName: 0,
   skippedNoUid: 0,
+  skippedBilledRowExists: 0,
+  skippedTooOld: 0,
   errors: 0,
   skippedReasons: [],
 });
+
+/**
+ * An Orthanc study is a *fallback* for a scan CARE has not billed yet. Beyond
+ * this many days it is archive history: measured 2026-10-06, one unbounded
+ * sweep of the 14-day window put 1,381 untitled "USG Study" rows on a worklist
+ * that holds about 100 real patients a day, and the bill-desk rows — the only
+ * ones carrying a referring doctor and a test name — disappeared underneath.
+ */
+export const ORPHAN_MAX_AGE_DAYS = 3;
+
+/** The clinic's calendar day, read as IST wall time (the scanner's own clock). */
+export function istDayOfDate(d: Date | null | undefined): string | null {
+  if (!d) return null;
+  const ms = d.getTime() + (5 * 60 + 30) * 60 * 1000;
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+/**
+ * "Same patient, same scanning day" key — sorted name tokens, so CARE's
+ * "First Last" and the DICOM "LAST^FIRST" agree. Order matters nowhere here;
+ * only that both sides of one patient produce one key.
+ */
+export function nameDayKey(name: string | null | undefined, ymd: string | null | undefined): string | null {
+  const d = (ymd ?? "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
+  const tokens = (name ?? "").toLowerCase().replace(/[^a-z ]/g, " ").split(/\s+/).filter(Boolean).sort();
+  if (!tokens.length) return null;
+  return `${tokens.join(" ")}|${d}`;
+}
 
 const isUniqueViolation = (e: unknown): boolean =>
   e instanceof Error &&
@@ -464,13 +585,18 @@ export async function importCareRows(rows: CareWorklistItem[], clinicId: string 
 
 /**
  * Import Orthanc ultrasound studies that are not yet linked to any CARE
- * order. Identity = StudyInstanceUID only (never names). Creates PENDING
- * UsgCareOrder rows so the radiologist can report walk-in / unlinked PACS
- * studies without waiting for bill-desk linking.
+ * order. Creates PENDING UsgCareOrder rows so the radiologist can report
+ * walk-in / unlinked PACS studies without waiting for bill-desk linking.
  *
- * Idempotent: an existing order with the same UID is left alone (counted
- * as alreadyPresent). Accession is stored when Orthanc has a single clear
- * value; blank accessions stay null (never synthesized).
+ * It is a FALLBACK, not a second feed, and it is bounded on that basis:
+ *   - identity is StudyInstanceUID only (never names) — an existing order with
+ *     the same UID is left alone (counted as alreadyPresent);
+ *   - a study older than {@link ORPHAN_MAX_AGE_DAYS} is archive history;
+ *   - a patient who already has a bill-desk order on that scanning day is not
+ *     given a second, emptier row.
+ *
+ * Accession is stored when Orthanc has a single clear value; blank accessions
+ * stay null (never synthesized).
  */
 export async function importOrthancOrphans(
   studies: OrthancUsStudyRow[],
@@ -501,6 +627,22 @@ export async function importOrthancOrphans(
     existingAcc.map((o) => o.accessionNumber).filter((a): a is string => !!a),
   );
 
+  // A bill-desk order for this patient on this scanning day already owns their
+  // row on the worklist. The Orthanc copy carries no doctor, no bill number and
+  // no catalogued test name, so letting it stand beside the billed row shows
+  // the same patient twice — and the emptier copy is what the doctor reads as
+  // "Self/Walk-in · USG Study".
+  const billedOrders = await db.usgCareOrder.findMany({
+    where: { clinicId, careWorklistId: { not: null } },
+    select: { patientName: true, studyDate: true },
+  });
+  const billedDayKeys = new Set(
+    billedOrders
+      .map((o) => nameDayKey(o.patientName, istDayOfDate(o.studyDate)))
+      .filter((k): k is string => !!k),
+  );
+  const oldestAcceptedYmd = addCalendarDaysYmd(clinicTodayIST(), -ORPHAN_MAX_AGE_DAYS);
+
   for (const st of studies) {
     const uid = clean(st.studyInstanceUid);
     if (!uid) {
@@ -516,6 +658,16 @@ export async function importOrthancOrphans(
       // UNKNOWN is the DICOMweb fallback when PatientName is blank — not safe
       // to put on a reporting worklist without a human identity.
       stats.skippedNoName++;
+      continue;
+    }
+
+    // Bounded fallback: yesterday's archive is not today's worklist.
+    if (st.studyDate && st.studyDate < oldestAcceptedYmd) {
+      stats.skippedTooOld++;
+      continue;
+    }
+    if (billedDayKeys.has(nameDayKey(name, st.studyDate) ?? "")) {
+      stats.skippedBilledRowExists++;
       continue;
     }
 
@@ -576,6 +728,35 @@ export async function importOrthancOrphans(
     }
   }
   return stats;
+}
+
+/**
+ * Project the chunked DICOMweb ultrasound rows onto the Orthanc REST shape the
+ * attach pass matches against, so one date-range query can serve both the
+ * attach and the orphan import.
+ *
+ * The Orthanc study id is not an identity anyone persists here — the UID is —
+ * so the UID stands in for it. Accession stays null when absent rather than
+ * becoming "", which is the difference between "no accession" and an
+ * accession that collides with every other blank one.
+ */
+export function orthancRowsToStudies(rows: OrthancUsStudyRow[]): OrthancStudy[] {
+  const out: OrthancStudy[] = [];
+  for (const r of rows) {
+    const uid = clean(r.studyInstanceUid);
+    if (!uid) continue;
+    out.push({
+      ID: uid,
+      MainDicomTags: {
+        StudyInstanceUID: uid,
+        AccessionNumber: clean(r.accessionNumber) ?? "",
+        StudyDate: r.studyDate ?? "",
+        StudyTime: r.studyTime ?? "",
+        StudyDescription: r.testName ?? "",
+      },
+    });
+  }
+  return out;
 }
 
 /**

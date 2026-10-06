@@ -184,6 +184,28 @@ Then press **Deep sync** in the worklist: it re-reads the backlog page by page
 and brings the bill-desk rows — with doctors and test names — back. Every 20
 hours the ordinary sync does a bounded version of this on its own.
 
+### If you forget your PIN
+
+There is deliberately no "forgot my PIN" link on the login screen: this studio
+is reachable from outside the clinic, and an unauthenticated reset endpoint
+would be a second door into every patient record. The person who can reach the
+server shell already owns the studio, so recovery lives there:
+
+```bash
+docker exec -w /app usg-reporting-studio node scripts/pin-reset.mjs            # default clinic
+docker exec -w /app usg-reporting-studio node scripts/pin-reset.mjs <clinicId> # any other clinic
+```
+
+That clears one column (`HospitalSettings.pinHash`) on one row and writes an
+`auth.pin_reset` audit entry. Live sessions are left alone, so resetting from
+the desk cannot interrupt a report being written on the studio PC. Reload the
+browser: the studio asks for a new PIN and logs you straight in.
+
+A studio still on the built-in demo PIN is treated as "setup not finished", so
+the setup screen is shown and is allowed to replace it. A PIN you chose yourself
+is never replaced by setup — that path is Settings → change PIN, which asks for
+the current one first.
+
 ### Print
 
 Always tick **“Background graphics”** in the print dialog — that switch

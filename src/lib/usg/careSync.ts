@@ -370,6 +370,29 @@ const isUniqueViolation = (e: unknown): boolean =>
   e instanceof Error &&
   ((e as { code?: string }).code === "P2002" || /unique constraint/i.test(e.message));
 
+/**
+ * One short, PHI-free line describing why Prisma rejected a write.
+ *
+ * Prisma's message opens with a blank line and a boilerplate header, and puts
+ * the actionable text LAST ("Unknown argument `testCode`", "Unique constraint
+ * failed on …"). Reading `message.split("\n")[0]` therefore printed nothing at
+ * all: 1369 rejected inserts reported "create failed ()" for four days while
+ * the studio looked healthy, because a stale generated client was refusing
+ * every write and the diagnostic was empty.
+ *
+ * Only the last line is taken: that is where Prisma names the offending
+ * argument or constraint, and it is never the echoed `data:` block — so
+ * submitted patient values stay out of the log.
+ */
+export function prismaErrorSummary(e: unknown): string {
+  if (!(e instanceof Error)) return "unknown";
+  const lines = e.message.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
+  const detail = lines.length ? (lines[lines.length - 1] as string) : "unknown";
+  const code = (e as { code?: unknown }).code;
+  const prefix = typeof code === "string" && code ? `${code} · ` : "";
+  return `${prefix}${detail}`.slice(0, 120);
+}
+
 // ── DB orchestration ────────────────────────────────────────────────────────
 
 type CareOrderRow = {
@@ -576,7 +599,7 @@ export async function importCareRows(rows: CareWorklistItem[], clinicId: string 
       // collision on update). Counted, never fatal, never merged.
       stats.errors++;
       stats.skippedReasons.push(
-        `WL ${n.wlId ?? "?"}: database constraint (${e instanceof Error ? e.message.split("\n")[0].slice(0, 80) : "unknown"})`,
+        `WL ${n.wlId ?? "?"}: write rejected (${prismaErrorSummary(e)})`,
       );
     }
   }
@@ -722,7 +745,7 @@ export async function importOrthancOrphans(
         stats.errors++;
         // Safe diagnostics: study UID tail + error class, never patient data.
         stats.skippedReasons.push(
-          `UID ..${uid.slice(-8)}: create failed (${e instanceof Error ? e.message.split("\n")[0].slice(0, 60) : "unknown"})`,
+          `UID ..${uid.slice(-8)}: create failed (${prismaErrorSummary(e)})`,
         );
       }
     }

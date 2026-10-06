@@ -67,7 +67,12 @@ COPY scripts/usg-v4-cleanup.mjs ./scripts/usg-v4-cleanup.mjs
 # v6.1 worklist-identity helper — run by the entrypoint AFTER `db push`
 # (blank accessionNumber "" → NULL + duplicate-identity diagnostics).
 COPY scripts/usg-v7-null-accession.mjs ./scripts/usg-v7-null-accession.mjs
-# Operator-run worklist maintenance — dry run by default, --execute to delete.
+# Forgotten-PIN recovery — NOT run by the entrypoint. It is the operator's
+# escape hatch, so it has to ship inside the image: the container is the only
+# place the studio database exists.
+COPY scripts/pin-reset.mjs ./scripts/pin-reset.mjs
+# Operator-run worklist maintenance — also not run by the entrypoint, and dry
+# run by default; --execute to delete.
 COPY scripts/usg-prune-orthanc-orphans.mjs ./scripts/usg-prune-orthanc-orphans.mjs
 
 # Entrypoint: prepare DB, then start the standalone server

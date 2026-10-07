@@ -184,6 +184,15 @@ Then press **Deep sync** in the worklist: it re-reads the backlog page by page
 and brings the bill-desk rows — with doctors and test names — back. Every 20
 hours the ordinary sync does a bounded version of this on its own.
 
+The same PACS-first ordering used to leave the *format* wrong: a study that
+arrives before its bill opens as a draft while its billed procedure is still
+blank, so the draft keeps whatever the fallback guessed, and re-opening it
+returned that draft untouched even after CARE named the test. Opening a row now
+re-resolves the billed format and applies it **only while the draft is
+untouched** — no organ tapped, no note typed, no measurement entered, never a
+finalized report. If you had already started typing, the format stays as you
+left it and the header chip shows what the bill actually says.
+
 ### If you forget your PIN
 
 There is deliberately no "forgot my PIN" link on the login screen: this studio

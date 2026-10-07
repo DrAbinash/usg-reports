@@ -6,7 +6,7 @@ import { normaliseState } from "@/lib/usg/composer";
 import { resolveColumns } from "@/lib/usg/server";
 import { linkPatient, latestKnownDemographics } from "@/lib/usg/patients";
 import { audit } from "@/lib/usg/audit";
-import { isObStudyKey, orderSex, testSuggestsChild } from "@/lib/usg/orderStudy";
+import { isObStudyKey, isPristineDraft, orderSex, testSuggestsChild } from "@/lib/usg/orderStudy";
 import { resolveNormalBootstrapFormat } from "@/lib/usg/billedStudyType";
 import { applyRushNormalStudy, applyRushPreset, studyAllowsRushNormals, type RushPreset } from "@/lib/usg/quickActions";
 import { USG_PATHOLOGIES } from "@/lib/usg/pathologies";
@@ -84,14 +84,44 @@ export async function POST(req: Request, ctx: Ctx) {
     procedureMap: settings.usgBillingProcedureMap,
   });
 
-  // Already started? Open the same draft (rush flag does not rewrite it).
+  // Already started? Open the same draft (rush flag does not rewrite it) —
+  // UNLESS the bill desk now names a format and the draft is still untouched,
+  // in which case the billed format is applied to it (see isPristineDraft).
   // Re-surface the unmapped banner when the bill still has no USG format.
   if (order.reportId) {
     const existing = await db.usgReport.findUnique({ where: { id: order.reportId } });
     if (existing) {
+      let report = existing;
+      let adopted: { from: string; to: string } | null = null;
+      const billedKey = boot.kind === "mapped" ? boot.studyKey : null;
+      const currentKey = (existing.studyKey ?? "").trim();
+      if (billedKey && billedKey !== currentKey) {
+        const pristine = isPristineDraft({
+          finalizedAt: existing.finalizedAt,
+          studyKey: existing.studyKey,
+          stateJson: existing.stateJson,
+          defaultStateJson: currentKey ? JSON.stringify(normaliseState({}, currentKey)) : "",
+        });
+        const study = pristine ? getStudy(billedKey) : null;
+        if (study) {
+          const state = normaliseState({}, billedKey);
+          const cols = await resolveColumns(JSON.stringify(state), study.technique);
+          report = await db.usgReport.update({
+            where: { id: existing.id },
+            data: { technique: study.technique, stateJson: JSON.stringify(state), ...cols },
+          });
+          adopted = { from: currentKey, to: billedKey };
+          await audit({
+            action: "report.format_adopted",
+            reportId: existing.id,
+            patientName: existing.patientName,
+            detail: `draft re-opened with the billed format ${billedKey} (was ${currentKey || "none"}) — bill desk: ${order.testName?.trim() || order.testCode?.trim() || "?"}`,
+          });
+        }
+      }
       return Response.json({
-        report: existing,
-        ob: isObStudyKey(existing.studyKey),
+        report,
+        ob: isObStudyKey(report.studyKey),
         rushApplied: false,
         billedUnmapped: boot.kind === "unmapped",
         billedProcedure:
@@ -101,6 +131,7 @@ export async function POST(req: Request, ctx: Ctx) {
         billedTestCode: order.testCode?.trim() || null,
         billedBanner: boot.kind === "unmapped" ? boot.banner : null,
         npTemplateName: boot.kind === "mapped" ? boot.npTemplateName : null,
+        formatAdopted: adopted,
       });
     }
   }

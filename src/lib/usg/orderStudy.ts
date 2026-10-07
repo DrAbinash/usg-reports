@@ -69,3 +69,56 @@ export function testSuggestsChild(testNameOrCode: string): boolean {
   const t = String(testNameOrCode ?? "").toLowerCase();
   return /child|paed|ped|infant|neonat|transfontanelle|baby/.test(t);
 }
+
+/** Key-sorted stringify, so object ordering alone never looks like an edit. */
+function canonicalJson(raw: string): string | null {
+  try {
+    return stable(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+function stable(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(stable).join(",")}]`;
+  if (v && typeof v === "object") {
+    const entries = Object.entries(v as Record<string, unknown>)
+      .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+      .map(([k, val]) => `${JSON.stringify(k)}:${stable(val)}`);
+    return `{${entries.join(",")}}`;
+  }
+  return JSON.stringify(v);
+}
+
+/**
+ * True when a draft still holds exactly what the format generator produced —
+ * nothing of the doctor's own.
+ *
+ * This is the gate that lets the bill desk decide the format AFTER a draft
+ * already exists. A study that arrived in PACS first opens as a draft while its
+ * billed name is still the "USG Study" stand-in (or nothing at all), and CARE's
+ * real procedure only arrives on a later sync; without re-resolution the report
+ * keeps whatever format the empty moment guessed. Re-resolving is safe only
+ * while the draft is untouched, so this compares the stored state against a
+ * freshly generated one for the draft's own study key: any organ tap, note,
+ * measurement or added image makes it differ.
+ *
+ * Deliberately strict in the direction that costs nothing: a false negative
+ * skips one automatic adoption and the doctor picks the format as before, while
+ * a false positive would overwrite clinical text. An empty canvas (no study
+ * key) has nothing to lose, so it counts as pristine.
+ */
+export function isPristineDraft(opts: {
+  finalizedAt?: Date | string | null;
+  studyKey: string | null | undefined;
+  stateJson: string | null | undefined;
+  /** `JSON.stringify(normaliseState({}, studyKey))` for that same study key. */
+  defaultStateJson: string;
+}): boolean {
+  if (opts.finalizedAt) return false;
+  const key = (opts.studyKey ?? "").trim();
+  if (!key) return true;
+  const stored = canonicalJson((opts.stateJson ?? "").trim());
+  if (stored === null) return false;
+  return stored === canonicalJson(opts.defaultStateJson);
+}

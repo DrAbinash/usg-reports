@@ -1,5 +1,8 @@
 # Pending work — read this first, every session
 
+## OPEN INCIDENT — read before anything else
+- 2026-10-30: operator reports the studio "not reachable" and "data not syncing". Diagnosed remotely, **nothing changed**. Tests, evidence and hard stops: `docs/runbook-2026-10-30-studio-unreachable.md`; the read-only probe is `scripts/usg-sync-health.mjs`.
+
 ## Template Library (formats-usg/_index.json)
 - Extracted 4,608 Word templates: 2557 USG, 1210 CT, 499 XRAY, 245 ECHO, 26 MRI, 64 LAB, 7 EEG.
 - **NEXT (USG)**: Wire USG rows into composer quick-select (pathologies) + whole-report picker.

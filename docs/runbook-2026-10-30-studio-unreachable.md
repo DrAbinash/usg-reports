@@ -241,7 +241,7 @@ Verdict map:
 | `MISSING UsgSyncState …` | image predates #64, or `db push` never ran → deploy, then restart so the entrypoint regenerates + pushes |
 | `MISSING UsgReport.printSettingsJson …` | the running client expects a column the file lacks → **every report read can 500**. Restart the container; the entrypoint pushes the schema |
 | `no sync row yet` | no CARE pull has ever completed on this DB |
-| `lastSyncAt … min ago` > 30 | the sync is stalled; read `lastError`, `cursorHoldCount`, `lastCareOk` on the same block |
+| `lastSyncAt … min ago` > 30 | the sync is stalled; read `lastError` and `lastCareOk` on the same block. (`cursorHoldCount` on the same line is always 0 after §9 — it belonged to the watermark that was removed) |
 | `newest order NONE` | mid-session this means the sync is not writing at all |
 | `fallback=` in the hundreds | the Orthanc flood rows are still on the list → §5 |
 | `SELECT 1` median > 30 ms | the **storage** is the bottleneck, not the code — see `-wal` size |
@@ -386,3 +386,78 @@ list is gone, because nothing was renumbered._
 
 Do not conclude "the app is fine" from a 200 on `/`. It was 200 and failing 5 % of
 boot calls at 11:37 this morning.
+
+## 8. Settled — the operator's own NAS evidence, later the same day
+
+The next three commands answered it, and hypothesis 1 above was **wrong**: the
+deployed image was `9df0364` (#65), both greps came back `29` and `1` (client and
+schema agree), and both CARE addresses answered in `0.0005 s`. Nothing was stale
+and nothing was unreachable. The probe's sync block was the story:
+
+| Evidence (from the NAS, verbatim in the session) | Reading |
+|---|---|
+| `lastSyncAt 26696 min ago` | the watermark had not moved in **18.5 days** |
+| `lastError 19 CARE order(s) failed to write … hold 1/10` | 19 rows kept being rejected; the counter that should give up after 10 holds was stuck at 1 |
+| `docker logs`: `WL 11628: write rejected (P1008 · Socket timeout)` | the reason was **database contention**, not `Unknown argument` |
+| `docker logs`: `[sync] repair pull — re-reading 72h` four cycles in a row | every cycle re-ran the heaviest possible pull |
+| `care fetch: ok rows=448`, `Orthanc DICOMweb timed out`, `us=1079 … tooOld=776` | a 448-row write burst plus a 1,079-study sweep, per cycle |
+
+**The loop.** A `P1008` timeout rejected the tail of the pull → `planCareCursor`
+held the watermark → the hold branch also refused to stamp `lastDeepPullAt`
+(`deepPullRan && cursorPlan.action === "advance"`), so the next cycle still
+believed a repair pull was overdue → the 72-hour pull plus the 14-day Orthanc
+sweep ran again against the same file and timed out again. The fault fed itself
+and the only escape (ten consecutive holds) could never be counted, because the
+same outage reset the counter every cycle.
+
+**Why "not reachable" was the same fault.** SQLite was in its default
+rollback-journal mode: one writer locks the file against every reader. A sync
+writing hundreds of orders therefore stalled unrelated requests — including
+`/api/auth/state`, which is exactly the 5 % of empty 500s at 5.6 s measured from
+the internet, and it was happening while the LAN looked fine because the LAN
+caller arrived between cycles.
+
+## 9. What shipped for it, and the deploy
+
+One change, four parts (`main` after this session):
+
+1. **The watermark is gone.** `planWorklistPull` now asks CARE for a fixed
+   `SYNC_LOOKBACK_DAYS = 3` window on every cycle and upserts. `planCareCursor`,
+   `MAX_CURSOR_HOLDS`, `DEEP_PULL_*`, `worklistPullMode` and
+   `servedAtFromPayload` are deleted; a row that fails to land is simply served
+   again next cycle. `UsgSyncState.cursorHoldCount` and `lastDeepPullAt` stay as
+   columns (this database holds finalized reports) but are vestigial, and the
+   counter is pinned at 0.
+2. **The Orthanc sweep is bounded** to `ORTHANC_SWEEP_DAYS = 7`, which matches
+   `ORPHAN_MAX_AGE_DAYS` — the attach pass used to read 14 days of studies the
+   very next step refused to act on. Auto-sync cadence went from 2 to 5 minutes.
+3. **WAL is enabled on boot** — `docker-entrypoint.sh` runs
+   `scripts/usg-enable-wal.mjs`, idempotent and never fatal.
+4. **`log: ['query']` is off** unless `PRISMA_LOG_QUERIES=1`. It printed every
+   statement with its parameters (patient names) and drowned the `P1008` line
+   that was the entire diagnosis.
+
+Deploy — the operator chooses the window; the studio is down for a few minutes:
+
+```
+cd /volume1/docker/usg-reports && git pull
+```
+
+```
+sudo docker compose up -d --build studio
+```
+
+Then confirm from the probe (`journal_mode=wal`, `cursorHoldCount=0`,
+`lastSyncAt` a few minutes old, and the 19 stuck orders present on the worklist):
+
+```
+sudo docker exec -w /app usg-reporting-studio node scripts/usg-sync-health.mjs
+```
+
+**Deliberately not done:** `usg-prune-orthanc-orphans.mjs --execute` (its dry run
+found 1,218 of 2,301 rows to be Orthanc fallbacks, and with
+`ORPHAN_MAX_AGE_DAYS = 3` a deletion would erase the only trace of scans that
+were never billed — the operator reads the dry run first); the Cloudflare Access
+policy for the open `ohif.caredeoghar.com/dicom-web`; moving the ~430 KB of
+inline base64 out of the settings row. `reports_total=13` against
+`drafts=11` and `finalized_last_24h=0` is still his to interpret.

@@ -159,6 +159,19 @@ a deploy. Establish this **first**:
 cd /volume1/docker/usg-reports && git log --oneline -1
 ```
 
+**Answered on the NAS at 12:35 IST:** `9df0364 (HEAD -> main, origin/main)` — the
+host working tree **is** at #65, so the source for the boot-time regeneration, the
+cursor fix and the flood bound is on the box. That leaves the question sharp and
+narrow: **is the running image built from it?** A container started from an image
+older than the pull keeps the old entrypoint and the old generated client no
+matter what `git log` says, and #63's `prisma generate` only ever runs at
+container start. So `git log` alone can no longer answer §2 — the three greps in
+§3 can, and they need no rebuild.
+
+Two supporting facts to collect: `sudo docker ps --format "{{.Names}} {{.Status}}"`
+(NOTES the container's uptime — started before the pull means the current image
+was never booted), and the boot banner from §4 line 3.
+
 ## 3. Run the read-only probe (safe while the clinic is reporting)
 
 `scripts/usg-sync-health.mjs` — added by this session and **tested against three
@@ -168,13 +181,58 @@ section `UNREADABLE`/`MISSING` with the reason **and does not crash** — a prev
 draft died mid-report inside a 200 KB Prisma stack, which is exactly how these
 faults stay hidden.
 
+**Correction, from the first attempt on the NAS.** `docker exec ... node
+scripts/usg-sync-health.mjs` answered `Cannot find module
+'/app/scripts/usg-sync-health.mjs'` — and that is my error, not a fault on the
+box. The Dockerfile copies **scripts by name**, one `COPY` line each
+(`usg-v4-cleanup`, `usg-v7-null-accession`, `pin-reset`,
+`usg-prune-orthanc-orphans`), so any script added to the repo is invisible to the
+running image until the image is rebuilt. A `COPY` line for this probe has been
+added; until the next build, put the file in with `docker cp`, which needs no
+rebuild and no restart:
+
+```
+cd /volume1/docker/usg-reports && git pull
+```
+```
+sudo docker cp scripts/usg-sync-health.mjs usg-reporting-studio:/app/scripts/usg-sync-health.mjs
+```
 ```
 sudo docker exec -w /app usg-reporting-studio node scripts/usg-sync-health.mjs
 ```
 
+`git pull` here moves the working tree to documentation plus one new script — no
+application source, so nothing changes about the running app. The `docker cp` adds
+one file to the container's filesystem; it disappears on the next recreate and
+touches no data.
+
+**The two checks that need nothing installed** — they read the image's own
+generated client against the image's own schema, which is the exact disagreement
+#63 was written to prevent:
+
+```
+sudo docker exec usg-reporting-studio grep -c usgSyncState /app/node_modules/.prisma/client/index.d.ts
+```
+```
+sudo docker exec usg-reporting-studio grep -c "model UsgSyncState" /app/prisma/schema.prisma
+```
+
+`0` then a number ≥ `1` is the stale-client fault itself: the schema the image
+carries knows the sync-state table, the generated client baked into
+`node_modules/.prisma` does not, and every `UsgCareOrder`/`UsgSyncState` write
+through that client is rejected while reads and login sail on. Both `0` means the
+**image** predates #64 even though the host repo is at #65 — the build was never
+re-run, which is the other half of "not deployed". If the first file turns out to
+be absent, the same grep works on `/app/node_modules/.prisma/client/index.js`.
+
 It writes nothing (counts and single-row reads only), prints no patient name, and
 answers, from **inside the running image**, what `git log` on the host cannot:
 does the deployed client agree with the deployed database.
+
+**Do not accept `Up (healthy)` as proof the app works.** The image's healthcheck is
+`wget --spider http://localhost:3000/api/health`, and that route returns a
+hardcoded `{ok: true}` with **no database access** (`src/app/api/health/route.ts`).
+A container can be green for weeks while every write fails.
 
 Verdict map:
 
@@ -193,6 +251,11 @@ Verdict map:
 ## 4. The one-line checks (send output back, one line at a time)
 
 Long pasted blocks truncate on this terminal — **one command per line, no heredocs.**
+Paste only what is inside a code block: labels written on the same line as a
+command get executed as part of it (`172.16.1.x: curl …` became
+`-sh: 172.16.1.x:: command not found`), and two of the address checks below were
+typed with the wrong host in the URL as a result. Re-run them from the block, not
+from the prose.
 
 ```
 sudo docker ps --format "{{.Names}} {{.Status}}"

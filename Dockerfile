@@ -74,6 +74,11 @@ COPY scripts/pin-reset.mjs ./scripts/pin-reset.mjs
 # Operator-run worklist maintenance — also not run by the entrypoint, and dry
 # run by default; --execute to delete.
 COPY scripts/usg-prune-orthanc-orphans.mjs ./scripts/usg-prune-orthanc-orphans.mjs
+# Read-only fault probe for the worklist sync and the database. Scripts are
+# copied by name, not as a folder, so a new one is invisible to the container
+# until it appears here — `docker exec ... node scripts/<name>` otherwise fails
+# with MODULE_NOT_FOUND on a box where the file is plainly in the repo.
+COPY scripts/usg-sync-health.mjs ./scripts/usg-sync-health.mjs
 
 # Entrypoint: prepare DB, then start the standalone server
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh

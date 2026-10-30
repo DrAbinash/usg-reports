@@ -9,55 +9,75 @@ Reported symptom, in the operator's words: the USG studio "is not reachable" and
 
 ---
 
-## 0. Root-cause candidate found at 12:12 IST — check this before anything else
+## 0. Two addresses on the Synology — read this before trusting §1
 
-**The clinic network has been renumbered, and the studio's saved integration
-addresses were left behind.** The NAS answers on **`192.168.1.137`**; every
-address this repository assumes — `172.16.1.139`, which is what `.env.example:13`
-(`CARE_API_BASE`), the compose defaults and the built-in OHIF/Orthanc LAN fallbacks
-all carry — **no longer answers anything at all.**
+**Correction, 12:20 IST.** The first version of this section said the clinic had
+been renumbered and `172.16.1.139` was retired. **That was wrong**, and the
+operator confirmed why: the Synology carries **both** addresses —
+`172.16.1.139` on the clinic network, `192.168.1.137` on the other — which is
+ordinary for a dual-NIC NAS. Nothing was renumbered.
 
-Measured from this PC (`192.168.0.109`), which *can* route `192.168.1.0/24` —
-an earlier note in this file said the opposite; that was wrong, and the correction
-is what found the fault:
+The timeouts I read as "the address is dead" say more about the machine that ran
+them: this PC is `192.168.0.109` with no route to `172.16.1.0/24`. **A timeout
+proves nothing about a network until the address and the route are both
+confirmed** — I made that mistake twice in one morning and wrote it into a file.
 
-| Target | `192.168.1.137` (where the NAS actually is) | `172.16.1.139` (where the config says it is) |
+The measurement, read correctly:
+
+| Target | via `192.168.1.137` | via `172.16.1.139` |
 |---|---|---|
-| Studio `:3040` | **200**, TTFB 0.036 s | **no answer** |
-| CARE ERP `:8888` | **200**, TTFB 0.009 s | **no answer** |
-| Orthanc `:8042` | **200** (`/studies`), 0.052 s | — |
-| OHIF `:3010` | **200** root | — |
+| Studio `:3040` | **200**, TTFB 0.036 s | no answer **from this PC — no route. Health unknown** |
+| CARE ERP `:8888` | **200**, TTFB 0.009 s | as above |
+| Orthanc `:8042` | **200**, 0.052 s | as above |
+| OHIF `:3010` | **200** | as above |
 
-And the same boot endpoint, from the same machine, two ways:
+**What survives the correction — and it is useful:**
 
-| Path | Result |
-|---|---|
-| LAN `http://192.168.1.137:3040/api/auth/state` | **18/18 = 200, TTFB 0.13–0.19 s** |
-| WAN `https://usg.caredeoghar.com/api/auth/state` | **0.77–1.8 s** (clean in the 12:13 window; ~5 % of calls returned an empty 500 after exactly 5.6 s in the 11:36–11:37 window) |
+1. **The studio and its database are healthy.** The same boot endpoint that took
+   0.77–1.8 s and failed ~5 % of calls over the internet answered **18/18 in
+   0.13–0.19 s** on the LAN (`http://192.168.1.137:3040/api/auth/state`). A
+   contended SQLite file would be slow for the LAN caller too, so **§1's
+   "requests that read SQLite are slow" is an access-path symptom, not a
+   storage one.** The remote path — Cloudflare/tunnel, the clinic uplink, or
+   Caddy's 96 M cap — is where that fault lives, and the tunnel is **outside**
+   this compose project (its services are only `studio`, `caddy`, `chrome`).
+2. **"Data is not syncing" goes back to §2 as the leading candidate.** A
+   generated Prisma client that lags its own schema rejects every
+   `UsgCareOrder` write with `Unknown argument` while reads, login and the sync
+   banner all keep working — which is exactly "the app opens, the worklist
+   never grows, and nothing says why". Production is only *proven* to contain
+   #62; #63 (boot-time `prisma generate` + a readable failure reason) is
+   unproven on the box.
 
-**Why that explains both reported symptoms:**
+**The tests that can separate the two remaining causes.** Run them from a machine
+that is genuinely on `172.16.1.0/24`, and on the NAS itself — a container reaching
+its own host's second address does not depend on this PC's routing at all:
 
-1. **"Data is not syncing."** If `HospitalSettings.careApiBase` still reads
-   `http://172.16.1.139:8888`, every CARE pull connects to a retired address. A
-   dropped/blackholed address does not fail fast — it waits for the connect
-   timeout, so the sync burns seconds on each attempt and writes nothing. The
-   worklist simply stops growing while the app looks healthy. **The probe prints
-   this value in one line** (§3, `careApiBase=…`) — read that before believing
-   anything else in this runbook.
-2. **"Software is not reachable."** Anyone opening the studio by the old LAN
-   address (`http://172.16.1.139:3040`) gets a hang, not an error. Over the
-   internet the app *is* reachable, but 5–10× slower than on the LAN and briefly
-   throwing 500s — so the fault is in the access path, and the app+database are
-   **not** the bottleneck: 0.14 s TTFB on the LAN for the same three-query
-   endpoint kills the "SQLite contention" theory as the primary cause.
+```
+ping -c 2 172.16.1.139
+```
+```
+curl -s -o /dev/null -w "%{http_code} %{time_total}s\n" http://172.16.1.139:8888/
+```
+```
+sudo ip -4 addr show | grep -E "172\.16|192\.168"
+```
+```
+sudo docker exec usg-reporting-studio sh -c 'nc -vz -w3 172.16.1.139 8888; echo care=$?'
+```
 
-**Fix shape (the operator's to approve — do not apply it yourself mid-session):**
-the mechanism is in the code, `src/lib/settings.ts:101-110`:
+If the NAS shows both addresses and that last line succeeds, then the configured
+address is **correct**, the network is fine, and the sync fault is in the
+build/code — go to §2 and §3. If `172.16.1.139` is gone from `ip addr`, or the
+container cannot reach it, then the clinic segment, the switch/VLAN or the
+second NIC is the fault, and no code change will fix it.
+
+One code detail worth knowing either way, `src/lib/settings.ts:101-110`:
 
 ```ts
 const CLINIC_LAN_HOST = (() => {
   const v = (process.env.CLINIC_LAN_HOST ?? "").trim();
-  return v || "172.16.1.139";            // <-- the retired address, still the default
+  return v || "172.16.1.139";            // clinic default; both addresses are valid
 })();
 const LAN_DEFAULTS = {
   careApiBase: `http://${CLINIC_LAN_HOST}:8888`,
@@ -66,37 +86,21 @@ const LAN_DEFAULTS = {
 };
 ```
 
-So on a NAS where `CLINIC_LAN_HOST` was never set and nothing was saved in the
-app, **all three integration targets default to a dead address** — CARE pulls time
-out, Orthanc looks empty, and the viewer route has nothing to build from. Two
-routes to the fix, in order of preference:
-
-1. `CLINIC_LAN_HOST=192.168.1.137` in the NAS `.env`, then a restart of the studio
-   service only. Applies when the Settings fields were left blank.
-2. **Settings → Integrations** in the studio (care base `http://192.168.1.137:8888`,
-   Orthanc `http://192.168.1.137:8042`, OHIF LAN `http://192.168.1.137:3010`).
-   A saved value **always beats** the environment default, so if the fields are
-   already filled with `172.16.1.139`, option 1 will look like it did nothing —
-   which is why the probe's `careApiBase=` line must be read first.
-
-Also check whatever publishes `usg.caredeoghar.com` (a Cloudflare tunnel/connector)
-— it lives **outside** this compose project (services here are only `studio`,
-`caddy`, `chrome`), so a stale tunnel ingress rule is part of the same renumbering
-and would explain the WAN 500s and the 5× penalty. And the code default itself
-(`src/lib/settings.ts:103`) plus `.env.example:13,18,26`, `docker-compose.yml:23`
-and `:105` (`OHIF_UPSTREAM` default) and six Settings hints/placeholders still name
-the retired address — worth one cleanup commit so the next clinic renumbering is not
-silent again, but that is a separate change from restoring service today.
+That is why blank Settings fields still produce a working CARE/Orthanc/OHIF
+config. **Do not change these addresses on my recommendation** — with two valid
+addresses on the box, `172.16.1.139` is a correct default, and switching it to
+`192.168.1.137` would be a second, self-inflicted outage if the clinic devices
+expect the first.
 
 ## 1. What was already measured — and the blind spot
 
 Every number below came from a Windows PC at **192.168.0.109/24 (gateway
-192.168.0.1)**, which routes `192.168.1.0/24` fine. Its first round of LAN probes
-to **`172.16.1.139`** all timed out, and this file originally read that as "the
-measuring machine is off the clinic network". **That reading was wrong** — the
-machine reaches the clinic; the address it was told to reach has been retired. See
-§0. Keep the lesson: a timeout proves nothing about the network until you have
-confirmed the address, and I nearly reported a false blind spot.
+192.168.0.1)**. It reaches `192.168.1.0/24` — where the Synology also answers —
+and it has **no route to the clinic segment `172.16.1.0/24`**, so every probe of
+`172.16.1.139` from here timed out for a reason that says nothing about the
+clinic. Both of that NAS's addresses are correct and in use; see §0. Treat
+anything in this file that depends on `172.16.1.x` as **unverified**, and re-run
+it from a machine that is actually on that network.
 
 Measured 2026-10-30, 11:32–11:47 IST, over the internet via Cloudflare:
 
@@ -113,12 +117,15 @@ Measured 2026-10-30, 11:32–11:47 IST, over the internet via Cloudflare:
 So the studio is **not down**. It answers, and over the internet the requests that
 must read SQLite are slow (0.77 s for what should be <100 ms) and intermittently
 die on a fixed ~5.6 s ceiling in bursts, then go quiet for ten minutes at a time.
-**§0 later showed the same endpoint answering in 0.14 s on the LAN**, which moves
-the blame from the database to the access path and the stale addresses.
+**§0 showed the same endpoint answering in 0.13–0.19 s on the LAN**, so that
+slowness and those 500s belong to the **remote access path**, not to the database.
 
-**Ruled out by that evidence:** the container being dead, Cloudflare/tunnel being
-broken, Caddy being misconfigured, Node being wedged (401s are instant), and the
-TLS/DNS path. `/api/health` returns a hardcoded `{ok:true}` with no DB access —
+**Ruled out by that evidence:** the container being dead, Node being wedged (401s
+are instant), the TLS/DNS path, and — because the LAN was fast — SQLite
+contention as the cause of the WAN symptoms. **Not ruled out: the Cloudflare
+tunnel / clinic uplink**, which is precisely where the remaining difference
+between 0.14 s and 0.77–1.8 s has to live, and which sits outside this compose
+project. `/api/health` returns a hardcoded `{ok:true}` with no DB access —
 **do not trust it as a health signal.**
 
 Why the boot endpoint touches the DB three times: `src/app/api/auth/state/route.ts:6-10`
@@ -200,10 +207,10 @@ sudo docker logs --tail 30 usg-reporting-studio
 sudo docker exec usg-reporting-studio sh -c 'ls -la /app/data/db'
 ```
 ```
-sudo docker exec usg-reporting-studio sh -c 'nc -vz -w3 192.168.1.137 8888; echo care-new=$?'
+sudo docker exec usg-reporting-studio sh -c 'nc -vz -w3 172.16.1.139 8888; echo care-clinic-segment=$?'
 ```
 ```
-sudo docker exec usg-reporting-studio sh -c 'nc -vz -w3 172.16.1.139 8888; echo care-old=$?'
+sudo docker exec usg-reporting-studio sh -c 'nc -vz -w3 192.168.1.137 8888; echo care-other-segment=$?'
 ```
 ```
 curl -s -o /dev/null -w "%{http_code} %{time_total}s\n" http://192.168.1.137:3040/api/auth/state
@@ -212,45 +219,49 @@ curl -s -o /dev/null -w "%{http_code} %{time_total}s\n" http://192.168.1.137:304
 Line 2 is the whole diagnosis if it fires. Line 3 tells you whether **#63** is
 deployed: a boot log containing `[studio] Regenerating Prisma client from
 prisma/schema.prisma…` means it is; absence means the stale-client bug is live.
-**Lines 5 and 6 together are the test for §0**: they ask the *container* — not this
-PC — whether CARE is alive at the address the studio is configured to use. Read
-them as a pair against `careApiBase` from the probe: new answers / old does not,
-and the saved value says old, is the fault. Note `:3040` is Caddy's published port
+**Lines 5 and 6 are the pair that decides the address question**, because they ask
+from *inside* the container rather than from my laptop: whatever
+`careApiBase` says (probe, §3) must be the address that answers. If the configured
+one fails and the other succeeds, the fix is the value, not the code. Line 7 is a
+LAN baseline from any machine on that segment — it measured **0.13–0.19 s** here
+against 0.77–1.8 s over the internet, so a slow studio at the desk is an access
+fault, not a database one. Note `:3040` is Caddy's published port
 (`docker-compose.yml:103`: `${STUDIO_PORT:-3040}:8090`); the studio itself is
 `:3000` inside the network and is not published.
 
-Line 7 is run **from a clinic machine** and is the honest LAN baseline: it answered
-0.13–0.19 s TTFB from here, against 0.77–1.8 s over the internet, so a slow or
-failing studio at the desk is an access-path fault, not a database one.
-
-If the LAN URL fails from a clinic PC while the internet URL works, suspect the
-**network, not the app**: the NAS IP, the switch/VLAN, or a renumbered subnet. The
-deployment knob for that is `CLINIC_LAN_HOST` in `docker-compose.yml` (it feeds the
-built-in CARE/Orthanc/OHIF defaults), and anything saved in **Settings →
-Integrations overrides it** — which is how a moved NAS becomes "data is not
-syncing" while the app itself looks fine.
+Because the NAS is dual-homed, "the NAS" is not one address: the studio's saved
+`careApiBase`, the Orthanc and OHIF LAN fields, `CLINIC_LAN_HOST`
+(`docker-compose.yml:24`, which feeds the built-in defaults when Settings is blank),
+Caddy's `OHIF_UPSTREAM` (`docker-compose.yml:105`) and whatever the clinic PCs and
+the USG machine use can each name a *different* one of the two. A saved value in
+**Settings → Integrations always beats** the environment default, so check the
+probe's `careApiBase=` line before changing any config. If a clinic PC cannot reach
+the studio on the address it expects while the internet URL works, suspect that
+mismatch or the clinic segment itself — not the application.
 
 ## 5. Ranked hypotheses
 
-1. **The clinic was renumbered and the studio's saved addresses were not updated**
-   (§0). `172.16.1.139` — the address `.env.example:13`, the compose defaults and
-   the built-in CARE/Orthanc/OHIF fallbacks all carry — answers nothing, while the
-   same services answer in under 60 ms on `192.168.1.137`. Explains "not syncing"
-   (pulls time out against a retired IP) and "not reachable" (anyone using the old
-   LAN URL hangs). Discriminator: `careApiBase` from the probe, plus §4 lines 5–6
-   asked *from inside the container*. This is now the leading candidate because it
-   is directly measured, not inferred.
-2. **Deployed image is older than #63/#64** → a stale Prisma client rejects every
-   bill-desk write, and the unguarded sync storm still loads SQLite. Independent of
-   #1 and possibly true *at the same time*: the fixes are on `main` but production
-   is only proven to carry #62. Discriminator: `git log -1`, the boot banner, and
+_Re-ranked at 12:25 IST after §0's correction. The address theory that led this
+list is gone, because nothing was renumbered._
+
+1. **The deployed image is older than #63/#64 → a stale generated Prisma client
+   rejects every bill-desk write.** This is the best fit for "the app opens, the
+   worklist never grows, and nothing says why": reads, login and the sync banner
+   all keep working while every `UsgCareOrder` insert fails with `Unknown
+   argument`. Production is only *proven* to contain #62. Discriminator: `git log
+   -1` on the NAS, the `[studio] Regenerating Prisma client…` boot banner, and
    `MISSING UsgSyncState` from the probe.
-3. **The remote access path** (Cloudflare tunnel/connector, uplink, or the
-   port-forward that publishes the studio). The LAN measured 0.13–0.19 s and 18/18
-   successes; the internet path of the same endpoint measured 0.77–1.8 s with ~5 %
-   empty 500s at exactly 5.6 s. The tunnel is **not** in this compose project, so
-   it is outside this repository — and it is the one part of "not reachable" the LAN
-   numbers cannot explain.
+2. **The remote access path** (Cloudflare tunnel/connector, the clinic uplink, or
+   whatever port-forwards the studio) explains the second symptom — 0.77–1.8 s and
+   ~5 % empty 500s over the internet against **0.13–0.19 s and 18/18 on the LAN**.
+   The tunnel is not in this compose project, so it is outside this repository, and
+   it is the one part of "not reachable" the LAN numbers cannot account for.
+3. **An address the container cannot reach.** Not because the address is stale
+   (both of the NAS's addresses are valid) but because the studio's configured
+   `careApiBase` may name a segment the studio container itself has no path to.
+   This is **unverified from my machine** — I have no route to `172.16.1.0/24`, so
+   my timeouts there prove nothing (§0). Discriminator: §4 lines 5–6, run inside
+   the container, read against the probe's `careApiBase=`.
 4. **Write contention on single-writer SQLite.** In the #62-era code the worklist
    auto-sync fires **every 2 minutes, on mount and on window focus**, with no guard
    for "mounted but hidden behind the composer" (`UsgWorklistView.tsx:350,408` at
@@ -269,7 +280,7 @@ syncing" while the app itself looks fine.
    restart loop on a small NAS is a real load. Check `docker ps` status/counters —
    and remember a restart counter resets when a container is recreated, so it cannot
    prove "never crashed".
-6. **The Settings guard from `a9bee9f`** — UI-only (`store.ts`, `SettingsView.tsx`,
+7. **The Settings guard from `a9bee9f`** — UI-only (`store.ts`, `SettingsView.tsx`,
    `AppShell.tsx`), no DB, no deps, no compose. It cannot reach
    `/api/auth/state`, and the failing endpoint does not call anything it touched.
 

@@ -63,6 +63,8 @@ type SyncStats = {
   importedFromOrthanc?: number;
   orthancUsStudies?: number;
   orphanErrors?: number;
+  demographyLinked?: number;
+  demographyAmbiguous?: number;
   skippedReasons?: string[];
 };
 
@@ -402,6 +404,13 @@ export function UsgWorklistView() {
           st?.erpFinalizedNotLocal ? `${st.erpFinalizedNotLocal} ERP-finalized` : "",
           st?.matchedByStudyUid ? `${st.matchedByStudyUid} by UID` : "",
           st?.matchedByAccession ? `${st.matchedByAccession} by accession` : "",
+          // A scan joined to its bill row by patient name + scanning day. Said
+          // out loud because it is the weakest join here and the doctor is
+          // entitled to see it happen; the count is 0 whenever identifiers work.
+          st?.demographyLinked ? `${st.demographyLinked} by patient+date` : "",
+          st?.demographyAmbiguous
+            ? `${st.demographyAmbiguous} same name/day — left for you to match`
+            : "",
           st?.awaitingImages ? `${st.awaitingImages} awaiting images` : "",
           skipped ? `${skipped} skipped` : "",
         ].filter(Boolean);

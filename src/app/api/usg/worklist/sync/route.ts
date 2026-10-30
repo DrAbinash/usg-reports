@@ -11,10 +11,12 @@ import {
   emptySyncStats,
   importCareRows,
   importOrthancOrphans,
+  linkOrdersByDemography,
   ORTHANC_SWEEP_DAYS,
   orthancRowsToStudies,
   planWorklistPull,
   SYNC_LOOKBACK_DAYS,
+  type DemographicLinkStats,
 } from "@/lib/usg/careSync";
 import { audit } from "@/lib/usg/audit";
 
@@ -28,8 +30,13 @@ import { audit } from "@/lib/usg/audit";
  *      planWorklistPull for why one was removed). A row rejected this cycle
  *      is served again next cycle.
  *   2. Orthanc studies → attach by exact StudyInstanceUID, then exact
- *      single-hit AccessionNumber; orders without a study stay visible
- *      as "Awaiting images" — nothing disappears silently.
+ *      single-hit AccessionNumber. Whatever the identifiers could not reach is
+ *      then linked by demographics (patient name + the clinic's scanning day,
+ *      with the referring doctor's name as the only tie-breaker) — a UNIQUE hit
+ *      writes the Study UID onto the bill row CARE already sent; two candidates
+ *      and nothing is guessed, but it is counted and shown. This pass exists
+ *      because the USG machine follows no MWL and writes no accession. Orders
+ *      with no study at all stay visible as "Awaiting images".
  *   3. Outage safety net (importOrthancOrphans): a study in the PACS that CARE
  *      has not served YET becomes a reportable row carrying only the patient's
  *      details, the referring doctor's name and the Study UID — never an
@@ -64,6 +71,7 @@ export async function POST(req: NextRequest) {
   let importStats = emptySyncStats();
   let attachStats = emptyAttachStats();
   let orphanStats = emptyOrphanImportStats();
+  let demoStats: DemographicLinkStats = { linked: 0, ambiguous: 0, skippedNoDay: 0, errors: 0, reasons: [] };
 
   // 1. CARE worklist → import ultrasound orders by identity
   let backfillRan = false;
@@ -130,6 +138,28 @@ export async function POST(req: NextRequest) {
       } catch (e: any) {
         lastError = lastError ?? `attach failed: ${e?.message ?? String(e)}`;
         console.error('[sync] attachOrthancStudies threw:', e);
+      }
+      // 2b. Whatever the identifiers could not reach, demographics can: the
+      // scanner follows no MWL and writes no accession, so a bill row and its
+      // study share only a name, a day and (sometimes) the doctor's reference.
+      // Unique hits are linked; anything else is counted, never guessed.
+      try {
+        demoStats = await linkOrdersByDemography(us.data, clinicId);
+        if (demoStats.linked || demoStats.ambiguous || demoStats.errors) {
+          console.log(
+            "[sync] demographic link:",
+            `linked=${demoStats.linked}`,
+            `ambiguous=${demoStats.ambiguous}`,
+            `noStudyDate=${demoStats.skippedNoDay}`,
+            `errors=${demoStats.errors}`,
+          );
+        }
+        if (demoStats.errors > 0) {
+          console.warn("[sync] demographic link failures:", demoStats.reasons.slice(0, 3).join(" | "));
+        }
+      } catch (e: any) {
+        lastError = lastError ?? `demographic link failed: ${e?.message ?? String(e)}`;
+        console.error("[sync] linkOrdersByDemography threw:", e);
       }
       try {
         orphanStats = await importOrthancOrphans(us.data, clinicId);
@@ -306,16 +336,22 @@ export async function POST(req: NextRequest) {
     orphanSkippedBilledRowExists: orphanStats.skippedBilledRowExists,
     orphanSkippedTooOld: orphanStats.skippedTooOld,
     orphanErrors: orphanStats.errors,
+    demographyLinked: demoStats.linked,
+    demographyAmbiguous: demoStats.ambiguous,
+    demographyNoStudyDate: demoStats.skippedNoDay,
+    demographyErrors: demoStats.errors,
     // Both reason lists, CARE first — the audit line and the UI toast read
     // this one array.
-    skippedReasons: [...importStats.skippedReasons, ...orphanStats.skippedReasons],
+    skippedReasons: [...importStats.skippedReasons, ...orphanStats.skippedReasons, ...demoStats.reasons],
   };
-  const skippedTotal = stats.skippedNoName + stats.skippedMissingIdentity + stats.errors + stats.orphanErrors;
+  const skippedTotal =
+    stats.skippedNoName + stats.skippedMissingIdentity + stats.errors + stats.orphanErrors + stats.demographyErrors;
   const newOrders = stats.imported + stats.importedFromOrthanc;
   if (
     newOrders > 0 ||
     skippedTotal > 0 ||
     stats.ambiguousMatches > 0 ||
+    stats.demographyLinked > 0 ||
     stats.erpFinalizedNotLocal > 0
   ) {
     const bits: string[] = [];
@@ -325,6 +361,7 @@ export async function POST(req: NextRequest) {
     if (stats.erpFinalizedNotLocal) bits.push(`${stats.erpFinalizedNotLocal} already finalized in ERP`);
     if (stats.matchedByStudyUid) bits.push(`${stats.matchedByStudyUid} linked by StudyInstanceUID`);
     if (stats.matchedByAccession) bits.push(`${stats.matchedByAccession} linked by accession`);
+    if (stats.demographyLinked) bits.push(`${stats.demographyLinked} linked by patient + date`);
     if (stats.awaitingImages) bits.push(`${stats.awaitingImages} awaiting images`);
     if (skippedTotal) bits.push(`${skippedTotal} skipped`);
     if (stats.ambiguousMatches) bits.push(`${stats.ambiguousMatches} ambiguous accession matches`);

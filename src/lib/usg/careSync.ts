@@ -310,17 +310,153 @@ export function istDayOfDate(d: Date | null | undefined): string | null {
 }
 
 /**
+ * Sorted lowercase name tokens. CARE writes "First Last" and the scanner writes
+ * "LAST^FIRST", so order is discarded before anything is compared.
+ */
+export function nameTokens(name: string | null | undefined): string[] {
+  return (name ?? "").toLowerCase().replace(/[^a-z ]/g, " ").split(/\s+/).filter(Boolean).sort();
+}
+
+/**
  * "Same patient, same scanning day" key — sorted name tokens, so CARE's
- * "First Last" and the DICOM "LAST^FIRST" agree. This is the demographic link,
- * and it is used only to decide when NOT to add a row: a name can justify
- * suppressing a duplicate, never a merge of two patients' records.
+ * "First Last" and the DICOM "LAST^FIRST" agree. Order matters nowhere here;
+ * only that both sides of one patient produce one key.
  */
 export function nameDayKey(name: string | null | undefined, ymd: string | null | undefined): string | null {
   const d = (ymd ?? "").slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
-  const tokens = (name ?? "").toLowerCase().replace(/[^a-z ]/g, " ").split(/\s+/).filter(Boolean).sort();
+  const tokens = nameTokens(name);
   if (!tokens.length) return null;
   return `${tokens.join(" ")}|${d}`;
+}
+
+/**
+ * A referring doctor's name, reduced to what survives the two sources disagreeing
+ * about style: "Dr. R. K. Sinha" and "R K SINHA" are the same referral.
+ *
+ * It is a TIE-BREAKER, never a requirement. At this site the bill desk knows the
+ * referrer and the scanner often does not (the ERP reads the same field out of
+ * either `radiology_worklist.referring_doctor` or the bill, per
+ * docs/erp-bridge-billdesk-demographics.md), so a link that demanded agreement
+ * would refuse most real matches. It is consulted only when a name and a day
+ * already point at more than one candidate.
+ */
+export function normalizeDoctor(d: string | null | undefined): string {
+  return nameTokens((d ?? "").replace(/\bdr\.?\b/gi, " ")).join(" ");
+}
+
+// ── demographic link (the join this clinic's machine makes possible) ────────
+//
+// The USG unit follows no Modality Worklist and writes no accession number, so a
+// bill row and its scan share no identifier until CARE's own intake delivers one.
+// What they DO share is the patient's name, the scanning day and — when both
+// sides know it — the doctor's reference. That is enough to LINK a study to the
+// row CARE already sent, and it is not enough to merge two patients' records, so
+// this function only ever writes a StudyInstanceUID onto an existing bill row,
+// and only when one row and one study point at each other.
+
+export type DemographicOrder = {
+  id: string;
+  patientName: string;
+  studyDate: Date | null;
+  referringDoctor?: string | null;
+};
+
+export type DemographicStudy = {
+  studyInstanceUid: string;
+  patientName?: string | null;
+  /** `yyyy-mm-dd` as the DICOM header gave it. */
+  studyDate?: string | null;
+  referringDoctor?: string | null;
+};
+
+export type DemographicPlan = {
+  links: { orderId: string; studyInstanceUid: string }[];
+  /** Name + day agreed, but more than one row or more than one study did. */
+  ambiguous: number;
+  /** A bill row with no study date: nothing to place the scan on. */
+  skippedNoDay: number;
+};
+
+/**
+ * Decide which scans may be written onto which bill rows, by demographics.
+ *
+ * One order and one study for the same name on the same clinic day → link.
+ * Anything else (two scans that day, two bills that day, or both) is refused
+ * unless the doctor's reference name picks exactly one of the candidates — and
+ * if it cannot, nothing is guessed. A wrong link would put this patient's
+ * pictures inside another patient's report, which is the one error here that
+ * cannot be talked out of the record afterwards.
+ */
+export function planDemographicLinks(
+  orders: DemographicOrder[],
+  studies: DemographicStudy[],
+): DemographicPlan {
+  const links: { orderId: string; studyInstanceUid: string }[] = [];
+  let ambiguous = 0;
+  let skippedNoDay = 0;
+
+  const ordersByKey = new Map<string, DemographicOrder[]>();
+  for (const o of orders) {
+    const key = nameDayKey(o.patientName, istDayOfDate(o.studyDate));
+    if (!key) {
+      skippedNoDay++;
+      continue;
+    }
+    const list = ordersByKey.get(key);
+    if (list) list.push(o);
+    else ordersByKey.set(key, [o]);
+  }
+
+  const studiesByKey = new Map<string, DemographicStudy[]>();
+  for (const s of studies) {
+    const uid = (s.studyInstanceUid ?? "").trim();
+    if (!uid) continue;
+    const key = nameDayKey(s.patientName, s.studyDate);
+    if (!key) continue;
+    const list = studiesByKey.get(key);
+    if (list) list.push(s);
+    else studiesByKey.set(key, [s]);
+  }
+
+  // Only the doctor's name can separate two same-named patients on one day, and
+  // only when BOTH sides recorded it. Used as a filter, so a missing value on
+  // either side leaves the candidate set unchanged rather than emptying it.
+  const byDoctor = <T extends { referringDoctor?: string | null }>(
+    items: T[],
+    against: string | null | undefined,
+  ): T[] => {
+    const want = normalizeDoctor(against);
+    if (!want) return items;
+    return items.filter((i) => normalizeDoctor(i.referringDoctor) === want);
+  };
+
+  for (const [key, orderList] of ordersByKey) {
+    const studyList = studiesByKey.get(key);
+    if (!studyList?.length) continue;
+
+    if (orderList.length === 1 && studyList.length === 1) {
+      links.push({ orderId: orderList[0]!.id, studyInstanceUid: studyList[0]!.studyInstanceUid });
+      continue;
+    }
+    if (orderList.length === 1) {
+      const picked = byDoctor(studyList, orderList[0]!.referringDoctor);
+      if (picked.length === 1) {
+        links.push({ orderId: orderList[0]!.id, studyInstanceUid: picked[0]!.studyInstanceUid });
+      } else ambiguous++;
+      continue;
+    }
+    if (studyList.length === 1) {
+      const picked = byDoctor(orderList, studyList[0]!.referringDoctor);
+      if (picked.length === 1) {
+        links.push({ orderId: picked[0]!.id, studyInstanceUid: studyList[0]!.studyInstanceUid });
+      } else ambiguous++;
+      continue;
+    }
+    ambiguous++;
+  }
+
+  return { links, ambiguous, skippedNoDay };
 }
 
 /**
@@ -771,6 +907,59 @@ export async function attachOrthancStudies(studies: OrthancStudy[], clinicId: st
 
   for (const st of studies) {
     if (!matchedStudyIds.has(st.ID)) stats.unmatchedOrthanc++;
+  }
+  return stats;
+}
+
+export type DemographicLinkStats = {
+  linked: number;
+  ambiguous: number;
+  skippedNoDay: number;
+  errors: number;
+  /** Safe per-link diagnostics — order id + reason, never patient data. */
+  reasons: string[];
+};
+
+/**
+ * Write a scan's StudyInstanceUID onto the CARE bill row it belongs to, by
+ * demographics — the join this clinic's machine makes necessary (no MWL, no
+ * accession) and the only join that ever writes bill fields here is CARE itself.
+ *
+ * Runs after the identifier passes, so it can never override a UID or accession
+ * match, and before the safety net, so a study that reaches its own bill row
+ * does not also get a duplicate row. It touches `studyInstanceUid` and nothing
+ * else: no name, no test, no status, no accession. A wrong link would put this
+ * patient's pictures inside another patient's report, so anything that is not a
+ * unique hit is left unlinked and COUNTED — see planDemographicLinks.
+ */
+export async function linkOrdersByDemography(
+  studies: DemographicStudy[],
+  clinicId: string = "default",
+): Promise<DemographicLinkStats> {
+  const stats: DemographicLinkStats = { linked: 0, ambiguous: 0, skippedNoDay: 0, errors: 0, reasons: [] };
+  if (!studies.length) return stats;
+
+  const unlinked = await db.usgCareOrder.findMany({
+    where: { clinicId, studyInstanceUid: null },
+    select: { id: true, patientName: true, studyDate: true, referringDoctor: true },
+  });
+  if (!unlinked.length) return stats;
+
+  const plan = planDemographicLinks(unlinked, studies);
+  stats.ambiguous = plan.ambiguous;
+  stats.skippedNoDay = plan.skippedNoDay;
+
+  for (const link of plan.links) {
+    try {
+      await db.usgCareOrder.update({
+        where: { id: link.orderId },
+        data: { studyInstanceUid: link.studyInstanceUid },
+      });
+      stats.linked++;
+    } catch (e) {
+      stats.errors++;
+      stats.reasons.push(`order ${link.orderId.slice(-8)}: link failed (${prismaErrorSummary(e)})`);
+    }
   }
   return stats;
 }

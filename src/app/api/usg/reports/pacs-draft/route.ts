@@ -45,14 +45,22 @@ export async function POST(req: NextRequest) {
     await db.usgCareOrder.create({
       data: {
         clinicId,
-        careWorklistId: `PACS-${studyInstanceUid}`,
-        // Leave accession null — PACS-only drafts are keyed by studyInstanceUid;
-        // copying a PatientID into the unique accession column would collide with CARE rows.
+        // Not a bill, so it carries no bill identity: careWorklistId stays null
+        // (it used to hold a synthetic `PACS-<uid>` string, which read as a
+        // bill-desk id everywhere a filter asked "is this a CARE row?") and the
+        // accession is left null too — copying a PatientID into that UNIQUE
+        // column collided with CARE rows. The StudyInstanceUID is the identity,
+        // and when CARE later bills this study its row is adopted by the UID
+        // bridge in importCareRows and gains the real worklist id.
+        careWorklistId: null,
         patientName: patientName || "UNKNOWN",
         patientAge: String(patientAge || "").replace(/[^0-9]/g, ""),
         patientSex: patientSex === "M" ? "M" : "F",
         referringDoctor: referringDoctor || "Self/Walk-in",
-        testName: testName || "USG Study",
+        // Whatever the DICOM Study Description said, including nothing. This row
+        // exists because the doctor chose to report this patient's scan, not
+        // because a bill desk catalogued a test.
+        testName: typeof testName === "string" ? testName : "",
         modality: "US",
         studyDate: studyDate ? new Date(studyDate) : new Date(),
         studyInstanceUid,

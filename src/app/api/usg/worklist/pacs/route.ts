@@ -20,7 +20,11 @@ export async function GET() {
     patientAge: st.patientAge,
     patientSex: st.patientSex || "F",
     referringDoctor: st.referringDoctor || "Self/Walk-in",
-    testName: st.testName || "USG Study",
+    // Exactly what the DICOM header said, including nothing. This row is POSTed
+    // back to /api/usg/reports/pacs-draft when the doctor drafts it, so a
+    // fallback invented here would end up stored as a catalogued test the bill
+    // desk never billed. The list renders its own placeholder instead.
+    testName: st.testName,
     modality: "US",
     studyDate: st.studyDate,
     studyInstanceUid: st.studyInstanceUid,

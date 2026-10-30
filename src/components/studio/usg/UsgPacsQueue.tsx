@@ -1,7 +1,11 @@
 "use client";
-/** PACS-only fallback queue — Orthanc US studies via DICOMweb.
- *  Shown when CARE is down, or when the CARE worklist is empty so unlinked
- *  PACS studies stay reachable for draft reporting. */
+/** Un-billed scans, read straight from DICOMweb — the only route a study with
+ *  no CARE bill takes to a report. The sync deliberately does not write these
+ *  into the order table (1,218 of 2,301 worklist rows came from doing exactly
+ *  that); a row appears here when the scan exists in the PACS, and it enters
+ *  the database only when the doctor presses Draft, via /api/usg/reports/
+ *  pacs-draft. What a scan can say about itself is the DICOM header: the
+ *  patient's details and the referring doctor's name. Nothing is invented. */
 import { useCallback, useEffect, useState } from "react";
 import { useStudio } from "@/lib/store";
 import { Button } from "@/components/ui/button";
@@ -74,7 +78,7 @@ export function UsgPacsQueue() {
         <div className="flex items-center gap-2">
           <WifiOff className="h-5 w-5 text-orange-600" />
           <span className="font-bold text-orange-800 dark:text-orange-300">
-            Live PACS queue — Orthanc US studies (unbilled drafts OK)
+            Not billed in CARE — scans only (last 72 hours, read live from the PACS)
           </span>
         </div>
         <Button size="sm" variant="outline" onClick={() => void load()} disabled={loading}>

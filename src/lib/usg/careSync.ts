@@ -22,6 +22,14 @@
  * with no Orthanc study yet simply shows as "Awaiting images" — it never
  * disappears.
  *
+ * What a bill is for, and what a scan is for: this engine writes rows only for
+ * what CARE's bill desk has billed. A study that arrived in the PACS with no
+ * bill behind it is not turned into a pseudo-order — it stays a scan, read live
+ * from DICOMweb by patient details and the referring doctor's name
+ * (UsgPacsQueue → /api/usg/reports/pacs-draft). Claiming the one thing it does
+ * not have (a bill) is what made 1,218 of this clinic's 2,301 worklist rows
+ * noise.
+ *
  * The DB-facing functions take the Prisma client from @/lib/db (the tests
  * run them against the real scratch database), and every decision path is
  * counted: the sync response reports the numbers, nothing is silent.
@@ -35,8 +43,6 @@ import {
   type CareWorklistItem,
 } from "./careClient";
 import type { OrthancStudy, OrthancUsStudyRow } from "./orthancClient";
-import { UNNAMED_STUDY_PLACEHOLDER } from "./billedStudyType";
-import { addCalendarDaysYmd, clinicTodayIST } from "./dates";
 
 // ── pure row normalisation ──────────────────────────────────────────────────
 
@@ -256,67 +262,6 @@ export const emptyAttachStats = (): AttachStats => ({
   awaitingImages: 0,
   unmatchedOrthanc: 0,
 });
-
-/** Stats for importing Orthanc US studies that have no CARE order yet. */
-export type OrphanImportStats = {
-  orthancUsStudies: number;
-  importedFromOrthanc: number;
-  alreadyPresent: number;
-  skippedNoName: number;
-  skippedNoUid: number;
-  /** A bill-desk order for this patient on this day already represents them. */
-  skippedBilledRowExists: number;
-  /** Older than {@link ORPHAN_MAX_AGE_DAYS} — archive history, not today's list. */
-  skippedTooOld: number;
-  errors: number;
-  /** Safe per-row diagnostics — study UID tail + reason, never patient data. */
-  skippedReasons: string[];
-};
-
-export const emptyOrphanImportStats = (): OrphanImportStats => ({
-  orthancUsStudies: 0,
-  importedFromOrthanc: 0,
-  alreadyPresent: 0,
-  skippedNoName: 0,
-  skippedNoUid: 0,
-  skippedBilledRowExists: 0,
-  skippedTooOld: 0,
-  errors: 0,
-  skippedReasons: [],
-});
-
-/**
- * An Orthanc study is a *fallback* for a scan CARE has not billed yet. Beyond
- * this many days it is archive history: measured 2026-10-06, one unbounded
- * sweep of the 14-day window put 1,381 untitled "USG Study" rows on a worklist
- * that holds about 100 real patients a day, and the bill-desk rows — the only
- * ones carrying a referring doctor and a test name — disappeared underneath.
- */
-export const ORPHAN_MAX_AGE_DAYS = 3;
-
-/** The clinic's calendar day, read as IST wall time (the scanner's own clock). */
-export function istDayOfDate(d: Date | null | undefined): string | null {
-  if (!d) return null;
-  const ms = d.getTime() + (5 * 60 + 30) * 60 * 1000;
-  return new Date(ms).toISOString().slice(0, 10);
-}
-
-/**
- * "Same patient, same scanning day" key — sorted name tokens, so CARE's
- * "First Last" and the DICOM "LAST^FIRST" agree. Order matters nowhere here;
- * only that both sides of one patient produce one key.
- */
-export function nameDayKey(name: string | null | undefined, ymd: string | null | undefined): string | null {
-  const d = (ymd ?? "").slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
-  const tokens = (name ?? "").toLowerCase().replace(/[^a-z ]/g, " ").split(/\s+/).filter(Boolean).sort();
-  if (!tokens.length) return null;
-  return `${tokens.join(" ")}|${d}`;
-}
-
-const isUniqueViolation = (e: unknown): boolean =>
-  e instanceof Error &&
-  ((e as { code?: string }).code === "P2002" || /unique constraint/i.test(e.message));
 
 /**
  * One short, PHI-free line describing why Prisma rejected a write.
@@ -555,156 +500,8 @@ export async function importCareRows(rows: CareWorklistItem[], clinicId: string 
 }
 
 /**
- * Import Orthanc ultrasound studies that are not yet linked to any CARE
- * order. Creates PENDING UsgCareOrder rows so the radiologist can report
- * walk-in / unlinked PACS studies without waiting for bill-desk linking.
- *
- * It is a FALLBACK, not a second feed, and it is bounded on that basis:
- *   - identity is StudyInstanceUID only (never names) — an existing order with
- *     the same UID is left alone (counted as alreadyPresent);
- *   - a study older than {@link ORPHAN_MAX_AGE_DAYS} is archive history;
- *   - a patient who already has a bill-desk order on that scanning day is not
- *     given a second, emptier row.
- *
- * Accession is stored when Orthanc has a single clear value; blank accessions
- * stay null (never synthesized).
- */
-export async function importOrthancOrphans(
-  studies: OrthancUsStudyRow[],
-  clinicId: string = "default",
-): Promise<OrphanImportStats> {
-  const stats = emptyOrphanImportStats();
-  stats.orthancUsStudies = studies.length;
-  if (!studies.length) return stats;
-
-  const existing = await db.usgCareOrder.findMany({
-    where: { clinicId, studyInstanceUid: { not: null } },
-    select: { studyInstanceUid: true },
-  });
-  const haveUid = new Set(
-    existing.map((o) => o.studyInstanceUid).filter((u): u is string => !!u),
-  );
-
-  // Also avoid unique-collision on accession when an order already holds it.
-  // The unique constraint is TABLE-WIDE (accessionNumber @unique), so this
-  // lookup must be too — a clinic-scoped version let an accession owned by
-  // another clinic's order fail every create with a swallowed error
-  // (NAS-verified: 67 of 145 fetched US studies lost this way).
-  const existingAcc = await db.usgCareOrder.findMany({
-    where: { accessionNumber: { not: null } },
-    select: { accessionNumber: true },
-  });
-  const haveAcc = new Set(
-    existingAcc.map((o) => o.accessionNumber).filter((a): a is string => !!a),
-  );
-
-  // A bill-desk order for this patient on this scanning day already owns their
-  // row on the worklist. The Orthanc copy carries no doctor, no bill number and
-  // no catalogued test name, so letting it stand beside the billed row shows
-  // the same patient twice — and the emptier copy is what the doctor reads as
-  // "Self/Walk-in · USG Study".
-  const billedOrders = await db.usgCareOrder.findMany({
-    where: { clinicId, careWorklistId: { not: null } },
-    select: { patientName: true, studyDate: true },
-  });
-  const billedDayKeys = new Set(
-    billedOrders
-      .map((o) => nameDayKey(o.patientName, istDayOfDate(o.studyDate)))
-      .filter((k): k is string => !!k),
-  );
-  const oldestAcceptedYmd = addCalendarDaysYmd(clinicTodayIST(), -ORPHAN_MAX_AGE_DAYS);
-
-  for (const st of studies) {
-    const uid = clean(st.studyInstanceUid);
-    if (!uid) {
-      stats.skippedNoUid++;
-      continue;
-    }
-    if (haveUid.has(uid)) {
-      stats.alreadyPresent++;
-      continue;
-    }
-    const name = (st.patientName ?? "").trim();
-    if (!name || name.toUpperCase() === "UNKNOWN") {
-      // UNKNOWN is the DICOMweb fallback when PatientName is blank — not safe
-      // to put on a reporting worklist without a human identity.
-      stats.skippedNoName++;
-      continue;
-    }
-
-    // Bounded fallback: yesterday's archive is not today's worklist.
-    if (st.studyDate && st.studyDate < oldestAcceptedYmd) {
-      stats.skippedTooOld++;
-      continue;
-    }
-    if (billedDayKeys.has(nameDayKey(name, st.studyDate) ?? "")) {
-      stats.skippedBilledRowExists++;
-      continue;
-    }
-
-    const acc = clean(st.accessionNumber);
-    // If another order already owns this accession, keep accession null on
-    // the orphan (UID is enough) rather than failing the unique constraint.
-    const safeAcc = acc && !haveAcc.has(acc) ? acc : null;
-
-    const data = {
-      clinicId,
-      accessionNumber: safeAcc,
-      careWorklistId: null,
-      patientName: name,
-      patientAge: (st.patientAge ?? "").replace(/[^0-9]/g, "").slice(0, 3),
-      patientSex: st.patientSex === "M" ? "M" : "F",
-      patientPhone: "",
-      patientAddress: "",
-      billNumber: "",
-      referringDoctor: (st.referringDoctor ?? "").trim(),
-      testName: (st.testName ?? "").trim() || UNNAMED_STUDY_PLACEHOLDER,
-      testCode: "",
-      modality: "USG",
-      studyInstanceUid: uid,
-      studyDate: parseStudyDateTime(st.studyDate, st.studyTime),
-      billingStatus: null,
-      status: "PENDING",
-    };
-
-    try {
-      await db.usgCareOrder.create({ data });
-      stats.importedFromOrthanc++;
-      haveUid.add(uid);
-      if (safeAcc) haveAcc.add(safeAcc);
-    } catch (e) {
-      // After the table-wide guard, what's left is a race with a concurrent
-      // sync claiming the accession between our lookup and this insert.
-      // Retry once with the accession dropped — the UID is the orphan's
-      // real identity — before counting the failure.
-      let saved = false;
-      if (safeAcc && isUniqueViolation(e)) {
-        try {
-          await db.usgCareOrder.create({ data: { ...data, accessionNumber: null } });
-          saved = true;
-        } catch {
-          // fall through — the original failure is what gets counted
-        }
-      }
-      if (saved) {
-        stats.importedFromOrthanc++;
-        haveUid.add(uid);
-      } else {
-        stats.errors++;
-        // Safe diagnostics: study UID tail + error class, never patient data.
-        stats.skippedReasons.push(
-          `UID ..${uid.slice(-8)}: create failed (${prismaErrorSummary(e)})`,
-        );
-      }
-    }
-  }
-  return stats;
-}
-
-/**
  * Project the chunked DICOMweb ultrasound rows onto the Orthanc REST shape the
- * attach pass matches against, so one date-range query can serve both the
- * attach and the orphan import.
+ * attach pass matches against.
  *
  * The Orthanc study id is not an identity anyone persists here — the UID is —
  * so the UID stands in for it. Accession stays null when absent rather than

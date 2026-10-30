@@ -144,6 +144,14 @@ describe("sync route wires the window", () => {
     expect(schema).toMatch(/cursorHoldCount\s+Int/);
   });
 
+  it("writes no orders from Orthanc — an un-billed scan stays a scan", () => {
+    // The fabricated bill rows are what turned 1,218 of this clinic's 2,301
+    // worklist rows into noise. The Orthanc pass attaches images to rows CARE
+    // billed; it never creates a row of its own.
+    expect(route).not.toMatch(/importOrthancOrphans/);
+    expect(route).toMatch(/attachOrthancStudies\(/);
+  });
+
   it("writes lastSyncAt as a clock, not as a gate", () => {
     expect(route).toMatch(/lastSyncAt: completedAt/);
     expect(route).not.toMatch(/lastSyncAt:\s*(cursorPlan|nextSyncAt|nextDeepPullAt)/);

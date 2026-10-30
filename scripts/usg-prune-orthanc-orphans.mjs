@@ -1,23 +1,27 @@
 #!/usr/bin/env node
 /**
- * Remove the Orthanc-only worklist rows that a sync flood left behind.
+ * Remove the LEGACY Orthanc-only worklist rows that older syncs left behind.
  *
  *   docker exec -w /app usg-reporting-studio node scripts/usg-prune-orthanc-orphans.mjs
  *   docker exec -w /app usg-reporting-studio node scripts/usg-prune-orthanc-orphans.mjs --execute
  *
  * An "orphan" here is a UsgCareOrder that CARE never sent: no careWorklistId,
- * no bill number. It is the fallback row that lets an un-billed scan still be
- * reported. A fallback is not a second feed — and when one sync swept 14 days
- * of the archive it wrote 1,381 of them onto a list that carries about 100 real
- * patients a day. Those rows have no referring doctor and no catalogued test
- * name, so the worklist read "Self/Walk-in · USG Study" for everyone and the
- * three bill-desk rows underneath became impossible to find.
+ * no bill number. Older builds wrote one of these for every ultrasound study in
+ * the PACS, and on this clinic 1,218 of 2,301 worklist rows ended up as such
+ * copies. They carry no referring doctor and no catalogued test name, so the
+ * list read "Self/Walk-in · USG Study" for everyone and the bill-desk rows
+ * underneath became impossible to find.
+ *
+ * SINCE v6.22 the sync no longer creates them: an un-billed scan stays a scan in
+ * the live PACS queue and only enters the order table when the doctor drafts it.
+ * So this script's subject matter is historical, and running it is optional
+ * tidying, not a fix — the count can no longer grow.
  *
  * Deleted, and ONLY ever these:
  *   - never sent from CARE (careWorklistId NULL and billNumber ''), and
  *   - nothing was written against them (no report, no Form F, still PENDING), and
  *   - either the patient already has a CARE row on that scanning day, or the
- *     study is older than the fallback window (see ORPHAN_MAX_AGE_DAYS).
+ *     study is older than the window below.
  *
  * A CARE row is never touched, and a row carrying a report is never touched —
  * that is the difference between pruning noise and deleting a clinical record.
@@ -28,7 +32,7 @@ import { PrismaClient } from "@prisma/client";
 const db = new PrismaClient();
 const execute = process.argv.includes("--execute");
 
-/** Keep in step with src/lib/usg/careSync.ts — ORPHAN_MAX_AGE_DAYS. */
+/** Rows scanned before this many days back are treated as archive, not worklist. */
 const ORPHAN_MAX_AGE_DAYS = 3;
 /** Care stores a study day at noon or midnight UTC; the scanner's own day is IST. */
 const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;

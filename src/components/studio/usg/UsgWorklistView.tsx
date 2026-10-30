@@ -60,9 +60,6 @@ type SyncStats = {
   ambiguousMatches?: number;
   awaitingImages?: number;
   unmatchedOrthanc?: number;
-  importedFromOrthanc?: number;
-  orthancUsStudies?: number;
-  orphanErrors?: number;
   skippedReasons?: string[];
 };
 
@@ -154,6 +151,17 @@ function OrderRow({
           ) : order.careWorklistId ? (
             <span className="hidden shrink-0 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-slate-500 ring-1 ring-slate-200 sm:inline" title="Bill-desk order (no accession number — ERP identifies it by worklist id)">
               WL {order.careWorklistId}
+            </span>
+          ) : null}
+          {/* No bill-desk identity at all: this row is the scan, not a bill.
+              It carries the patient's details and the referring doctor's name
+              from the DICOM header — nothing invented on top of that. */}
+          {!order.accessionNumber && !order.careWorklistId && !order.billNumber ? (
+            <span
+              className="hidden shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 ring-1 ring-slate-200 sm:inline"
+              title="No CARE bill behind this row — it is the scan itself: patient details and the referring doctor's name, read off the DICOM header. It becomes a billed row automatically if CARE sends the bill for this study."
+            >
+              Scan, not billed
             </span>
           ) : null}
           {order.studyInstanceUid ? (
@@ -374,13 +382,11 @@ export function UsgWorklistView() {
         const skipped =
           (st?.skippedNoName ?? 0) +
           (st?.skippedMissingIdentity ?? 0) +
-          (st?.errors ?? 0) +
-          (st?.orphanErrors ?? 0);
+          (st?.errors ?? 0);
         const bits = [
           `CARE ${r.careOk ? "✓" : "✗"}`,
           `Orthanc ${r.orthancOk ? "✓" : "✗"}`,
           r.newOrders ? `${r.newOrders} new` : "",
-          st?.importedFromOrthanc ? `${st.importedFromOrthanc} from PACS` : "",
           st?.updatedExisting ? `${st.updatedExisting} refreshed` : "",
           st?.erpFinalizedNotLocal ? `${st.erpFinalizedNotLocal} ERP-finalized` : "",
           st?.matchedByStudyUid ? `${st.matchedByStudyUid} by UID` : "",
@@ -601,12 +607,12 @@ export function UsgWorklistView() {
         </Button>
       </div>
 
-      {/* PACS fallback: CARE down, OR worklist truly empty (not just date-filtered)
-          while Orthanc is configured — safety net if orphan import missed a study. */}
-      {data && data.orthancConfigured && (
-        (!data.careOk && data.careConfigured) ||
-        (pending.length === 0 && (data.pendingOutsideFilter ?? 0) === 0)
-      ) ? <UsgPacsQueue /> : null}
+      {/* Un-billed scans, read live from the PACS. This is the ONLY place a
+          study with no bill appears: the sync no longer writes them into the
+          order table, so nothing here can flood the list and nothing needs a
+          cleanup script. Shown whenever Orthanc is configured — including while
+          CARE is healthy, because a walk-in scan is billed late or never. */}
+      {data?.orthancConfigured ? <UsgPacsQueue /> : null}
 
       {/* v6.14: Date range filter — quick presets + custom from-to */}
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2">

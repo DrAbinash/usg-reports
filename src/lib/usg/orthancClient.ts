@@ -183,7 +183,10 @@ export async function listRecentUltrasoundStudies(
       patientSex: sexRaw === "M" ? "M" : sexRaw === "F" ? "F" : "",
       patientAge: String(st["00101010"]?.Value?.[0] ?? "").replace(/[^0-9]/g, ""),
       referringDoctor: dicomPn(st["00080090"]),
-      testName: String(st["00081030"]?.Value?.[0] ?? "").trim() || "USG Study",
+      // Study Description (0008,1030) when the scanner wrote one, and nothing
+      // when it did not. This used to fall back to "USG Study", and that string
+      // then looked like a catalogued test the bill desk had billed.
+      testName: String(st["00081030"]?.Value?.[0] ?? "").trim(),
       studyDate:
         rawDate.length >= 8
           ? `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`

@@ -7,10 +7,8 @@ import { listRecentUltrasoundStudies } from "@/lib/usg/orthancClient";
 import {
   attachOrthancStudies,
   emptyAttachStats,
-  emptyOrphanImportStats,
   emptySyncStats,
   importCareRows,
-  importOrthancOrphans,
   ORTHANC_SWEEP_DAYS,
   orthancRowsToStudies,
   planWorklistPull,
@@ -19,22 +17,19 @@ import {
 import { audit } from "@/lib/usg/audit";
 
 /**
- * Worklist sync — four fail-soft steps (v6.1 identity model + Orthanc orphans):
+ * Worklist sync — three fail-soft steps (v6.1 identity model):
  *   1. CARE bill-desk rows → import ultrasound orders by identity
  *      (careWorklistId first, legacy accession second, StudyInstanceUID
- *      bridge for prior Orthanc orphans, never names). Every cycle re-reads
- *      the last SYNC_LOOKBACK_DAYS days and upserts — there is no watermark
- *      and nothing to fall behind (see planWorklistPull for why one was
- *      removed). A row rejected this cycle is served again next cycle.
+ *      bridge for a scan that was drafted here before it was billed,
+ *      never names). Every cycle re-reads the last SYNC_LOOKBACK_DAYS days
+ *      and upserts — there is no watermark and nothing to fall behind (see
+ *      planWorklistPull for why one was removed). A row rejected this cycle
+ *      is served again next cycle.
  *   2. Orthanc studies → attach by exact StudyInstanceUID, then exact
  *      single-hit AccessionNumber; orders without a study stay visible
- *      as "Awaiting images" — nothing disappears silently
- *   3. Orthanc US orphans (DICOMweb, last ORTHANC_SWEEP_DAYS queried) → import
- *      as PENDING orders keyed by StudyInstanceUID, but only for the last
- *      ORPHAN_MAX_AGE_DAYS days and only where no bill-desk order already
- *      represents that patient that day. This is the fallback for un-billed
- *      scans, not a second feed.
- *   4. Billing badge refresh + retry pending finalizes
+ *      as "Awaiting images" — nothing disappears silently. Studies with no
+ *      bill are NOT written as orders: they stay in the live PACS queue.
+ *   3. Billing badge refresh + retry pending finalizes
  *
  * Every decision is counted in the response; skips carry a safe reason
  * (worklistId + reason — never patient data, never secrets).
@@ -57,7 +52,6 @@ export async function POST(req: NextRequest) {
 
   let importStats = emptySyncStats();
   let attachStats = emptyAttachStats();
-  let orphanStats = emptyOrphanImportStats();
 
   // 1. CARE worklist → import ultrasound orders by identity
   let backfillRan = false;
@@ -101,12 +95,20 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 2 + 3. Orthanc → attach images to existing orders by exact identity, then
-  // import the ultrasound studies that have no order yet. ONE chunked DICOMweb
-  // date-range query feeds both passes. The attach pass used to call
+  // 2. Orthanc → attach images to existing orders by exact identity. ONE
+  // chunked DICOMweb date-range query; the attach pass used to call
   // listStudies() as well, which fetched every study id and then issued one
   // HTTP GET per study — ~1400 requests, each re-reading the settings row —
   // on every sync, every two minutes, against a SQLite file with one writer.
+  //
+  // A study with no bill behind it is NOT imported as an order any more. It
+  // never was a bill: the row carried no worklist id, no bill number and no
+  // catalogued test, and on this clinic it grew to 1,218 of 2,301 worklist
+  // rows, which is why the list read as unfiltered noise and why a delete
+  // script was needed at all. Un-billed scans stay what they are — a scan in
+  // the PACS queue, reached live from DICOMweb by patient details and the
+  // referring doctor's name, and draftable from there (UsgPacsQueue →
+  // /api/usg/reports/pacs-draft). Nothing is written, so nothing can flood.
   //
   // Fail-soft: a DICOMweb outage must not undo a successful CARE import — but
   // it is never SILENT: it sets lastError so the banner shows amber.
@@ -120,36 +122,13 @@ export async function POST(req: NextRequest) {
         lastError = lastError ?? `attach failed: ${e?.message ?? String(e)}`;
         console.error('[sync] attachOrthancStudies threw:', e);
       }
-      try {
-        orphanStats = await importOrthancOrphans(us.data, clinicId);
-        console.log(
-          "[sync] orthanc orphans:",
-          `us=${orphanStats.orthancUsStudies}`,
-          `imported=${orphanStats.importedFromOrthanc}`,
-          `present=${orphanStats.alreadyPresent}`,
-          `errors=${orphanStats.errors}`,
-          `noName=${orphanStats.skippedNoName}`,
-          `noUid=${orphanStats.skippedNoUid}`,
-          `billedRowExists=${orphanStats.skippedBilledRowExists}`,
-          `tooOld=${orphanStats.skippedTooOld}`,
-        );
-        if (orphanStats.errors > 0) {
-          console.warn(
-            "[sync] orphan create failures:",
-            orphanStats.skippedReasons.slice(0, 3).join(" | "),
-          );
-        }
-      } catch (e: any) {
-        lastError = lastError ?? `orphan import failed: ${e?.message ?? String(e)}`;
-        console.error("[sync] importOrthancOrphans threw:", e);
-      }
     } else {
       lastError = lastError ?? us.error;
       console.warn("[sync] listRecentUltrasoundStudies:", us.error);
     }
   }
 
-  // 4a. Billing badge refresh for open rows (accession-keyed — blank
+  // 3a. Billing badge refresh for open rows (accession-keyed — blank
   // accessions have no billing join on the ERP side either; fail-soft).
   if (careOk) {
     if (careBillingPollEnabled()) {
@@ -283,24 +262,13 @@ export async function POST(req: NextRequest) {
 
   // Observability: counts (and safe skip reasons) in the audit trail and
   // the response. No patient data in the skip reasons, no secrets anywhere.
-  // Spread carefully — orphan stats reuse names like skippedNoName/errors.
   const stats = {
     ...importStats,
     ...attachStats,
-    orthancUsStudies: orphanStats.orthancUsStudies,
-    importedFromOrthanc: orphanStats.importedFromOrthanc,
-    orphanAlreadyPresent: orphanStats.alreadyPresent,
-    orphanSkippedNoName: orphanStats.skippedNoName,
-    orphanSkippedNoUid: orphanStats.skippedNoUid,
-    orphanSkippedBilledRowExists: orphanStats.skippedBilledRowExists,
-    orphanSkippedTooOld: orphanStats.skippedTooOld,
-    orphanErrors: orphanStats.errors,
-    // Both reason lists, CARE first — the audit line and the UI toast read
-    // this one array.
-    skippedReasons: [...importStats.skippedReasons, ...orphanStats.skippedReasons],
+    skippedReasons: importStats.skippedReasons,
   };
-  const skippedTotal = stats.skippedNoName + stats.skippedMissingIdentity + stats.errors + stats.orphanErrors;
-  const newOrders = stats.imported + stats.importedFromOrthanc;
+  const skippedTotal = stats.skippedNoName + stats.skippedMissingIdentity + stats.errors;
+  const newOrders = stats.imported;
   if (
     newOrders > 0 ||
     skippedTotal > 0 ||
@@ -309,7 +277,6 @@ export async function POST(req: NextRequest) {
   ) {
     const bits: string[] = [];
     if (stats.imported) bits.push(`${stats.imported} new from CARE`);
-    if (stats.importedFromOrthanc) bits.push(`${stats.importedFromOrthanc} new from Orthanc`);
     if (stats.updatedExisting) bits.push(`${stats.updatedExisting} refreshed`);
     if (stats.erpFinalizedNotLocal) bits.push(`${stats.erpFinalizedNotLocal} already finalized in ERP`);
     if (stats.matchedByStudyUid) bits.push(`${stats.matchedByStudyUid} linked by StudyInstanceUID`);

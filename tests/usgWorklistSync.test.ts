@@ -23,14 +23,12 @@ import {
   attachOrthancStudies,
   decideImport,
   importCareRows,
-  importOrthancOrphans,
   indexOrthancStudies,
   matchOrthancStudy,
   normalizeCareRow,
 } from "@/lib/usg/careSync";
 import type { CareWorklistItem } from "@/lib/usg/careClient";
-import type { OrthancStudy, OrthancUsStudyRow } from "@/lib/usg/orthancClient";
-import { addCalendarDaysYmd, clinicTodayIST } from "@/lib/usg/dates";
+import type { OrthancStudy } from "@/lib/usg/orthancClient";
 
 // ── fixtures ────────────────────────────────────────────────────────────────
 
@@ -334,157 +332,62 @@ describe("J · REPORTED state is never reset by resync", () => {
   });
 });
 
-// ── K · Orthanc orphans (unlinked PACS US → Studio worklist) ────────────────
+// ── L · a scan drafted from the PACS is adopted, never duplicated ───────────
 
-describe("K · Orthanc orphan import (unlinked PACS US)", () => {
-  // The orphan fallback is bounded to the last ORPHAN_MAX_AGE_DAYS days, so the
-  // fixtures are written relative to the clinic's today, never as a fixed date
-  // that silently ages out of the window.
-  const recentYmd = addCalendarDaysYmd(clinicTodayIST(), -1);
-  const staleYmd = addCalendarDaysYmd(clinicTodayIST(), -10);
-  const orphan = (uid: string, name = "Alfi Parween", studyDate = recentYmd): OrthancUsStudyRow => ({
-    studyInstanceUid: uid,
-    accessionNumber: null,
-    patientName: name,
-    patientSex: "F",
-    patientAge: "28",
-    referringDoctor: "",
-    testName: "USG Study",
-    studyDate,
-    studyTime: "090500",
-  });
-
-  test("a study older than the fallback window never reaches the worklist", async () => {
-    const stats = await importOrthancOrphans([orphan("1.2.840.orphan.old", "Ancient Patient", staleYmd)]);
-    expect(stats.importedFromOrthanc).toBe(0);
-    expect(stats.skippedTooOld).toBe(1);
-    expect(await db.usgCareOrder.count({ where: { studyInstanceUid: "1.2.840.orphan.old" } })).toBe(0);
-  });
-
-  test("a patient who already has a CARE row that day is not given a second, emptier one", async () => {
-    await importCareRows([
-      {
-        worklistId: "9801",
-        accessionNumber: "",
-        patientName: "Alfi Parween",
-        modality: "US",
-        studyInstanceUid: "1.2.840.orphan.billed",
-        studyDate: recentYmd,
-        referringDoctor: "Dr Neha Priya",
-        testName: "USG Whole Abdomen",
-        billNumber: "B-9801",
+describe("L · the StudyInstanceUID bridge into a billed row", () => {
+  // What /api/usg/reports/pacs-draft writes: the study exists in the PACS, no
+  // bill was raised, so the row carries the patient's details, the referring
+  // doctor's name and the UID — and no bill identity of any kind.
+  const draftedScan = async (uid = "1.2.840.draft.1") =>
+    db.usgCareOrder.create({
+      data: {
+        clinicId: "default",
+        accessionNumber: null,
+        careWorklistId: null,
+        patientName: "Naaz Afrin",
+        patientAge: "28",
+        patientSex: "F",
+        referringDoctor: "",
+        testName: "",
+        modality: "USG",
+        studyInstanceUid: uid,
+        status: "REPORTING",
       },
-    ]);
-    // DICOM arrives as LAST^FIRST; the sorted-token key must still recognise it.
-    const stats = await importOrthancOrphans([orphan("1.2.840.orphan.dup", "PARWEEN ALFI")]);
-    expect(stats.importedFromOrthanc).toBe(0);
-    expect(stats.skippedBilledRowExists).toBe(1);
-    // Exactly one row for her that day — and it is the bill-linked one, which
-    // is the only copy carrying a referring doctor and a catalogued test name.
-    const rows = await db.usgCareOrder.findMany({
-      where: { patientName: { contains: "parween" } },
     });
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.careWorklistId).toBe("9801");
-  });
 
-  test("unmatched Orthanc US becomes a PENDING worklist order", async () => {
-    const stats = await importOrthancOrphans([orphan("1.2.840.orphan.1")]);
-    expect(stats.importedFromOrthanc).toBe(1);
-    expect(stats.alreadyPresent).toBe(0);
-    const order = await db.usgCareOrder.findFirstOrThrow({
-      where: { studyInstanceUid: "1.2.840.orphan.1" },
-    });
-    expect(order.patientName).toBe("Alfi Parween");
-    expect(order.status).toBe("PENDING");
-    expect(order.careWorklistId).toBeNull();
-    expect(order.studyInstanceUid).toBe("1.2.840.orphan.1");
-    expect(order.studyDate).not.toBeNull();
-  });
-
-  test("repeated orphan import is idempotent (UID identity)", async () => {
-    await importOrthancOrphans([orphan("1.2.840.orphan.2")]);
-    const second = await importOrthancOrphans([orphan("1.2.840.orphan.2")]);
-    expect(second.importedFromOrthanc).toBe(0);
-    expect(second.alreadyPresent).toBe(1);
-    expect(await db.usgCareOrder.count({ where: { studyInstanceUid: "1.2.840.orphan.2" } })).toBe(1);
-  });
-
-  test("CARE row with same StudyInstanceUID updates the orphan (no duplicate)", async () => {
-    await importOrthancOrphans([orphan("1.2.840.orphan.3", "Naaz Afrin")]);
+  test("CARE's billed row for the same UID updates that row instead of adding one", async () => {
+    await draftedScan();
     const stats = await importCareRows([
       {
         worklistId: "9901",
-        accessionNumber: "",
+        accessionNumber: "ACC-9901",
         patientName: "Naaz Afrin",
         modality: "US",
-        studyInstanceUid: "1.2.840.orphan.3",
+        studyInstanceUid: "1.2.840.draft.1",
         patientAge: "30/F",
         billNumber: "B-100",
+        testName: "USG KUB",
       },
     ]);
     expect(stats.imported).toBe(0);
     expect(stats.updatedExisting).toBe(1);
-    expect(await db.usgCareOrder.count({ where: { studyInstanceUid: "1.2.840.orphan.3" } })).toBe(1);
+    expect(await db.usgCareOrder.count({ where: { studyInstanceUid: "1.2.840.draft.1" } })).toBe(1);
     const merged = await db.usgCareOrder.findFirstOrThrow({
-      where: { studyInstanceUid: "1.2.840.orphan.3" },
+      where: { studyInstanceUid: "1.2.840.draft.1" },
     });
+    // The row gains the bill identity it never claimed for itself.
     expect(merged.careWorklistId).toBe("9901");
+    expect(merged.accessionNumber).toBe("ACC-9901");
     expect(merged.billNumber).toBe("B-100");
+    expect(merged.testName).toBe("USG KUB");
+    expect(merged.patientAge).toBe("30");
   });
 
-  test("UNKNOWN / blank names are skipped", async () => {
-    const stats = await importOrthancOrphans([
-      orphan("1.2.840.orphan.4", "UNKNOWN"),
-      orphan("1.2.840.orphan.5", ""),
-    ]);
-    expect(stats.skippedNoName).toBe(2);
-    expect(stats.importedFromOrthanc).toBe(0);
-  });
-
-  // accessionNumber is @unique TABLE-WIDE (schema.prisma), not per-clinic —
-  // an accession owned by another clinic's order used to fail every orphan
-  // create with a swallowed P2002 (67 lost rows on the NAS).
-  test("accession owned by ANOTHER clinic's order → imports with null accession", async () => {
-    await db.usgCareOrder.create({
-      data: {
-        clinicId: "care-bangalore",
-        accessionNumber: "ACC-BLR-1",
-        patientName: "Other Clinic Row",
-        status: "PENDING",
-      },
-    });
-    const stats = await importOrthancOrphans(
-      [{ ...orphan("1.2.840.orphan.6", "Same Acc Patient"), accessionNumber: "ACC-BLR-1" }],
-      "default",
-    );
-    expect(stats.errors).toBe(0);
-    expect(stats.importedFromOrthanc).toBe(1);
-    const order = await db.usgCareOrder.findFirstOrThrow({
-      where: { studyInstanceUid: "1.2.840.orphan.6" },
-    });
-    expect(order.clinicId).toBe("default");
-    expect(order.accessionNumber).toBeNull(); // UID is the identity; the acc belongs to the other clinic
-  });
-
-  test("accession owned by the SAME clinic's order → imports with null accession", async () => {
-    await db.usgCareOrder.create({
-      data: {
-        clinicId: "default",
-        accessionNumber: "ACC-OWN-1",
-        patientName: "Own Acc Row",
-        status: "PENDING",
-      },
-    });
-    const stats = await importOrthancOrphans([
-      { ...orphan("1.2.840.orphan.7", "Second Patient"), accessionNumber: "ACC-OWN-1" },
-    ]);
-    expect(stats.errors).toBe(0);
-    expect(stats.importedFromOrthanc).toBe(1);
-    const order = await db.usgCareOrder.findFirstOrThrow({
-      where: { studyInstanceUid: "1.2.840.orphan.7" },
-    });
-    expect(order.accessionNumber).toBeNull();
+  test("a drafted scan with no bill yet stays free of invented bill fields", async () => {
+    const row = await draftedScan("1.2.840.draft.2");
+    expect(row.accessionNumber).toBeNull();
+    expect(row.careWorklistId).toBeNull();
+    expect(row.testName).toBe("");
   });
 });
 

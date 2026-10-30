@@ -155,24 +155,27 @@ never stored here — they belong to the mri-reports deployment.
 ### If the worklist fills up with "Self/Walk-in · USG Study"
 
 Every order on the worklist is bill-desk truth joined to a scan, so the
-referring doctor and the test name only exist on rows CARE sent. Rows that came
-from Orthanc alone carry neither — they read `Self/Walk-in` and `USG Study`, and
-the composer cannot pick a format from a title like that. A whole clinic day can
-appear as 1,300 of these against a handful of real rows.
+referring doctor and the test name only exist on rows CARE sent. Rows built from
+Orthanc alone carried neither — they read `Self/Walk-in` and `USG Study`, and the
+composer cannot pick a format from a title like that. One clinic day appeared as
+1,218 of these against a handful of real rows.
 
-Two things cause it, and both are now bounded in code:
+**That mechanism is gone.** The sync no longer writes a worklist row for a study
+CARE has not billed. Two rules replaced it:
 
-1. **The sync cursor outran the writes.** A Studio whose `UsgCareOrder` inserts
-   are failing still moves `lastSyncAt` forward, so CARE never serves those rows
-   again — a gap no error message shows. The cursor now advances only to CARE's
-   own serve clock, and only when every row landed; otherwise it holds and the
-   rows arrive on the next cycle (after ten held cycles it advances and says so
-   in the banner).
-2. **The Orthanc fallback swept the archive.** It now imports studies from the
-   last three days only, and never a second row for a patient who already has a
-   CARE row on that scanning day.
+1. **A bill row comes from CARE only.** Each cycle re-reads the last three days
+   of the ERP's worklist and upserts them, matched by worklist id, then accession,
+   then StudyInstanceUID — never by name. Nothing is consulted to decide what to
+   fetch next, so a row that fails to write is simply served again next cycle.
+2. **A scan with no bill stays a scan.** It appears in *Not billed in CARE —
+   scans only*, read live from the PACS, and says what a DICOM header can honestly
+   say: the patient's details and the referring doctor's name. Pressing **Draft**
+   there is the only way such a study enters the order table, and the row claims
+   no accession and no bill-desk id. If CARE bills that study later, the same row
+   is adopted by its StudyInstanceUID and gains the real bill identity.
 
-To clear a list that is already flooded (dry run first, it prints the counts):
+To clear a list a previous build already filled (dry run first, it prints the
+counts, and the number can no longer grow):
 
 ```
 docker exec -w /app usg-reporting-studio node scripts/usg-prune-orthanc-orphans.mjs
@@ -181,8 +184,7 @@ docker exec -w /app usg-reporting-studio node scripts/usg-prune-orthanc-orphans.
 
 It deletes only rows CARE never sent and that no report or Form F points at.
 Then press **Deep sync** in the worklist: it re-reads the backlog page by page
-and brings the bill-desk rows — with doctors and test names — back. Every 20
-hours the ordinary sync does a bounded version of this on its own.
+and brings the bill-desk rows — with doctors and test names — back.
 
 The same PACS-first ordering used to leave the *format* wrong: a study that
 arrives before its bill opens as a draft while its billed procedure is still

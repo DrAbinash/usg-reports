@@ -461,3 +461,30 @@ were never billed — the operator reads the dry run first); the Cloudflare Acce
 policy for the open `ohif.caredeoghar.com/dicom-web`; moving the ~430 KB of
 inline base64 out of the settings row. `reports_total=13` against
 `drafts=11` and `finalized_last_24h=0` is still his to interpret.
+
+## 10. Same day, after the operator set the rule
+
+Asked to go further — *"make the sync easier. link to bill should only be for
+demography and doctor reference name"* — he took the option that removes the
+mechanism rather than the identifier, and called it a trial: the full billing
+rules can come back later, deliberately, one at a time.
+
+- **An un-billed scan is no longer written as an order.** `importOrthancOrphans`,
+  `ORPHAN_MAX_AGE_DAYS`, `nameDayKey` and `istDayOfDate` are deleted, with the
+  orphan half of the sync's stats and toast. This is what made 1,218 of 2,301
+  worklist rows; it cannot regrow, which is also why §6's `--execute` question is
+  now optional tidying rather than a repair.
+- **Un-billed scans reach a report from the queue instead.** The live PACS panel
+  (DICOMweb, last 72 h) shows whenever Orthanc is configured — it used to hide
+  whenever CARE had any rows — and **Draft** there is the only way such a study
+  enters the order table. Matching by hard identifiers is untouched: name-based
+  linking was explicitly rejected, because two same-named patients in one OPD day
+  is routine here and a report on the wrong bill is not a fixable mistake.
+- **A scan row claims nothing it does not have.** The `PACS-<uid>` string that
+  `pacs-draft` wrote into `careWorklistId` is gone (null — it is not a bill-desk
+  id), an accession in the DICOM header is never copied onto a row the ERP has
+  not billed, and no code path invents `USG Study` as a test name any more. When
+  CARE later bills that study, its real worklist id, accession and test name land
+  on the same row through the StudyInstanceUID bridge.
+- The worklist row now says **"Scan, not billed"** where it previously showed an
+  identifier chip for a bill that does not exist.

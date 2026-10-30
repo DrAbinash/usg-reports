@@ -224,7 +224,10 @@ if (journalMode === "delete" || journalMode === "truncate")
   verdicts.push(`journal_mode=${journalMode} — the sync's writes lock out every reader; the entrypoint runs scripts/usg-enable-wal.mjs, so a restart should switch it to wal`);
 if (settings.error) verdicts.push(`the settings row cannot be read: ${reason(settings.error)}`);
 verdicts.push("any line above marked MISSING means the running image and the database disagree — restart the container so the entrypoint regenerates the client and pushes the schema, and re-run this probe");
-if (Number.isFinite(fallbackRows) && fallbackRows > 200) verdicts.push("the fallback flood is still present — run the prune with --dry-run before touching it");
+if (Number.isFinite(fallbackRows) && fallbackRows > 200)
+  verdicts.push(
+    "these fallback rows are legacy — the sync no longer writes an order for an un-billed scan, so the count can only fall. Leave them, or read the prune's dry run before running it",
+  );
 for (const v of verdicts) console.log(`  * ${v}`);
 
 console.log(`\ntotal ${Math.round(performance.now())}ms since process start`);

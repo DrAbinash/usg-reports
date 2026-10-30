@@ -251,7 +251,16 @@ export type AttachStats = {
   matchedByStudyUid: number;
   matchedByAccession: number;
   ambiguousMatches: number;
+  /** Orders with NO Study UID at all — the ones genuinely waiting on images. */
   awaitingImages: number;
+  /**
+   * Orders that already carry a Study UID which this cycle's sweep did not
+   * contain. They are NOT waiting: the images exist, the sweep window simply
+   * did not reach them. Counted separately because mixing the two reported
+   * "1807 awaiting images" on a NAS holding ~150 studies a day, which read as a
+   * PACS outage and was a window.
+   */
+  uidOutsideSweep: number;
   unmatchedOrthanc: number;
 };
 
@@ -261,6 +270,7 @@ export const emptyAttachStats = (): AttachStats => ({
   matchedByAccession: 0,
   ambiguousMatches: 0,
   awaitingImages: 0,
+  uidOutsideSweep: 0,
   unmatchedOrthanc: 0,
 });
 
@@ -900,8 +910,13 @@ export async function attachOrthancStudies(studies: OrthancStudy[], clinicId: st
     } else if (m.kind === "ambiguous") {
       stats.ambiguousMatches++;
     } else {
-      // No Orthanc link (yet) — the order stays visible as "Awaiting images".
-      if (order.status !== "REPORTED") stats.awaitingImages++;
+      // Two different things, and reading them as one invented a PACS outage.
+      if (order.studyInstanceUid) {
+        stats.uidOutsideSweep++;
+      } else if (order.status !== "REPORTED") {
+        // No identifier at all — this row really is waiting for its images.
+        stats.awaitingImages++;
+      }
     }
   }
 

@@ -363,6 +363,7 @@ export async function POST(req: NextRequest) {
     if (stats.matchedByAccession) bits.push(`${stats.matchedByAccession} linked by accession`);
     if (stats.demographyLinked) bits.push(`${stats.demographyLinked} linked by patient + date`);
     if (stats.awaitingImages) bits.push(`${stats.awaitingImages} awaiting images`);
+    if (stats.uidOutsideSweep) bits.push(`${stats.uidOutsideSweep} outside the sweep window (images exist)`);
     if (skippedTotal) bits.push(`${skippedTotal} skipped`);
     if (stats.ambiguousMatches) bits.push(`${stats.ambiguousMatches} ambiguous accession matches`);
     await audit({

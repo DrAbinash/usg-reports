@@ -112,6 +112,31 @@ describe("B · blank accession + worklistId only, no images yet", () => {
     expect(attach3.matchedByStudyUid).toBe(1);
     expect(attach3.awaitingImages).toBe(0);
   });
+
+  test("a row whose study is outside the sweep is not reported as waiting for images", async () => {
+    // Measured 2026-10-30: one cycle reported "1807 awaiting images" on a NAS
+    // doing ~150 studies a day. The number was not a PACS outage — most of those
+    // rows already carry a Study UID; the 3-day/7-day sweep simply did not reach
+    // them. Reading them as waiting sent two of us hunting a broken Orthanc.
+    await db.usgCareOrder.create({
+      data: {
+        clinicId: "default",
+        careWorklistId: "4899",
+        patientName: "Outside Sweep Patient",
+        patientAge: "40",
+        patientSex: "F",
+        modality: "USG",
+        studyInstanceUid: "1.2.840.not.in.sweep",
+        status: "PENDING",
+      },
+    });
+    const attach = await attachOrthancStudies([orthancStudy("1.2.840.some.other.study")]);
+    expect(attach.awaitingImages).toBe(0);
+    expect(attach.uidOutsideSweep).toBe(1);
+    // The images are where they always were: the row keeps its UID.
+    const still = await db.usgCareOrder.findFirstOrThrow({ where: { careWorklistId: "4899" } });
+    expect(still.studyInstanceUid).toBe("1.2.840.not.in.sweep");
+  });
 });
 
 describe("C · StudyInstanceUID exact match attaches the Orthanc study", () => {

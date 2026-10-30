@@ -59,6 +59,7 @@ type SyncStats = {
   matchedByAccession?: number;
   ambiguousMatches?: number;
   awaitingImages?: number;
+  uidOutsideSweep?: number;
   unmatchedOrthanc?: number;
   importedFromOrthanc?: number;
   orthancUsStudies?: number;
@@ -627,11 +628,12 @@ export function UsgWorklistView() {
         </Button>
       </div>
 
-      {/* Un-billed scans, read live from the PACS. This is the ONLY place a
-          study with no bill appears: the sync no longer writes them into the
-          order table, so nothing here can flood the list and nothing needs a
-          cleanup script. Shown whenever Orthanc is configured — including while
-          CARE is healthy, because a walk-in scan is billed late or never. */}
+      {/* Scans read live from the PACS, for the hours CARE's bridge is not
+          serving their row — this clinic's scanner sends no accession and no
+          MWL, so CARE is the only thing that can tell the studio a patient was
+          billed. Shown whenever Orthanc is configured, including while CARE is
+          healthy, because a bill can arrive late; the safety-net rows in the
+          list above reconcile against CARE's own row by StudyInstanceUID. */}
       {data?.orthancConfigured ? <UsgPacsQueue /> : null}
 
       {/* v6.14: Date range filter — quick presets + custom from-to */}

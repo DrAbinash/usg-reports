@@ -174,6 +174,32 @@ console.log(
     ` | ${await count("finalized_last_24h", () => db.usgReport.count({ where: { status: "FINALIZED", updatedAt: { gte: new Date(Date.now() - 24 * 60 * MIN) } } }))}`,
 );
 
+console.log("\n--- why the writes fail: the last sync audit entries ---");
+// The sync route stores its per-row rejection reasons in the audit trail
+// (`worklist.sync` / `worklist.careSync`), e.g. "WL 4213: write rejected
+// (Unique constraint failed on accessionNumber)". Read createdAt/action/detail
+// only — the audit row also carries patientName, which has no business in a
+// console log someone is about to paste into a bug report.
+const auditRow = await timed("audit", () =>
+  db.usgAudit.findMany({
+    where: { action: { in: ["worklist.sync", "worklist.careSync"] } },
+    orderBy: { createdAt: "desc" },
+    take: 6,
+    select: { createdAt: true, action: true, detail: true },
+  }),
+);
+if (auditRow.error) console.log(`  unreadable — ${reason(auditRow.error)}`);
+else if (!auditRow.value?.length) console.log("  no sync audit rows: the sync has never completed a cycle on this database.");
+else {
+  for (const a of auditRow.value) {
+    const when = new Date(a.createdAt).toISOString();
+    const text = (a.detail ?? "").replace(/\s+/g, " ").slice(0, 300);
+    console.log(`  ${when}  ${a.action}`);
+    console.log(`      ${text || "(no detail)"}`);
+  }
+  console.log("  (detail is truncated here and holds at most five reasons in the stored row)");
+}
+
 console.log("\n--- what this means ---");
 const verdicts = [];
 if (main === null) verdicts.push("the database file could not be read — check the DATABASE_URL/volume mount");

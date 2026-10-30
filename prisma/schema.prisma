@@ -512,9 +512,18 @@ model UsgSyncState {
   id            String    @id @default("singleton")
   clinicId      String    @default("default")
   lastSyncAt    DateTime?
-  /** When the last bounded repair pull ran (see DEEP_PULL_INTERVAL_MS). */
+  /**
+   * The last backlog (?full=1 / empty-database) pull that ran, not a schedule.
+   * Nothing reads it to decide what to fetch; it is history for the probe.
+   */
   lastDeepPullAt DateTime?
-  /** Syncs whose CARE rows failed to write, holding lastSyncAt in place. */
+  /**
+   * Vestigial — always 0. This counted consecutive cycles the CARE watermark
+   * was held back, and the watermark was removed on 2026-10-30 (a held cursor
+   * starved this clinic's worklist for 18 days; see planWorklistPull). The
+   * column stays: this database holds finalized reports, and columns are not
+   * dropped for tidiness.
+   */
   cursorHoldCount Int     @default(0)
   lastCareOk    Boolean   @default(false)
   lastOrthancOk Boolean   @default(false)

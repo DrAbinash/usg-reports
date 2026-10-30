@@ -6,36 +6,31 @@ import { careBillingPollEnabled, careFinalizeEnabled, fetchBillingStatus, fetchW
 import { listRecentUltrasoundStudies } from "@/lib/usg/orthancClient";
 import {
   attachOrthancStudies,
-  DEEP_PULL_WINDOW_MS,
   emptyAttachStats,
   emptyOrphanImportStats,
   emptySyncStats,
   importCareRows,
   importOrthancOrphans,
-  MAX_CURSOR_HOLDS,
+  ORTHANC_SWEEP_DAYS,
   orthancRowsToStudies,
-  planCareCursor,
   planWorklistPull,
-  worklistPullMode,
-  type CareCursorPlan,
+  SYNC_LOOKBACK_DAYS,
 } from "@/lib/usg/careSync";
 import { audit } from "@/lib/usg/audit";
-
-/** Subtract a small buffer so clock skew between studio and ERP never misses a row. */
-const SINCE_BUFFER_MS = 2 * 60 * 1000;
 
 /**
  * Worklist sync — four fail-soft steps (v6.1 identity model + Orthanc orphans):
  *   1. CARE bill-desk rows → import ultrasound orders by identity
  *      (careWorklistId first, legacy accession second, StudyInstanceUID
- *      bridge for prior Orthanc orphans, never names). The watermark this
- *      step writes is CARE's clock and moves only when every served row
- *      landed — see planCareCursor.
+ *      bridge for prior Orthanc orphans, never names). Every cycle re-reads
+ *      the last SYNC_LOOKBACK_DAYS days and upserts — there is no watermark
+ *      and nothing to fall behind (see planWorklistPull for why one was
+ *      removed). A row rejected this cycle is served again next cycle.
  *   2. Orthanc studies → attach by exact StudyInstanceUID, then exact
  *      single-hit AccessionNumber; orders without a study stay visible
  *      as "Awaiting images" — nothing disappears silently
- *   3. Orthanc US orphans (DICOMweb, last 14d queried) → import as PENDING
- *      orders keyed by StudyInstanceUID, but only for the last
+ *   3. Orthanc US orphans (DICOMweb, last ORTHANC_SWEEP_DAYS queried) → import
+ *      as PENDING orders keyed by StudyInstanceUID, but only for the last
  *      ORPHAN_MAX_AGE_DAYS days and only where no bill-desk order already
  *      represents that patient that day. This is the fallback for un-billed
  *      scans, not a second feed.
@@ -59,78 +54,51 @@ export async function POST(req: NextRequest) {
   let careOk = false;
   let orthancOk = false;
   let lastError: string | null = null;
-  let incremental = false;
 
   let importStats = emptySyncStats();
   let attachStats = emptyAttachStats();
   let orphanStats = emptyOrphanImportStats();
 
   // 1. CARE worklist → import ultrasound orders by identity
-  let cursorPlan: CareCursorPlan = { action: "advance", at: new Date(), holds: 0, gaveUpAfterHolds: false };
-  let deepPullRan = false;
-  let priorWatermark: Date | null = null;
+  let backfillRan = false;
   let priorDeepPullAt: Date | null = null;
   if (careConfigured) {
     const priorSync = await db.usgSyncState.findUnique({ where: { clinicId } });
-    const watermark = priorSync?.lastSyncAt ?? null;
-    priorWatermark = watermark;
     priorDeepPullAt = priorSync?.lastDeepPullAt ?? null;
     const localOrders = await db.usgCareOrder.count({ where: { clinicId } });
-    const mode = worklistPullMode({ fullRequested: fullSync, hasWatermark: !!watermark, localOrders });
-    const pull = planWorklistPull({
-      mode,
-      watermark,
-      bufferMs: SINCE_BUFFER_MS,
-      lastDeepPullAt: priorSync?.lastDeepPullAt ?? null,
-      nowMs: Date.now(),
-    });
-    incremental = !pull.full && !pull.deep;
-    // A backfill and a repair pull both re-read rows the watermark believes it
-    // has already served, so either one resets the hole-healing timer.
-    deepPullRan = pull.full || pull.deep;
-    if (pull.full && watermark && !fullSync) {
-      console.log("[sync] watermark ignored — lastSyncAt survived but this Studio holds no orders; backfilling");
-    }
+    const pull = planWorklistPull({ fullRequested: fullSync, localOrders, nowMs: Date.now() });
+    backfillRan = pull.full;
     if (pull.full) {
-      console.log("[sync] backlog pull — re-reading every CARE order the ERP will page out");
-    } else if (pull.deep) {
-      console.log(`[sync] repair pull — re-reading ${Math.round(DEEP_PULL_WINDOW_MS / 3600000)}h of CARE backlog`);
+      console.log(
+        fullSync
+          ? "[sync] backlog pull — operator asked for ?full=1, reading every CARE order the ERP will page out"
+          : "[sync] no orders stored — backfilling CARE's backlog instead of a few days",
+      );
     }
     const r = await fetchWorklist({ full: pull.full, since: pull.since });
-    console.log('[sync] care fetch:', r.ok ? ('ok rows=' + ((r.data as any[])?.length ?? 0)) : r.error);
+    console.log('[sync] care fetch:', r.ok ? ('ok rows=' + ((r.data as unknown[])?.length ?? 0)) : r.error);
     if (r.ok) {
       careOk = true;
-      let writeFailures = 0;
       try {
         importStats = await importCareRows(r.data, clinicId);
-        writeFailures = importStats.errors;
       } catch (e: any) {
         lastError = `import failed: ${e?.message ?? String(e)}`;
         console.error('[sync] importCareRows threw:', e);
-        writeFailures = Math.max(1, (r.data as any[])?.length ?? 1);
       }
-      cursorPlan = planCareCursor({
-        servedThroughAt: r.servedThroughAt,
-        writeFailures,
-        holds: priorSync?.cursorHoldCount ?? 0,
-        nowMs: Date.now(),
-      });
-      if (cursorPlan.action === "hold") {
-        lastError = `${writeFailures} CARE order(s) failed to write — sync cursor held at ${
-          watermark ? watermark.toISOString() : "the beginning"
-        } so they arrive again (hold ${cursorPlan.holds}/${MAX_CURSOR_HOLDS})`;
+      if (importStats.errors > 0) {
+        // There is no cursor to hold and nothing to pin. The rows that were
+        // served but refused by the database are inside this same window, so
+        // the next cycle asks CARE for them again — which is the whole
+        // difference from the design this replaced, where a rejected row could
+        // stall the backlog behind it indefinitely.
+        lastError =
+          lastError ??
+          `${importStats.errors} CARE order(s) failed to write — they are served again next cycle (${SYNC_LOOKBACK_DAYS}-day window)`;
         console.warn(`[sync] ${lastError}`);
-      } else if (cursorPlan.gaveUpAfterHolds) {
-        lastError = `${writeFailures} CARE order(s) failed to write after ${MAX_CURSOR_HOLDS} retries — cursor advanced, run a full sync`;
-        console.error(`[sync] ${lastError}`);
       }
     } else {
       lastError = r.error;
-      // Nothing was served, so nothing may be marked as served.
-      cursorPlan = { action: "hold", holds: priorSync?.cursorHoldCount ?? 0 };
     }
-  } else {
-    cursorPlan = { action: "hold", holds: 0 };
   }
 
   // 2 + 3. Orthanc → attach images to existing orders by exact identity, then
@@ -143,7 +111,7 @@ export async function POST(req: NextRequest) {
   // Fail-soft: a DICOMweb outage must not undo a successful CARE import — but
   // it is never SILENT: it sets lastError so the banner shows amber.
   if (orthancConfigured) {
-    const us = await listRecentUltrasoundStudies(14, 500);
+    const us = await listRecentUltrasoundStudies(ORTHANC_SWEEP_DAYS, 500);
     if (us.ok) {
       orthancOk = true;
       try {
@@ -280,26 +248,33 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // The watermark only moves when CARE's rows all landed (see planCareCursor).
-  const nextSyncAt = cursorPlan.action === "advance" ? cursorPlan.at : priorWatermark;
-  const nextDeepPullAt = deepPullRan && cursorPlan.action === "advance" ? cursorPlan.at : priorDeepPullAt;
-
+  // `lastSyncAt` is the clock of the last completed cycle — a number for the
+  // banner, not a gate. Nothing consults it to decide what to fetch, which is
+  // the whole point: a stalled cycle can no longer hide rows behind a promise.
+  // `lastDeepPullAt` now records the last backlog read and is written whenever
+  // one runs, regardless of how the import went — the old rule stamped it only
+  // on a successful advance, so a held cursor left every later cycle believing
+  // a repair pull was overdue. `cursorHoldCount` is retired and pinned at 0 so
+  // a stale count cannot be misread as a live diagnosis; the column stays,
+  // because this database holds clinical records and columns are not dropped
+  // for tidiness.
+  const completedAt = new Date();
   await db.usgSyncState.upsert({
     where: { clinicId },
     create: {
       id: clinicId === "default" ? "singleton" : clinicId,
       clinicId,
-      lastSyncAt: nextSyncAt,
-      lastDeepPullAt: nextDeepPullAt,
-      cursorHoldCount: cursorPlan.holds,
+      lastSyncAt: completedAt,
+      lastDeepPullAt: backfillRan ? completedAt : priorDeepPullAt,
+      cursorHoldCount: 0,
       lastCareOk: careOk,
       lastOrthancOk: orthancOk,
       lastError: careConfigured || orthancConfigured ? lastError : "Not configured — set CARE / Orthanc in Settings → Integrations",
     },
     update: {
-      lastSyncAt: nextSyncAt,
-      lastDeepPullAt: nextDeepPullAt,
-      cursorHoldCount: cursorPlan.holds,
+      lastSyncAt: completedAt,
+      lastDeepPullAt: backfillRan ? completedAt : priorDeepPullAt,
+      cursorHoldCount: 0,
       lastCareOk: careOk,
       lastOrthancOk: orthancOk,
       lastError: careConfigured || orthancConfigured ? lastError : "Not configured — set CARE / Orthanc in Settings → Integrations",
@@ -320,8 +295,6 @@ export async function POST(req: NextRequest) {
     orphanSkippedBilledRowExists: orphanStats.skippedBilledRowExists,
     orphanSkippedTooOld: orphanStats.skippedTooOld,
     orphanErrors: orphanStats.errors,
-    cursorHeld: cursorPlan.action === "hold",
-    cursorHoldCount: cursorPlan.holds,
     // Both reason lists, CARE first — the audit line and the UI toast read
     // this one array.
     skippedReasons: [...importStats.skippedReasons, ...orphanStats.skippedReasons],
@@ -363,7 +336,12 @@ export async function POST(req: NextRequest) {
     erpFinalizedNotLocal: stats.erpFinalizedNotLocal,
     lastError,
     stats,
-    incremental,
+    // `incremental` used to mean "started from the stored watermark". Nothing
+    // reads it any more, and the name describes a design that is gone: this
+    // response now says plainly which window was read.
+    backfill: backfillRan,
+    lookbackDays: SYNC_LOOKBACK_DAYS,
+    sweptDays: ORTHANC_SWEEP_DAYS,
     syncedAt: new Date().toISOString(),
   });
 }

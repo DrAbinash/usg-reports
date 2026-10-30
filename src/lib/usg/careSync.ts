@@ -95,113 +95,61 @@ export function decideImport(n: NormalizedCareRow): ImportDecision {
   return { kind: "import" };
 }
 
-export type WorklistPullMode = "incremental" | "backfill";
+export type CarePullRequest = { full: boolean; since: string | null };
 
 /**
- * How often the Studio re-reads a bounded slice of CARE's backlog regardless of
- * what the watermark believes. A watermark hole is silent — CARE simply stops
- * returning rows it has already served — so anything lost to a rejected write,
- * or to a bill linked only after the study arrived, stays invisible until
- * something asks again.
- */
-export const DEEP_PULL_INTERVAL_MS = 20 * 60 * 60 * 1000;
-/** How far a repair pull reaches back: a clinic weekend, in a few pages. */
-export const DEEP_PULL_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
-/**
- * Consecutive failed-write cycles the watermark is held for before it is
- * allowed to move. Holding costs a repeated pull; holding forever costs the
- * whole worklist the moment one row is permanently unwritable.
- */
-export const MAX_CURSOR_HOLDS = 10;
-
-export type CarePullRequest = { full: boolean; since: string | null; deep: boolean };
-
-/**
- * Pure pull-window decision.
- *   backfill    — ?full=1, or no usable watermark (first boot / cleared tables)
- *   repair      — watermark is usable but the deep pull is overdue
- *   incremental — watermark minus the clock-skew buffer
- */
-export function planWorklistPull(opts: {
-  mode: WorklistPullMode;
-  watermark: Date | null;
-  bufferMs: number;
-  lastDeepPullAt: Date | null;
-  nowMs: number;
-  deepIntervalMs?: number;
-  deepWindowMs?: number;
-}): CarePullRequest {
-  if (opts.mode === "backfill") return { full: true, since: null, deep: true };
-  const deepDue =
-    !opts.lastDeepPullAt ||
-    opts.nowMs - opts.lastDeepPullAt.getTime() > (opts.deepIntervalMs ?? DEEP_PULL_INTERVAL_MS);
-  if (deepDue) {
-    return { full: false, since: new Date(opts.nowMs - (opts.deepWindowMs ?? DEEP_PULL_WINDOW_MS)).toISOString(), deep: true };
-  }
-  return {
-    full: false,
-    since: new Date((opts.watermark?.getTime() ?? opts.nowMs) - opts.bufferMs).toISOString(),
-    deep: false,
-  };
-}
-
-export type CareCursorPlan =
-  | { action: "advance"; at: Date; holds: number; gaveUpAfterHolds: boolean }
-  | { action: "hold"; holds: number };
-
-/**
- * The watermark is a promise: CARE has served everything that changed up to
- * this instant. It may only move when every row of this pull actually landed.
+ * How far back an ordinary sync re-reads CARE's worklist, on every cycle.
  *
- * Why this exists, measured 2026-10-06: the Studio's generated Prisma client
- * lagged its schema for four days and rejected every `UsgCareOrder` write, while
- * the sync stamped `lastSyncAt: new Date()` regardless. Those bill-desk orders
- * were served once, lost, and parked behind the watermark for good — the Studio
- * held 3 CARE rows against 1,381 Orthanc rows, and the worklist read
- * "Self/Walk-in" for the whole clinic.
+ * This replaced a watermark, and deliberately. A watermark is a promise that
+ * CARE has served everything up to a given instant, and it can only be honoured
+ * by refusing to move when any row fails to land — which is exactly the failure
+ * mode it then feeds. Measured on this clinic 2026-10-30: `P1008` socket
+ * timeouts rejected the tail of a 448-row pull, the cursor held, the hold path
+ * also refused to stamp the repair pull's own clock
+ * (`lastDeepPullAt … && action === "advance"`), so every later cycle re-ran the
+ * heaviest possible pull and failed in the same place. The watermark sat at
+ * `2026-10-11T19:44:32Z` for 18.5 days with 19 orders refusing to land, and
+ * `cursorHoldCount` read `1` — the counter that was supposed to give up after
+ * ten holds could never climb, because the same outage kept resetting it.
  *
- * `servedThroughAt` is CARE's clock at serve time. Stamping the Studio's own
- * clock instead lets a fast machine skip rows CARE has not sent yet.
+ * A window makes no promise to keep. Each cycle asks for the last few days and
+ * upserts what comes back, so a row that fails for any reason — a timeout, a
+ * restart, a bill linked two days after the scan — is served again on the next
+ * cycle. Nothing can hide behind a cursor because there is no cursor. At roughly
+ * 150 studies a day the extra read costs almost nothing; the failure mode it
+ * removes is what this clinic just spent 18 days in.
  */
-export function planCareCursor(opts: {
-  servedThroughAt: number | null;
-  writeFailures: number;
-  holds: number;
-  nowMs: number;
-  maxHolds?: number;
-}): CareCursorPlan {
-  const max = opts.maxHolds ?? MAX_CURSOR_HOLDS;
-  if (opts.writeFailures > 0 && opts.holds < max) {
-    return { action: "hold", holds: opts.holds + 1 };
-  }
-  return {
-    action: "advance",
-    at: new Date(opts.servedThroughAt ?? opts.nowMs),
-    holds: 0,
-    gaveUpAfterHolds: opts.writeFailures > 0,
-  };
-}
+export const SYNC_LOOKBACK_DAYS = 3;
 
 /**
- * A sync watermark only means something if this Studio still holds the rows it
- * was built from. Clearing the clinical tables while `UsgSyncState` survives
- * leaves `lastSyncAt` pointing past every order CARE has, and the incremental
- * pull then answers zero rows forever with HTTP 200 and no error to notice.
- *
- * So a Studio with no stored orders always backfills, and only a Studio that
- * still holds the watermark's own rows may use it. `localOrders` counts
- * UsgCareOrder rows — what this sync itself writes. Not patients: a UsgPatient
+ * Decide what this cycle reads. A Studio holding no orders, or an explicit
+ * `?full=1`, pages CARE's whole backlog once — a few days cannot rebuild
+ * history. Counting orders rather than patients is deliberate: a `UsgPatient`
  * row only appears once a report is saved, so counting patients would keep a
  * freshly pulled Studio backfilling forever.
  */
-export function worklistPullMode(opts: {
+export function planWorklistPull(opts: {
   fullRequested: boolean;
-  hasWatermark: boolean;
   localOrders: number;
-}): WorklistPullMode {
-  if (opts.fullRequested) return "backfill";
-  return opts.hasWatermark && opts.localOrders > 0 ? "incremental" : "backfill";
+  nowMs: number;
+  lookbackDays?: number;
+}): CarePullRequest {
+  if (opts.fullRequested || opts.localOrders === 0) return { full: true, since: null };
+  const days = opts.lookbackDays ?? SYNC_LOOKBACK_DAYS;
+  return { full: false, since: new Date(opts.nowMs - days * 24 * 60 * 60 * 1000).toISOString() };
 }
+
+/**
+ * Days of the PACS archive one cycle looks at, for BOTH passes: linking images
+ * to existing orders and importing un-billed ones.
+ *
+ * The link pass used to sweep 14 days while the import rule underneath it only
+ * keeps a fallback row for 3 — so most of the ~1,079 studies read on every
+ * two-minute cycle were ones the very next step refused to act on, and the
+ * sweep was one of the things timing out (`listRecentUltrasoundStudies: Orthanc
+ * DICOMweb timed out`). One number, matching the rule that actually uses it.
+ */
+export const ORTHANC_SWEEP_DAYS = 7;
 
 // ── pure Orthanc matching ───────────────────────────────────────────────────
 

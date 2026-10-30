@@ -6,8 +6,8 @@
  *
  * It performs NO writes — every query is a count or a single-row read — so it
  * is safe to run while the clinic is reporting. It prints only sizes, counts,
- * timings and the sync watermark, never a patient name, so its output can be
- * pasted into a bug report.
+ * timings and the sync's own state row, never a patient name, so its output can
+ * be pasted into a bug report.
  *
  * Why the image rather than the host's git folder: what runs is the built
  * image, and a rebuilt image can still carry a generated Prisma client that
@@ -90,6 +90,17 @@ for (const r of [raw1, raw2, raw3]) console.log(`${r.label.padEnd(14)} ${r.ms}ms
 // sustained cost that means the volume is the bottleneck.
 const rawMs = [raw1.ms, raw2.ms, raw3.ms].sort((a, b) => a - b)[1];
 
+console.log("\n--- journal mode: can a writer lock the doctor's reads out? ---");
+// In the default `delete` (rollback-journal) mode SQLite lets one writer hold
+// the whole file, so a worklist sync that touches hundreds of rows makes every
+// concurrent query wait behind it — which surfaces as P1008 timeouts in the sync
+// and pages that spin. `wal` is what lets readers proceed anyway, and it is
+// recorded in the file header, so it survives a restart once set.
+const jm = await timed("PRAGMA journal_mode", () => db.$queryRawUnsafe("PRAGMA journal_mode"));
+const journalMode = String(Object.values(jm.value?.[0] ?? {})[0] ?? "").toLowerCase();
+console.log(`  journal_mode=${journalMode || "UNKNOWN"}${jm.error ? `  ERROR ${reason(jm.error)}` : ""}`);
+console.log("  (delete = writes block reads; wal = they do not. A -wal file next to the db is normal, not a fault)");
+
 console.log("\n--- the settings row: read on almost every request ---");
 const settings = await timed("settings", () =>
   db.hospitalSettings.findFirst({
@@ -121,7 +132,7 @@ const cols = [
   ["UsgReport.printSettingsJson (frozen print settings)", () => db.usgReport.findFirst({ select: { id: true, printSettingsJson: true } })],
   ["UsgReport.shareRevokedAt (share withdrawal)", () => db.usgReport.findFirst({ select: { id: true, shareRevokedAt: true } })],
   ["UsgCareOrder.careWorklistId (bill-desk identity)", () => db.usgCareOrder.findFirst({ select: { id: true, careWorklistId: true } })],
-  ["UsgSyncState (sync cursor, added with the flood fix)", () => db.usgSyncState.findFirst({ select: { id: true, lastSyncAt: true } })],
+  ["UsgSyncState (sync state row, added with the flood fix)", () => db.usgSyncState.findFirst({ select: { id: true, lastSyncAt: true } })],
 ];
 for (const [label, fn] of cols) {
   const r = await timed(label, fn);
@@ -141,6 +152,10 @@ if (sync.error) {
   console.log(`  lastSyncAt      ${age(st.lastSyncAt)}`);
   console.log(`  lastDeepPullAt  ${age(st.lastDeepPullAt ?? null)}`);
   console.log(`  lastCareOk=${st.lastCareOk} lastOrthancOk=${st.lastOrthancOk} cursorHoldCount=${st.cursorHoldCount}`);
+  // lastSyncAt is the clock of the last cycle that completed, not a watermark:
+  // since v6.22 every cycle re-reads the same window of days, so a stalled
+  // instant cannot hide rows. cursorHoldCount is retired and reads 0.
+  console.log("  (lastSyncAt is the clock of the last completed cycle, not a cursor — nothing fetches relative to it)");
   if (st.lastError) console.log(`  lastError       ${String(st.lastError).slice(0, 160)}`);
   if (st.lastSyncAt && Date.now() - new Date(st.lastSyncAt).getTime() > 30 * MIN) {
     console.log("  WARN: nothing has synced for over 30 minutes.");
@@ -205,6 +220,8 @@ const verdicts = [];
 if (main === null) verdicts.push("the database file could not be read — check the DATABASE_URL/volume mount");
 if (rawMs > 30) verdicts.push(`SELECT 1 medians ${rawMs}ms — the storage itself is slow or contended; this is not application code`);
 if (wal && wal > 8 * 1024 * 1024) verdicts.push(`the -wal is ${kb(wal)} — checkpoint starvation makes every reader wait`);
+if (journalMode === "delete" || journalMode === "truncate")
+  verdicts.push(`journal_mode=${journalMode} — the sync's writes lock out every reader; the entrypoint runs scripts/usg-enable-wal.mjs, so a restart should switch it to wal`);
 if (settings.error) verdicts.push(`the settings row cannot be read: ${reason(settings.error)}`);
 verdicts.push("any line above marked MISSING means the running image and the database disagree — restart the container so the entrypoint regenerates the client and pushes the schema, and re-run this probe");
 if (Number.isFinite(fallbackRows) && fallbackRows > 200) verdicts.push("the fallback flood is still present — run the prune with --dry-run before touching it");

@@ -70,5 +70,18 @@ if [ -f /app/scripts/usg-v7-null-accession.mjs ]; then
   node /app/scripts/usg-v7-null-accession.mjs || echo "[studio] v7 check did not run — continuing" >&2
 fi
 
+# Switch SQLite to WAL so a sync's writes no longer block the doctor's reads.
+# In the default rollback-journal mode one writer locks the whole file, and a
+# worklist sync that touches hundreds of rows makes every concurrent query wait
+# behind it — measured as P1008 socket timeouts and pages that time out. WAL is
+# persistent (it is recorded in the file header, so it survives a restart and
+# needs setting once), it is safe to re-apply every boot, and it is a no-op if
+# the database already uses it. Never fatal: a helper must not take the clinic
+# down, and the studio works in the old mode, just slower.
+if [ -f /app/scripts/usg-enable-wal.mjs ]; then
+  echo "[studio] SQLite journal mode check (WAL)…"
+  node /app/scripts/usg-enable-wal.mjs || echo "[studio] WAL check did not run — continuing" >&2
+fi
+
 echo "[studio] Starting server on :3000"
 exec "$@"

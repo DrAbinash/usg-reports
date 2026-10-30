@@ -348,7 +348,13 @@ export function UsgWorklistView() {
   }, [defaults]);
 
   const lastAutoSyncAt = useRef(0);
-  const AUTO_SYNC_INTERVAL_MS = 2 * 60 * 1000;
+  // Five minutes, not two. Each cycle re-reads a few days of the ERP's
+  // worklist and re-upserts it, so a two-minute repeat was mostly doing the
+  // same work again — and those overlapping heavy pulls were part of what
+  // starved the single SQLite writer until unrelated queries timed out
+  // (`P1008`) while the studio was open. New rows still arrive on mount and on
+  // tab focus, which is when a doctor actually looks at this list.
+  const AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000;
   const AUTO_SYNC_MIN_GAP_MS = 90 * 1000;
 
   const sync = useCallback(async (opts?: { silent?: boolean; full?: boolean }) => {

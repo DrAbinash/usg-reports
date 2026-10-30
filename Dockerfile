@@ -79,6 +79,11 @@ COPY scripts/usg-prune-orthanc-orphans.mjs ./scripts/usg-prune-orthanc-orphans.m
 # until it appears here — `docker exec ... node scripts/<name>` otherwise fails
 # with MODULE_NOT_FOUND on a box where the file is plainly in the repo.
 COPY scripts/usg-sync-health.mjs ./scripts/usg-sync-health.mjs
+# Journal-mode fixer — run by the entrypoint before the server starts, so a
+# busy worklist sync cannot make readers (the lock screen, a report open) wait
+# on the single SQLite writer. See the header of the script for the fault it
+# measures and the two filesystem caveats that come with WAL.
+COPY scripts/usg-enable-wal.mjs ./scripts/usg-enable-wal.mjs
 
 # Entrypoint: prepare DB, then start the standalone server
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh

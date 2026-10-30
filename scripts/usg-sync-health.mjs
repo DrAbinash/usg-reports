@@ -176,6 +176,22 @@ const total = await count("orders_total", () => db.usgCareOrder.count());
 const fallback = await count("fallback", () => db.usgCareOrder.count({ where: { careWorklistId: null, billNumber: "" } }));
 const lastDay = await count("last_24h", () => db.usgCareOrder.count({ where: { createdAt: { gte: new Date(Date.now() - 24 * 60 * MIN) } } }));
 console.log(`  ${total} | ${fallback} (never sent by CARE) | ${lastDay}`);
+// The number that decides the design. This clinic's USG machine follows no
+// Modality Worklist and writes no accession number, so the only identifier a
+// CARE bill row can be joined to its images on is the StudyInstanceUID that
+// CARE's own Orthanc intake records (`care-pacs/care-erp-sync`, which posts
+// studyInstanceUID into radiology_worklist, and the bridge serves it per row).
+// If billed rows carry a UID, a scan showing up with no bill is a bug in this
+// app. If they carry none, no identifier join is possible at this site at all,
+// and a worklist row invented from the PACS was the only way a scan could ever
+// reach a report — which is what the fallback import was for.
+const careRows = await count("care_rows", () => db.usgCareOrder.count({ where: { careWorklistId: { not: null } } }));
+const careWithUid = await count("care_rows_with_uid", () =>
+  db.usgCareOrder.count({ where: { careWorklistId: { not: null }, studyInstanceUid: { not: null } } }),
+);
+console.log(`  ${careRows} | ${careWithUid} carry a Study UID from CARE | ${await count("no_uid", () =>
+  db.usgCareOrder.count({ where: { careWorklistId: { not: null }, studyInstanceUid: null } }),
+)} have none`);
 const fallbackRows = Number(/^fallback=(\d+)$/.exec(fallback)?.[1] ?? NaN);
 const newest = await timed("newest", () => db.usgCareOrder.findFirst({ orderBy: { createdAt: "desc" }, select: { createdAt: true } }));
 if (newest.error) console.log(`  newest order     UNREADABLE — ${reason(newest.error)}`);
@@ -228,6 +244,16 @@ if (Number.isFinite(fallbackRows) && fallbackRows > 200)
   verdicts.push(
     "these fallback rows are legacy — the sync no longer writes an order for an un-billed scan, so the count can only fall. Leave them, or read the prune's dry run before running it",
   );
+// Which world this install lives in, stated as a fact rather than left to infer.
+const careRowsN = Number(/^care_rows=(\d+)$/.exec(careRows)?.[1] ?? NaN);
+const careUidN = Number(/^care_rows_with_uid=(\d+)$/.exec(careWithUid)?.[1] ?? NaN);
+if (Number.isFinite(careRowsN) && Number.isFinite(careUidN) && careRowsN > 20) {
+  verdicts.push(
+    careUidN === 0
+      ? "NO CARE bill row carries a StudyInstanceUID — at this site the identifier join between a bill and its images cannot happen, so check the Orthanc→ERP intake (is the care-erp-sync container up?) before treating an unlinked scan as un-billed"
+      : `${careUidN} of ${careRowsN} CARE rows carry a Study UID — a bill can be joined to its images by identifier, so a scan with no bill is an intake gap, not a walk-in`,
+  );
+}
 for (const v of verdicts) console.log(`  * ${v}`);
 
 console.log(`\ntotal ${Math.round(performance.now())}ms since process start`);

@@ -553,3 +553,40 @@ cp scripts/usg-sync-health.mjs` for the script alone):
   and its intake authenticated, and are CARE's mirror rows reaching the ERP's
   bill-link tiers at all? That is a CARE change (or switching on the guarded
   stamping flag), not something this app can invent its way around.
+
+### Answered, by the operator's own numbers (same evening)
+
+| Measured on the NAS | Value | What it means |
+|---|---|---|
+| `care-erp-sync` | `Up 43 hours` | the Orthanc→ERP intake is alive, not dead-lettering |
+| `radiology_worklist`, modality US | 8,481 rows, **8,481 with a StudyInstanceUID** | every study CARE knows carries the identifier — the studio can join by UID, exactly as `tests/usgWorklistSync.test.ts` describes as the production flow |
+| same, `study_id` set (tied to a billed study) | 1,909 (22 %) | three quarters of pushed studies never reach a bill row inside CARE |
+| same, `patient_match_status='MATCHED'` | 46 (0.5 %) | the real upstream gap is **patient identity**, not images |
+| `STAMP_ACCESSION_FROM_BILL` | `f` | the one feature that would put the bill number into the DICOM header is off |
+| newest mirror row | 2026-10-30 12:21Z | intake is current |
+
+So the flood was a **delivery** failure at the studio, not a missing identifier
+and not un-billed patients: CARE holds a UID for every study, the studio was not
+being served for 18 days, and the net filled the gap. The expectation after the
+deploy is therefore measurable — the fallback rows reconcile against CARE's rows
+by StudyInstanceUID, `care_rows` and `care_rows_with_uid` climb, and `fallback`
+stops growing.
+
+What stays broken **upstream**, and is not this app's to invent around: only 22 %
+of pushed US studies are tied to a billed study and 0.5 % to a matched patient,
+because CARE's own demographic tiers (`internal-radiology.ts:730-800`, all
+single-hit-only behind an identity veto) need a `patientId` the scanner never
+supplies without MWL. That is why test name and referrer are thin on pushed rows.
+The options are CARE's: the Match Center queue, switching on the guarded
+stamping flag, or an operator link screen.
+
+### The stat that misled two of us
+
+One cycle reported `1807 awaiting images` on a NAS doing roughly 150 studies a
+day. `attachOrthancStudies` counted every order that did not match **this
+cycle's sweep**, including thousands that already carry a Study UID whose study
+merely sits outside the 3-day window. The counts are split now
+(`awaitingImages` = no identifier at all; `uidOutsideSweep` = images exist, the
+window did not reach them) and the audit line says so in words. A row with a UID
+that fell outside the sweep is not waiting for anything, and reading it as
+waiting sends you hunting a PACS outage that never happened.

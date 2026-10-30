@@ -196,7 +196,7 @@ const fallbackRows = Number(/^fallback=(\d+)$/.exec(fallback)?.[1] ?? NaN);
 const newest = await timed("newest", () => db.usgCareOrder.findFirst({ orderBy: { createdAt: "desc" }, select: { createdAt: true } }));
 if (newest.error) console.log(`  newest order     UNREADABLE — ${reason(newest.error)}`);
 else console.log(`  newest order     ${newest.value?.createdAt ? new Date(newest.value.createdAt).toISOString() : "NONE (fine on a fresh install, fatal mid-session — the sync is not writing)"}`);
-if (fallbackRows > 200) console.log(`  WARN: ${fallbackRows} fallback rows — the Orthanc flood is still on the list.`);
+if (fallbackRows > 200) console.log(`  WARN: ${fallbackRows} rows came from the PACS rather than CARE — read them against care_rows_with_uid below before concluding anything about unbilled patients.`);
 
 console.log("\n--- reports ---");
 console.log(
@@ -242,7 +242,7 @@ if (settings.error) verdicts.push(`the settings row cannot be read: ${reason(set
 verdicts.push("any line above marked MISSING means the running image and the database disagree — restart the container so the entrypoint regenerates the client and pushes the schema, and re-run this probe");
 if (Number.isFinite(fallbackRows) && fallbackRows > 200)
   verdicts.push(
-    "these fallback rows are legacy — the sync no longer writes an order for an un-billed scan, so the count can only fall. Leave them, or read the prune's dry run before running it",
+    "fallback rows are the outage net: this clinic's scanner sends no accession and no MWL, so a study shows up here whenever CARE has not served its row. They reconcile by StudyInstanceUID when CARE answers — check care_rows_with_uid above before treating them as un-billed patients",
   );
 // Which world this install lives in, stated as a fact rather than left to infer.
 const careRowsN = Number(/^care_rows=(\d+)$/.exec(careRows)?.[1] ?? NaN);

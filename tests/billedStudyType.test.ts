@@ -219,11 +219,12 @@ describe("studyKeyForStudyType + resolveNormalBootstrapFormat", () => {
 });
 
 /**
- * The PACS importer writes UNNAMED_STUDY_PLACEHOLDER when Orthanc has no
- * StudyDescription. A study that arrives in PACS before its bill is linked
- * keeps that string in testName, so it must never be treated as the billed
- * procedure — that produced "Billed: USG Study — no matching USG report
- * format" for a study the CARE catalog covers as USG W / USG WHOLE ABDOMEN.
+ * No importer writes UNNAMED_STUDY_PLACEHOLDER any more — a study with no
+ * StudyDescription now leaves testName blank instead of inventing a catalogued
+ * test. The constant stays because rows already on the NAS carry it, and a
+ * report opened from one of those must not read "USG Study" as the billed
+ * procedure: that produced "Billed: USG Study — no matching USG report format"
+ * for a study the CARE catalog covers as USG W / USG WHOLE ABDOMEN.
  */
 describe("PACS placeholder is not bill data", () => {
   test("recognises the placeholder in any case/spacing, and blank", () => {

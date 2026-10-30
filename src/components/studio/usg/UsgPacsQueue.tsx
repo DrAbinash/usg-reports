@@ -1,11 +1,11 @@
 "use client";
-/** Un-billed scans, read straight from DICOMweb — the only route a study with
- *  no CARE bill takes to a report. The sync deliberately does not write these
- *  into the order table (1,218 of 2,301 worklist rows came from doing exactly
- *  that); a row appears here when the scan exists in the PACS, and it enters
- *  the database only when the doctor presses Draft, via /api/usg/reports/
- *  pacs-draft. What a scan can say about itself is the DICOM header: the
- *  patient's details and the referring doctor's name. Nothing is invented. */
+/** Scans read live from DICOMweb — what the PACS holds right now, whether or
+ *  not CARE has served its row yet. Drafting here writes the one row (via
+ *  /api/usg/reports/pacs-draft) and it claims no accession and no bill-desk id,
+ *  because it has none: this clinic's USG machine follows no Modality Worklist
+ *  and writes no accession number, so a bill reaches the studio only through
+ *  CARE's bridge. A row the safety net created reconciles against CARE's own
+ *  when the same StudyInstanceUID arrives. */
 import { useCallback, useEffect, useState } from "react";
 import { useStudio } from "@/lib/store";
 import { Button } from "@/components/ui/button";
@@ -78,7 +78,7 @@ export function UsgPacsQueue() {
         <div className="flex items-center gap-2">
           <WifiOff className="h-5 w-5 text-orange-600" />
           <span className="font-bold text-orange-800 dark:text-orange-300">
-            Not billed in CARE — scans only (last 72 hours, read live from the PACS)
+            In the PACS now — not in CARE's list yet (last 72 hours)
           </span>
         </div>
         <Button size="sm" variant="outline" onClick={() => void load()} disabled={loading}>

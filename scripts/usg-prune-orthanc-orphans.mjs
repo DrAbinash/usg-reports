@@ -12,10 +12,19 @@
  * list read "Self/Walk-in · USG Study" for everyone and the bill-desk rows
  * underneath became impossible to find.
  *
- * SINCE v6.22 the sync no longer creates them: an un-billed scan stays a scan in
- * the live PACS queue and only enters the order table when the doctor drafts it.
- * So this script's subject matter is historical, and running it is optional
- * tidying, not a fix — the count can no longer grow.
+ * WHY THERE ARE SO MANY, and it is not un-billed patients. This clinic's USG
+ * machine follows no Modality Worklist and writes no accession number, so a
+ * study reaches the studio's list only when CARE's bridge serves its row — and
+ * the stalled sync cursor served nothing for 18 days. Every study CARE does
+ * carry has a StudyInstanceUID (measured on the NAS 2026-10-30: 8,481 of 8,481
+ * US mirror rows), so the fallback rows are overwhelmingly the SAME studies CARE
+ * already holds; they became duplicates because the studio was not being served,
+ * not because the bill desk missed anyone.
+ *
+ * So the fallback import stays, bounded (it is the outage safety net), and this
+ * script's job is to clear what an outage left behind. A net row is reconciled
+ * automatically when CARE's own row for the same StudyInstanceUID arrives, which
+ * is why running this is optional tidying rather than the repair.
  *
  * Deleted, and ONLY ever these:
  *   - never sent from CARE (careWorklistId NULL and billNumber ''), and

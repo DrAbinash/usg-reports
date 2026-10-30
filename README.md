@@ -160,22 +160,36 @@ Orthanc alone carried neither — they read `Self/Walk-in` and `USG Study`, and 
 composer cannot pick a format from a title like that. One clinic day appeared as
 1,218 of these against a handful of real rows.
 
-**That mechanism is gone.** The sync no longer writes a worklist row for a study
-CARE has not billed. Two rules replaced it:
+**Why it happened, and what the list is now.** No scanned patient at this clinic
+is un-billed — the USG machine simply follows no Modality Worklist and writes no
+accession number, so a study and its bill row share no identifier until CARE's
+own Orthanc intake delivers one. Every row therefore comes from CARE when CARE is
+answering, and the four steps are:
 
-1. **A bill row comes from CARE only.** Each cycle re-reads the last three days
-   of the ERP's worklist and upserts them, matched by worklist id, then accession,
-   then StudyInstanceUID — never by name. Nothing is consulted to decide what to
-   fetch next, so a row that fails to write is simply served again next cycle.
-2. **A scan with no bill stays a scan.** It appears in *Not billed in CARE —
-   scans only*, read live from the PACS, and says what a DICOM header can honestly
-   say: the patient's details and the referring doctor's name. Pressing **Draft**
-   there is the only way such a study enters the order table, and the row claims
-   no accession and no bill-desk id. If CARE bills that study later, the same row
-   is adopted by its StudyInstanceUID and gains the real bill identity.
+1. **CARE's rows first.** Each cycle re-reads the last three days of the ERP's
+   worklist and upserts them, matched by worklist id, then accession, then
+   StudyInstanceUID. Nothing is consulted to decide what to fetch next, so a row
+   that fails to write is served again next cycle instead of stalling everything
+   behind it (that stall is what turned 1,218 rows into this list).
+2. **Images attach by identifier, then by demographics.** Exact Study UID first,
+   exact single-hit accession second. Whatever is left is linked by patient name +
+   the clinic's scanning day, and *only* when one bill row and one study point at
+   each other — the referring doctor's name is the tie-breaker, and anything that
+   still has two candidates is left unlinked and counted, because a wrong link
+   puts one patient's pictures inside another patient's report. That pass writes
+   the Study UID and nothing else.
+3. **A scan CARE has not served yet gets a reportable row** — the outage safety
+   net, bounded to three days, and it claims nothing bill-shaped: no accession
+   copied off the DICOM header, no synthetic bill-desk id, no invented `USG Study`
+   test name. It shows as **Not in CARE yet**. When CARE later serves the same
+   Study UID, `importCareRows` adopts that row, so the bill identity lands on the
+   record the doctor may already have reported on instead of making a twin.
+4. **The live PACS panel** (*Not billed in CARE — scans only*) is the same view
+   straight from DICOMweb for the last 72 hours, and drafting from it creates one
+   row, on purpose, by your hand.
 
 To clear a list a previous build already filled (dry run first, it prints the
-counts, and the number can no longer grow):
+counts; with CARE's pull healthy the number no longer climbs):
 
 ```
 docker exec -w /app usg-reporting-studio node scripts/usg-prune-orthanc-orphans.mjs

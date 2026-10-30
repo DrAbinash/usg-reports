@@ -464,6 +464,9 @@ inline base64 out of the settings row. `reports_total=13` against
 
 ## 10. Same day, after the operator set the rule
 
+> **Read §11 before acting on this section.** Its first two bullets were wrong:
+> the deleted mechanism was the outage safety net, and it has been restored.
+
 Asked to go further — *"make the sync easier. link to bill should only be for
 demography and doctor reference name"* — he took the option that removes the
 mechanism rather than the identifier, and called it a trial: the full billing
@@ -488,3 +491,65 @@ rules can come back later, deliberately, one at a time.
   on the same row through the StudyInstanceUID bridge.
 - The worklist row now says **"Scan, not billed"** where it previously showed an
   identifier chip for a bill that does not exist.
+
+## 11. Superseded by the operator — §10's first two bullets are wrong
+
+The next probe run on the NAS, plus the CARE source, settled it. §10 deleted the
+safety net on the premise that a worklist row with no CARE bill is an un-billed
+scan. It is not.
+
+- The operator's fact: **no scanned patient here is un-billed.** The USG machine
+  follows no Modality Worklist and writes no accession number, so a study reaches
+  the studio's list only when CARE's bridge serves its row.
+- His own probe output said the net was working: the last cycle reported
+  `202 new from CARE · 31 new from Orthanc · 461 linked by StudyInstanceUID ·
+  1807 awaiting images` — studies were arriving in the PACS faster than CARE was
+  serving them. Deleting `importOrthancOrphans` would have made those patients
+  invisible at the desk rather than fixing anything. Restored in `6c74ac3`,
+  bounded, still claiming nothing bill-shaped.
+- #64 already said this in 2026 and I read it as a feature note: *"those are the
+  emptier copy of patients CARE had already sent"*. The flood was a symptom of
+  the stalled pull, not the net's purpose.
+- CARE's side, verified rather than summarised: `radiology_worklist` is written
+  by **one** INSERT (`internal-radiology.ts:993`, provenance `PACS_INTAKE`); the
+  bill desk never touches it (registration fans out `radiology_studies`); the
+  studio bridge reads that mirror and joins the bill to it by accession,
+  `study_id`, then a guarded **name + date ±1 + modality single hit**
+  (`studioWorklistBillJoin.ts:490-520`) before serving
+  `studyInstanceUid`/`matchedKey`/`billNumber` per row
+  (`internal-reporting-studio.ts:446-467`). The scanner→ERP pipe is the deployed
+  `care-pacs/care-erp-sync` sidecar (`ORTHANC_CHANGES_POLLER=false` on purpose,
+  `care.env:72-73`), and `STAMP_ACCESSION_FROM_BILL` — which writes the bill
+  number into DICOM 00080050 for single-hit empty-accession studies, refusing
+  multi-hit and name-only matches — is **default off**.
+- **What was right in §10 stays.** `pacs-draft` no longer writes a synthetic
+  `PACS-<uid>` into `careWorklistId`, the DICOM accession is never copied onto a
+  row CARE has not served, no code invents `USG Study`, and the PACS panel shows
+  whenever Orthanc is configured. The chip now reads **"Not in CARE yet"**, which
+  is the claim this app can actually make.
+
+### The join this clinic needs, built at last
+
+`planDemographicLinks` / `linkOrdersByDemography` (careSync.ts) run after the
+identifier passes and before the safety net: one bill row and one study agreeing
+on patient name + the clinic's IST scanning day are linked, and the referring
+doctor's name is the only tie-breaker when either side has duplicates. Anything
+that still has two candidates is left unlinked and counted — the sync log, the
+audit line and the toast all report `linked by patient + date` and
+`N same name/day — left for you to match`. It writes `studyInstanceUid` and no
+other field, so a link cannot rewrite what CARE said. Both refusal branches were
+mutated and the tests caught them (`tests/demographicLink.test.ts`, 15 tests).
+
+### The measurement that decides what to fix upstream
+
+The probe now prints `care_rows | care_rows_with_uid | no_uid`. Run it against
+the deployed image (`git pull && docker compose up -d --build studio`, or `docker
+cp scripts/usg-sync-health.mjs` for the script alone):
+
+- **Billed rows carry a UID** → CARE's intake is delivering; the studio should
+  join by identifier, the safety net should be near-quiet each cycle, and a
+  persistent `not in CARE yet` count means the studio's own window or writes.
+- **Billed rows carry no UID** → the gap is upstream: is `care-erp-sync` running
+  and its intake authenticated, and are CARE's mirror rows reaching the ERP's
+  bill-link tiers at all? That is a CARE change (or switching on the guarded
+  stamping flag), not something this app can invent its way around.

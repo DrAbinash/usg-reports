@@ -60,6 +60,9 @@ type SyncStats = {
   ambiguousMatches?: number;
   awaitingImages?: number;
   unmatchedOrthanc?: number;
+  importedFromOrthanc?: number;
+  orthancUsStudies?: number;
+  orphanErrors?: number;
   skippedReasons?: string[];
 };
 
@@ -153,15 +156,19 @@ function OrderRow({
               WL {order.careWorklistId}
             </span>
           ) : null}
-          {/* No bill-desk identity at all: this row is the scan, not a bill.
-              It carries the patient's details and the referring doctor's name
-              from the DICOM header — nothing invented on top of that. */}
+          {/* No bill-desk row has reached the studio for this study yet. Every
+              scanned patient IS billed in CARE — the USG machine follows no
+              Modality Worklist and writes no accession, so the row appears here
+              from the PACS while CARE's own row is still missing (an outage, a
+              rejected write, or intake lag). It carries only the patient's
+              details and the referring doctor's name off the DICOM header, and
+              becomes a CARE row automatically when CARE serves the bill. */}
           {!order.accessionNumber && !order.careWorklistId && !order.billNumber ? (
             <span
               className="hidden shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 ring-1 ring-slate-200 sm:inline"
-              title="No CARE bill behind this row — it is the scan itself: patient details and the referring doctor's name, read off the DICOM header. It becomes a billed row automatically if CARE sends the bill for this study."
+              title="CARE has not sent a bill row for this study yet — it came from the PACS, so it shows only the patient details and the referring doctor's name. It picks up the bill number, accession and test automatically when CARE answers."
             >
-              Scan, not billed
+              Not in CARE yet
             </span>
           ) : null}
           {order.studyInstanceUid ? (
@@ -382,11 +389,15 @@ export function UsgWorklistView() {
         const skipped =
           (st?.skippedNoName ?? 0) +
           (st?.skippedMissingIdentity ?? 0) +
-          (st?.errors ?? 0);
+          (st?.errors ?? 0) +
+          (st?.orphanErrors ?? 0);
         const bits = [
           `CARE ${r.careOk ? "✓" : "✗"}`,
           `Orthanc ${r.orthancOk ? "✓" : "✗"}`,
           r.newOrders ? `${r.newOrders} new` : "",
+          // Named for what it is, so a growing number is a signal and not a
+          // mystery: these are scans the PACS has but CARE has not served yet.
+          st?.importedFromOrthanc ? `${st.importedFromOrthanc} not in CARE yet` : "",
           st?.updatedExisting ? `${st.updatedExisting} refreshed` : "",
           st?.erpFinalizedNotLocal ? `${st.erpFinalizedNotLocal} ERP-finalized` : "",
           st?.matchedByStudyUid ? `${st.matchedByStudyUid} by UID` : "",

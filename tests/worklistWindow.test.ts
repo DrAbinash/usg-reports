@@ -144,12 +144,17 @@ describe("sync route wires the window", () => {
     expect(schema).toMatch(/cursorHoldCount\s+Int/);
   });
 
-  it("writes no orders from Orthanc — an un-billed scan stays a scan", () => {
-    // The fabricated bill rows are what turned 1,218 of this clinic's 2,301
-    // worklist rows into noise. The Orthanc pass attaches images to rows CARE
-    // billed; it never creates a row of its own.
-    expect(route).not.toMatch(/importOrthancOrphans/);
+  it("keeps the PACS safety net visible and counted", () => {
+    // Every scanned patient here IS billed in CARE, but the machine follows no
+    // MWL and writes no accession, so a study reaches the list only through
+    // CARE's bridge. When CARE cannot answer, importOrthancOrphans is what keeps
+    // the patient reportable — silently dropping it (which I did once) removes
+    // the outage insurance, it does not remove the flood. What keeps the flood
+    // from returning is the bounded window, the demographic suppression of a
+    // second row, and the count being reported every cycle.
+    expect(route).toMatch(/importOrthancOrphans\(/);
     expect(route).toMatch(/attachOrthancStudies\(/);
+    expect(route).toMatch(/imported=\$\{orphanStats\.importedFromOrthanc\}/);
   });
 
   it("writes lastSyncAt as a clock, not as a gate", () => {

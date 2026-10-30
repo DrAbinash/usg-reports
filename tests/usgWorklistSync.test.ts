@@ -23,12 +23,14 @@ import {
   attachOrthancStudies,
   decideImport,
   importCareRows,
+  importOrthancOrphans,
   indexOrthancStudies,
   matchOrthancStudy,
   normalizeCareRow,
 } from "@/lib/usg/careSync";
 import type { CareWorklistItem } from "@/lib/usg/careClient";
-import type { OrthancStudy } from "@/lib/usg/orthancClient";
+import type { OrthancStudy, OrthancUsStudyRow } from "@/lib/usg/orthancClient";
+import { addCalendarDaysYmd, clinicTodayIST } from "@/lib/usg/dates";
 
 // ── fixtures ────────────────────────────────────────────────────────────────
 
@@ -329,6 +331,149 @@ describe("J · REPORTED state is never reset by resync", () => {
     const still = await db.usgCareOrder.findFirstOrThrow({ where: { id: order.id } });
     expect(still.status).toBe("REPORTING");
     expect(still.patientAge).toBe("27");
+  });
+});
+
+// ── K · the PACS safety net (a scan CARE has not served yet) ────────────────
+
+describe("K · outage safety net (Orthanc study with no CARE row yet)", () => {
+  // Bounded to ORPHAN_MAX_AGE_DAYS, so the fixtures are written relative to the
+  // clinic's today — never as a fixed date that silently ages out of the window.
+  const recentYmd = addCalendarDaysYmd(clinicTodayIST(), -1);
+  const staleYmd = addCalendarDaysYmd(clinicTodayIST(), -10);
+  const orphan = (uid: string, name = "Alfi Parween", studyDate = recentYmd): OrthancUsStudyRow => ({
+    studyInstanceUid: uid,
+    accessionNumber: null,
+    patientName: name,
+    patientSex: "F",
+    patientAge: "28",
+    referringDoctor: "",
+    testName: "",
+    studyDate,
+    studyTime: "090500",
+  });
+
+  test("a study CARE has not served becomes a reportable row", async () => {
+    const stats = await importOrthancOrphans([orphan("1.2.840.orphan.1")]);
+    expect(stats.importedFromOrthanc).toBe(1);
+    expect(stats.alreadyPresent).toBe(0);
+    const order = await db.usgCareOrder.findFirstOrThrow({
+      where: { studyInstanceUid: "1.2.840.orphan.1" },
+    });
+    expect(order.patientName).toBe("Alfi Parween");
+    expect(order.status).toBe("PENDING");
+    expect(order.careWorklistId).toBeNull();
+    expect(order.studyDate).not.toBeNull();
+  });
+
+  test("it claims nothing bill-shaped: no accession, no worklist id, no invented test name", async () => {
+    const stats = await importOrthancOrphans([
+      {
+        ...orphan("1.2.840.orphan.acc", "Free Acc Patient"),
+        accessionNumber: "ACC-FREE-1",
+        referringDoctor: "Dr R K Sinha",
+        testName: "",
+      },
+    ]);
+    expect(stats.importedFromOrthanc).toBe(1);
+    expect(stats.errors).toBe(0);
+    const order = await db.usgCareOrder.findFirstOrThrow({
+      where: { studyInstanceUid: "1.2.840.orphan.acc" },
+    });
+    // accessionNumber is @unique TABLE-WIDE. An orphan that grabbed one first
+    // made CARE's own row for that accession impossible to create (67 lost
+    // studies, NAS-verified) — so the DICOM accession is never copied.
+    expect(order.accessionNumber).toBeNull();
+    expect(order.careWorklistId).toBeNull();
+    expect(order.billNumber).toBe("");
+    // "USG Study" used to be written here and read like a catalogued test.
+    expect(order.testName).toBe("");
+    // What a scan legitimately can say about itself.
+    expect(order.patientAge).toBe("28");
+    expect(order.patientSex).toBe("F");
+    expect(order.referringDoctor).toBe("Dr R K Sinha");
+  });
+
+  test("a real DICOM Study Description is kept", async () => {
+    await importOrthancOrphans([{ ...orphan("1.2.840.orphan.desc"), testName: "USG Obstric" }]);
+    const order = await db.usgCareOrder.findFirstOrThrow({
+      where: { studyInstanceUid: "1.2.840.orphan.desc" },
+    });
+    expect(order.testName).toBe("USG Obstric");
+  });
+
+  test("repeated import is idempotent (UID identity)", async () => {
+    await importOrthancOrphans([orphan("1.2.840.orphan.2")]);
+    const second = await importOrthancOrphans([orphan("1.2.840.orphan.2")]);
+    expect(second.importedFromOrthanc).toBe(0);
+    expect(second.alreadyPresent).toBe(1);
+    expect(await db.usgCareOrder.count({ where: { studyInstanceUid: "1.2.840.orphan.2" } })).toBe(1);
+  });
+
+  test("a patient who already has a CARE row that day is not given a second, emptier one", async () => {
+    await importCareRows([
+      {
+        worklistId: "9801",
+        accessionNumber: "",
+        patientName: "Alfi Parween",
+        modality: "US",
+        studyInstanceUid: "1.2.840.orphan.billed",
+        studyDate: recentYmd,
+        referringDoctor: "Dr Neha Priya",
+        testName: "USG Whole Abdomen",
+        billNumber: "B-9801",
+      },
+    ]);
+    // DICOM arrives as LAST^FIRST; the sorted-token key must still recognise it.
+    const stats = await importOrthancOrphans([orphan("1.2.840.orphan.dup", "PARWEEN ALFI")]);
+    expect(stats.importedFromOrthanc).toBe(0);
+    expect(stats.skippedBilledRowExists).toBe(1);
+    const rows = await db.usgCareOrder.findMany({ where: { patientName: { contains: "parween" } } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.careWorklistId).toBe("9801");
+  });
+
+  test("older than the window is archive, not today's worklist", async () => {
+    const stats = await importOrthancOrphans([orphan("1.2.840.orphan.old", "Ancient Patient", staleYmd)]);
+    expect(stats.importedFromOrthanc).toBe(0);
+    expect(stats.skippedTooOld).toBe(1);
+    expect(await db.usgCareOrder.count({ where: { studyInstanceUid: "1.2.840.orphan.old" } })).toBe(0);
+  });
+
+  test("UNKNOWN / blank names are skipped", async () => {
+    const stats = await importOrthancOrphans([
+      orphan("1.2.840.orphan.4", "UNKNOWN"),
+      orphan("1.2.840.orphan.5", ""),
+    ]);
+    expect(stats.skippedNoName).toBe(2);
+    expect(stats.importedFromOrthanc).toBe(0);
+  });
+
+  test("when CARE serves the bill later, the same row adopts it — no twin", async () => {
+    await importOrthancOrphans([
+      { ...orphan("1.2.840.orphan.3", "Naaz Afrin"), accessionNumber: "ACC-BRIDGE-9" },
+    ]);
+    const stats = await importCareRows([
+      {
+        worklistId: "9911",
+        accessionNumber: "ACC-BRIDGE-9",
+        patientName: "Naaz Afrin",
+        modality: "US",
+        studyInstanceUid: "1.2.840.orphan.3",
+        patientAge: "30/F",
+        billNumber: "B-777",
+        testName: "USG KUB",
+      },
+    ]);
+    expect(stats.imported).toBe(0);
+    expect(stats.updatedExisting).toBe(1);
+    expect(await db.usgCareOrder.count({ where: { studyInstanceUid: "1.2.840.orphan.3" } })).toBe(1);
+    const merged = await db.usgCareOrder.findFirstOrThrow({
+      where: { studyInstanceUid: "1.2.840.orphan.3" },
+    });
+    expect(merged.careWorklistId).toBe("9911");
+    expect(merged.accessionNumber).toBe("ACC-BRIDGE-9");
+    expect(merged.testName).toBe("USG KUB");
   });
 });
 

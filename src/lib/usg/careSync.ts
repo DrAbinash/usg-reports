@@ -43,6 +43,7 @@ import {
   type CareWorklistItem,
 } from "./careClient";
 import type { OrthancStudy, OrthancUsStudyRow } from "./orthancClient";
+import { addCalendarDaysYmd, clinicTodayIST } from "./dates";
 
 // ── pure row normalisation ──────────────────────────────────────────────────
 
@@ -262,6 +263,65 @@ export const emptyAttachStats = (): AttachStats => ({
   awaitingImages: 0,
   unmatchedOrthanc: 0,
 });
+
+/** Stats for the outage safety net — scans pushed into Orthanc that CARE has
+ *  not served yet. */
+export type OrphanImportStats = {
+  orthancUsStudies: number;
+  importedFromOrthanc: number;
+  alreadyPresent: number;
+  skippedNoName: number;
+  skippedNoUid: number;
+  /** A bill-desk order for this patient on this day already represents them. */
+  skippedBilledRowExists: number;
+  /** Older than {@link ORPHAN_MAX_AGE_DAYS} — archive history, not today's list. */
+  skippedTooOld: number;
+  errors: number;
+  /** Safe per-row diagnostics — study UID tail + reason, never patient data. */
+  skippedReasons: string[];
+};
+
+export const emptyOrphanImportStats = (): OrphanImportStats => ({
+  orthancUsStudies: 0,
+  importedFromOrthanc: 0,
+  alreadyPresent: 0,
+  skippedNoName: 0,
+  skippedNoUid: 0,
+  skippedBilledRowExists: 0,
+  skippedTooOld: 0,
+  errors: 0,
+  skippedReasons: [],
+});
+
+/**
+ * How far back the outage safety net reaches. Not a feed — a stopgap: while
+ * CARE's rows are not arriving, a scanned patient must still be reportable.
+ * Measured 2026-10-06 with the sync cursor stuck: one 14-day sweep wrote ~1,400
+ * of these onto a list that carries about 100 real patients a day, and the
+ * bill-desk rows vanished underneath them.
+ */
+export const ORPHAN_MAX_AGE_DAYS = 3;
+
+/** The clinic's calendar day, read as IST wall time (the scanner's own clock). */
+export function istDayOfDate(d: Date | null | undefined): string | null {
+  if (!d) return null;
+  const ms = d.getTime() + (5 * 60 + 30) * 60 * 1000;
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+/**
+ * "Same patient, same scanning day" key — sorted name tokens, so CARE's
+ * "First Last" and the DICOM "LAST^FIRST" agree. This is the demographic link,
+ * and it is used only to decide when NOT to add a row: a name can justify
+ * suppressing a duplicate, never a merge of two patients' records.
+ */
+export function nameDayKey(name: string | null | undefined, ymd: string | null | undefined): string | null {
+  const d = (ymd ?? "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
+  const tokens = (name ?? "").toLowerCase().replace(/[^a-z ]/g, " ").split(/\s+/).filter(Boolean).sort();
+  if (!tokens.length) return null;
+  return `${tokens.join(" ")}|${d}`;
+}
 
 /**
  * One short, PHI-free line describing why Prisma rejected a write.
@@ -494,6 +554,126 @@ export async function importCareRows(rows: CareWorklistItem[], clinicId: string 
       stats.skippedReasons.push(
         `WL ${n.wlId ?? "?"}: write rejected (${prismaErrorSummary(e)})`,
       );
+    }
+  }
+  return stats;
+}
+
+/**
+ * The outage safety net: studies sitting in Orthanc that CARE has not served.
+ *
+ * It is NOT a second feed, and it must never be read as one. Every scanned
+ * patient at this clinic is billed in CARE; the USG machine simply follows no
+ * Modality Worklist and writes no accession number, so a study only reaches the
+ * studio's list when CARE's bridge hands over its row. When CARE is not
+ * answering — a rejected write, a stalled pull, the container being down — the
+ * patient still has to be reportable, and this is how.
+ *
+ * Rules, and why each one is there:
+ *   - identity is the StudyInstanceUID alone; a patient who already has a
+ *     bill-desk row on that scanning day is never given a second, emptier one
+ *     (`nameDayKey`: sorted name tokens + the clinic's IST day);
+ *   - nothing bill-shaped is invented: no accession is copied off the DICOM
+ *     header (CARE owns that column and it is UNIQUE table-wide — an orphan that
+ *     claimed one first made CARE's own row impossible to create, 67 lost
+ *     studies on the NAS), no synthetic worklist id, no test name;
+ *   - bounded by {@link ORPHAN_MAX_AGE_DAYS}; yesterday's archive is not today's
+ *     worklist;
+ *   - when CARE later serves the same UID, importCareRows adopts THIS row by the
+ *     UID bridge and fills in the real worklist id, accession, test and
+ *     demographics — the stopgap reconciles instead of lingering as a twin.
+ *
+ * What remains a scan with no bill is a real gap upstream: CARE's mirror row is
+ * written only by the Orthanc→ERP intake (`care-pacs/care-erp-sync`), so a study
+ * the ERP never learned about has nothing for the studio to join to.
+ */
+export async function importOrthancOrphans(
+  studies: OrthancUsStudyRow[],
+  clinicId: string = "default",
+): Promise<OrphanImportStats> {
+  const stats = emptyOrphanImportStats();
+  stats.orthancUsStudies = studies.length;
+  if (!studies.length) return stats;
+
+  const existing = await db.usgCareOrder.findMany({
+    where: { clinicId, studyInstanceUid: { not: null } },
+    select: { studyInstanceUid: true },
+  });
+  const haveUid = new Set(
+    existing.map((o) => o.studyInstanceUid).filter((u): u is string => !!u),
+  );
+
+  const billedOrders = await db.usgCareOrder.findMany({
+    where: { clinicId, careWorklistId: { not: null } },
+    select: { patientName: true, studyDate: true },
+  });
+  const billedDayKeys = new Set(
+    billedOrders
+      .map((o) => nameDayKey(o.patientName, istDayOfDate(o.studyDate)))
+      .filter((k): k is string => !!k),
+  );
+  const oldestAcceptedYmd = addCalendarDaysYmd(clinicTodayIST(), -ORPHAN_MAX_AGE_DAYS);
+
+  for (const st of studies) {
+    const uid = clean(st.studyInstanceUid);
+    if (!uid) {
+      stats.skippedNoUid++;
+      continue;
+    }
+    if (haveUid.has(uid)) {
+      stats.alreadyPresent++;
+      continue;
+    }
+    const name = (st.patientName ?? "").trim();
+    if (!name || name.toUpperCase() === "UNKNOWN") {
+      // UNKNOWN is the DICOMweb fallback when PatientName is blank — not safe
+      // to put on a reporting worklist without a human identity.
+      stats.skippedNoName++;
+      continue;
+    }
+
+    // Bounded fallback: yesterday's archive is not today's worklist.
+    if (st.studyDate && st.studyDate < oldestAcceptedYmd) {
+      stats.skippedTooOld++;
+      continue;
+    }
+    if (billedDayKeys.has(nameDayKey(name, st.studyDate) ?? "")) {
+      stats.skippedBilledRowExists++;
+      continue;
+    }
+
+    // What a scan may claim about itself: who the patient is, whose reference
+    // it was, and the Study UID that reaches the images. The exam name is left
+    // blank rather than invented — an un-billed row has no catalogued test, and
+    // the doctor choosing the study in the composer is the honest answer.
+    try {
+      await db.usgCareOrder.create({
+        data: {
+          clinicId,
+          accessionNumber: null,
+          careWorklistId: null,
+          patientName: name,
+          patientAge: (st.patientAge ?? "").replace(/[^0-9]/g, "").slice(0, 3),
+          patientSex: st.patientSex === "M" ? "M" : "F",
+          patientPhone: "",
+          patientAddress: "",
+          billNumber: "",
+          referringDoctor: (st.referringDoctor ?? "").trim(),
+          testName: (st.testName ?? "").trim(),
+          testCode: "",
+          modality: "USG",
+          studyInstanceUid: uid,
+          studyDate: parseStudyDateTime(st.studyDate, st.studyTime),
+          billingStatus: null,
+          status: "PENDING",
+        },
+      });
+      stats.importedFromOrthanc++;
+      haveUid.add(uid);
+    } catch (e) {
+      stats.errors++;
+      // Safe diagnostics: study UID tail + error class, never patient data.
+      stats.skippedReasons.push(`UID ..${uid.slice(-8)}: create failed (${prismaErrorSummary(e)})`);
     }
   }
   return stats;

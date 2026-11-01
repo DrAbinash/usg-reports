@@ -34,6 +34,9 @@ type Order = FormFOrderLite & {
   patientSex: string;
   modality: string;
   studyInstanceUid: string | null;
+  /** The rule that wrote it: "name+day…" | "accession" | null when CARE named
+   *  the study. A name rule gets a chip — see the PACS badge below. */
+  uidLinkedBy?: string | null;
   billingStatus: string | null;
   status: string;
   ignored: boolean;
@@ -65,6 +68,8 @@ type SyncStats = {
   orthancUsStudies?: number;
   orphanErrors?: number;
   demographyLinked?: number;
+  /** Of those, the ones decided by nearest scanning minute or across midnight. */
+  demographyGuessed?: number;
   demographyAmbiguous?: number;
   skippedReasons?: string[];
 };
@@ -175,9 +180,30 @@ function OrderRow({
             </span>
           ) : null}
           {order.studyInstanceUid ? (
-            <span className="hidden items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-700 ring-1 ring-violet-200 md:flex">
-              <ScanLine className="h-3 w-3" /> PACS
-            </span>
+            order.uidLinkedBy?.startsWith("name") ? (
+              // The images on this report were INFERRED, not named: no accession
+              // and no Study UID joined them, so patient name + scanning day did.
+              // Said on the row because it is the weakest join here and he is the
+              // one who signs the report — the study picker replaces it in a click.
+              <span
+                className="hidden items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-200 md:flex"
+                title={`Images linked by "${order.uidLinkedBy}" — the USG machine sends no accession, so this study was matched by the patient's name${
+                  order.uidLinkedBy.includes("nearest")
+                    ? " and the nearest scanning time"
+                    : order.uidLinkedBy.includes("referral")
+                      ? " and the referring doctor"
+                      : order.uidLinkedBy.includes("±1")
+                        ? ", a day either side of the bill"
+                        : ""
+                }. Open the study picker to change it.`}
+              >
+                <ScanLine className="h-3 w-3" /> Images by name
+              </span>
+            ) : (
+              <span className="hidden items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-700 ring-1 ring-violet-200 md:flex" title={order.uidLinkedBy === "accession" ? "Images linked by accession number" : "Images linked by the Study UID CARE sent"}>
+                <ScanLine className="h-3 w-3" /> PACS
+              </span>
+            )
           ) : order.status !== "REPORTED" ? (
             <span className="hidden items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200 md:flex" title="No Orthanc study linked yet — the order stays listed and links automatically once the images arrive">
               <Hourglass className="h-3 w-3" /> Awaiting images
@@ -408,9 +434,11 @@ export function UsgWorklistView() {
           // A scan joined to its bill row by patient name + scanning day. Said
           // out loud because it is the weakest join here and the doctor is
           // entitled to see it happen; the count is 0 whenever identifiers work.
-          st?.demographyLinked ? `${st.demographyLinked} by patient+date` : "",
+          st?.demographyLinked
+            ? `${st.demographyLinked} by patient+date${st.demographyGuessed ? ` (${st.demographyGuessed} by nearest scan)` : ""}`
+            : "",
           st?.demographyAmbiguous
-            ? `${st.demographyAmbiguous} same name/day — left for you to match`
+            ? `${st.demographyAmbiguous} same name, same minute — left for you to match`
             : "",
           st?.awaitingImages ? `${st.awaitingImages} awaiting images` : "",
           skipped ? `${skipped} skipped` : "",

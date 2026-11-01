@@ -21,6 +21,9 @@ export type WorklistOrderDto = {
   testCode: string;
   modality: string;
   studyInstanceUid: string | null;
+  /** Which rule wrote that UID — "name+day…"/"accession", or null when CARE
+   *  named the study itself. A name rule is shown as a chip, never silent. */
+  uidLinkedBy: string | null;
   billingStatus: string | null;
   status: string;
   ignored: boolean;
@@ -115,6 +118,7 @@ export async function GET(req: Request) {
     testCode: o.testCode ?? "",
     modality: o.modality,
     studyInstanceUid: o.studyInstanceUid,
+    uidLinkedBy: o.uidLinkedBy,
     billingStatus: o.billingStatus,
     status: o.status,
     ignored: o.ignored,

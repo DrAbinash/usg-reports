@@ -166,24 +166,34 @@ accession number, so a study and its bill row share no identifier until CARE's
 own Orthanc intake delivers one. Every row therefore comes from CARE when CARE is
 answering, and the four steps are:
 
-1. **CARE's rows first.** Each cycle re-reads the last three days of the ERP's
+1. **CARE's rows first.** Each cycle re-reads the last **14 days** of the ERP's
    worklist and upserts them, matched by worklist id, then accession, then
    StudyInstanceUID. Nothing is consulted to decide what to fetch next, so a row
    that fails to write is served again next cycle instead of stalling everything
-   behind it (that stall is what turned 1,218 rows into this list).
+   behind it (that stall is what turned 1,218 rows into this list). Two weeks is
+   the retry: an order rejected by a restart, a bill raised the day after the
+   scan, or a study from before an outage weekend all come back on their own.
 2. **Images attach by identifier, then by demographics.** Exact Study UID first,
    exact single-hit accession second. Whatever is left is linked by patient name +
-   the clinic's scanning day, and *only* when one bill row and one study point at
-   each other — the referring doctor's name is the tie-breaker, and anything that
-   still has two candidates is left unlinked and counted, because a wrong link
-   puts one patient's pictures inside another patient's report. That pass writes
-   the Study UID and nothing else.
+   the clinic's scanning day, and now takes its best-defensible candidate instead
+   of refusing: same day first, the **nearest scanning minute** when the day holds
+   more than one scan, the **referring doctor's name** when it agrees, and a day
+   either side when the bill was raised after midnight. Each row records *which*
+   rule wrote its Study UID, in `uidLinkedBy`, and the worklist shows an amber
+   **Images by name** chip for anything the studio inferred — so a guess is
+   something you can see and replace with the study picker, never a silent fill.
+   One case is still refused and counted: the same name, the same day, the same
+   minute, nothing to separate them. That is the only link that cannot be talked
+   out of a report afterwards, because it puts one patient's pictures inside
+   another patient's report. The pass writes the Study UID and the rule; nothing
+   else — no name, no test, no status, no accession.
 3. **A scan CARE has not served yet gets a reportable row** — the outage safety
-   net, bounded to three days, and it claims nothing bill-shaped: no accession
-   copied off the DICOM header, no synthetic bill-desk id, no invented `USG Study`
-   test name. It shows as **Not in CARE yet**. When CARE later serves the same
-   Study UID, `importCareRows` adopts that row, so the bill identity lands on the
-   record the doctor may already have reported on instead of making a twin.
+   net, bounded to **7 days** (as far as the PACS sweep reaches), and it claims
+   nothing bill-shaped: no accession copied off the DICOM header, no synthetic
+   bill-desk id, no invented `USG Study` test name. It shows as **Not in CARE yet**.
+   When CARE later serves the same Study UID, `importCareRows` adopts that row and
+   clears the inferred-link mark, so the bill identity lands on the record the
+   doctor may already have reported on instead of making a twin.
 4. **The live PACS panel** (*Not billed in CARE — scans only*) is the same view
    straight from DICOMweb for the last 72 hours, and drafting from it creates one
    row, on purpose, by your hand.

@@ -11,7 +11,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["tests/**/*.test.ts"],
+    include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"],
     globalSetup: ["./tests/global-setup.ts"],
     env: {
       // Absolute path so the SQLite file location never depends on cwd.

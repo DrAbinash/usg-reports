@@ -194,6 +194,8 @@ export type ComposerToolbarProps = {
   restoreDraft: () => void;
   dKey: string;
   diffSource?: DiffSource | null;
+  /** Close a comparison the doctor opened from inside this composer. */
+  onDismissDiff?: () => void;
   pathologies: UsgPathologyDef[];
   patientReports: Array<{ id: number; scanDate: string | null; stateJson: string | null; studyKey: string | null; status: string }>;
   togglePathology: (organKey: string, key: string | null) => void;
@@ -238,6 +240,7 @@ function toolbarEqual(a: ComposerToolbarProps, b: ComposerToolbarProps): boolean
     a.technique === b.technique &&
     a.restoreSnap === b.restoreSnap &&
     a.diffSource === b.diffSource &&
+    a.onDismissDiff === b.onDismissDiff &&
     a.pathologies === b.pathologies &&
     a.patientReports === b.patientReports &&
     a.sameDay === b.sameDay &&
@@ -403,7 +406,7 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
     order, orderUid, pullFromMachine, pulling, study, formFDefaults, setFormFOpen, pullSummary, setPullSummary,
     onNameChange, patients, patientPhone, setPatientPhone, setPatientAge, studyKey, setStudyKey, setTechnique,
     setPatientSex, showTechnique, setShowTechnique, isPregnancyStudy, lmp, setLmp, lmpInfo, technique,
-    restoreSnap, setRestoreSnap, restoreDraft, dKey, diffSource, pathologies, patientReports, togglePathology,
+    restoreSnap, setRestoreSnap, restoreDraft, dKey, diffSource, onDismissDiff, pathologies, patientReports, togglePathology,
     billedBanner, sameDay, onOpenReport,
   } = p;
 
@@ -854,6 +857,7 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
           source={diffSource}
           state={state}
           pathologies={pathologies}
+          onDismiss={onDismissDiff}
           onCopyForward={() => {
             try {
               const prior = JSON.parse(diffSource.stateJson) as UsgComposerState;

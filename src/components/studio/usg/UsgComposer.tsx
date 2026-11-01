@@ -40,7 +40,7 @@ import { clearDraft, draftKey, loadDraft, saveDraft, snapshotDiffers, type Draft
 import { type BiradsCategory } from "@/lib/usg/birads";
 import { ComposerToolbar, ComposerHotkeys, pullFromMachine as pullFromMachineFn } from "./composer/ComposerToolbar";
 import { OrganCard, saveNormalOverride, resetNormalOverride } from "./composer/OrganCard";
-import { ImpressionZone } from "./composer/ImpressionZone";
+import { ImpressionZone, type PriorFinalizedRow } from "./composer/ImpressionZone";
 import {
   PreviewZone,
   addImage,
@@ -382,7 +382,16 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
           ? `/api/usg/reports?patientPhone=${encodeURIComponent(phone)}&status=FINALIZED&limit=8`
           : `/api/usg/reports?patientName=${encodeURIComponent(name)}&status=FINALIZED&limit=20`;
       const r = await fetch(url);
-      if (!r.ok) return [] as Array<{ id: string; scanDate: string | null; stateJson: string | null; studyKey: string | null }>;
+      if (!r.ok)
+        return [] as Array<{
+          id: string;
+          scanDate: string | null;
+          stateJson: string | null;
+          studyKey: string | null;
+          studyTitle: string | null;
+          impression: string | null;
+          serialNo: number | null;
+        }>;
       const d = await r.json();
       const rows = (d.reports ?? []) as Array<{
         id: string;
@@ -391,6 +400,9 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         studyKey: string | null;
         status: string;
         patientName?: string;
+        studyTitle?: string | null;
+        impression?: string | null;
+        serialNo?: number | null;
       }>;
       const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
       return rows
@@ -404,6 +416,35 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     },
   });
   const priorFinalized = priorFinalizedQ.data ?? [];
+
+  // The Δ panel used to appear only on a draft made by "Duplicate", because that
+  // was the one place that knew which earlier report to compare against. A doctor
+  // who opens a fresh study for a known patient has the same question — what
+  // changed since last time — and the prior signed studies are already in hand
+  // for the copy-forward buttons. So pressing one of them opens the diff here,
+  // locally, without touching the register's own follow-up path.
+  const [priorDiff, setPriorDiff] = useState<DiffSource | null>(null);
+  // Both handlers are compared by identity in the memo comparators of the two
+  // components they are handed to, so they are created once — an inline arrow
+  // here would re-render the whole toolbar and impression zone on every keystroke.
+  const compareWithPrior = useCallback((p: PriorFinalizedRow) => {
+    if (!p.stateJson) {
+      toast.error("That study has no saved findings to compare against");
+      return;
+    }
+    setPriorDiff({
+      id: p.id,
+      serial: p.serialNo != null ? formatUsgSerial(p.serialNo) : undefined,
+      date: (p.scanDate
+        ? new Date(p.scanDate)
+        : new Date()
+      ).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+      stateJson: p.stateJson,
+      impression: p.impression ?? "",
+    });
+  }, []);
+  const clearPriorDiff = useCallback(() => setPriorDiff(null), []);
+  const shownDiffSource = priorDiff ?? diffSource ?? null;
 
   const saveNormalMut = useMutation({
     mutationFn: async ({ organKey, text }: { organKey: string; text: string }) => {
@@ -940,7 +981,8 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         setRestoreSnap={setRestoreSnap}
         restoreDraft={restoreDraft}
         dKey={dKey}
-        diffSource={diffSource}
+        diffSource={shownDiffSource}
+        onDismissDiff={priorDiff ? clearPriorDiff : undefined}
         pathologies={pathologies}
         patientReports={patientReports}
         togglePathology={togglePathology}
@@ -1037,6 +1079,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
             birads={birads}
             setBirads={setBirads}
             priorFinalized={priorFinalized}
+            onComparePrior={compareWithPrior}
             pathologyWording={pathologyWording}
             onPathologyWordingChange={onPathologyWordingChange}
             savedId={savedIdRef.current}

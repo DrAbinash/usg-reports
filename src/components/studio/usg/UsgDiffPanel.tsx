@@ -6,7 +6,7 @@
  */
 import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
-import { ArrowRight, ChevronDown, GitCompare, Minus, Plus } from "lucide-react";
+import { ArrowRight, ChevronDown, GitCompare, Minus, Plus, X } from "lucide-react";
 import type { UsgComposerState, UsgPathologyDef } from "@/lib/usg/types";
 import { computeDiff, type UsgReportDiff } from "@/lib/usg/diff";
 
@@ -24,9 +24,12 @@ export type UsgDiffPanelProps = {
   pathologies: UsgPathologyDef[];
   /** Fill empty measurement slots from the previous scan. */
   onCopyForward?: () => void;
+  /** Close a comparison opened from inside the composer. The follow-up draft
+   *  this panel was built for has nothing to go back to, so it is not offered. */
+  onDismiss?: () => void;
 };
 
-export function UsgDiffPanel({ source, state, pathologies, onCopyForward }: UsgDiffPanelProps) {
+export function UsgDiffPanel({ source, state, pathologies, onCopyForward, onDismiss }: UsgDiffPanelProps) {
   const [open, setOpen] = useState(true);
 
   const diff: UsgReportDiff | null = useMemo(() => {
@@ -68,6 +71,17 @@ export function UsgDiffPanel({ source, state, pathologies, onCopyForward }: UsgD
             Fill empty slots from prior
           </button>
         ) : null}
+        {onDismiss ? (
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
+            title="Stop comparing — the report you are writing does not change"
+          >
+            <X className="h-3 w-3" />
+            stop comparing
+          </button>
+        ) : null}
         {total === 0 ? (
           <span className="rounded-full bg-white px-2.5 py-0.5 text-[10.5px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
             no changes yet — identical to the last scan
@@ -91,7 +105,8 @@ export function UsgDiffPanel({ source, state, pathologies, onCopyForward }: UsgD
               ) : null}
               <ArrowRight className="h-3 w-3 text-sky-500" />
               <span className={cn("font-bold", !m.from ? "text-emerald-700" : "text-rose-700")}>
-                {m.to || "cleared"}{m.unit ? ` ${m.unit}` : ""}
+                {/* "cleared cm" is not a measurement — the unit belongs to a number. */}
+                {m.to || "cleared"}{m.to && m.unit ? ` ${m.unit}` : ""}
               </span>
             </div>
           ))}

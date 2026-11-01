@@ -39,6 +39,10 @@ export type PriorFinalizedRow = {
   scanDate: string | null;
   stateJson: string | null;
   studyKey: string | null;
+  /** All three come back on every list row already — the diff needs them. */
+  studyTitle?: string | null;
+  impression?: string | null;
+  serialNo?: number | null;
 };
 
 export type ImpressionZoneProps = {
@@ -54,6 +58,8 @@ export type ImpressionZoneProps = {
   birads: BiradsCategory | null;
   setBirads: (v: BiradsCategory | null) => void;
   priorFinalized: PriorFinalizedRow[];
+  /** Open the Δ-vs-previous panel against one of the patient's signed studies. */
+  onComparePrior?: (prior: PriorFinalizedRow) => void;
   pathologyWording?: PathologyWordingOverrides | null;
   onPathologyWordingChange?: (next: PathologyWordingOverrides) => void;
   savedId: string | null;
@@ -79,6 +85,7 @@ function impressionEqual(a: ImpressionZoneProps, b: ImpressionZoneProps): boolea
     a.birads === b.birads &&
     a.setBirads === b.setBirads &&
     a.priorFinalized === b.priorFinalized &&
+    a.onComparePrior === b.onComparePrior &&
     a.pathologyWording === b.pathologyWording &&
     a.onPathologyWordingChange === b.onPathologyWordingChange &&
     a.savedId === b.savedId &&
@@ -113,6 +120,7 @@ export const ImpressionZone = memo(function ImpressionZone({
   birads,
   setBirads,
   priorFinalized,
+  onComparePrior,
   pathologyWording,
   onPathologyWordingChange,
   savedId,
@@ -331,30 +339,47 @@ export const ImpressionZone = memo(function ImpressionZone({
                 })
               : "prior scan";
             return (
-              <Button
-                key={p.id}
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-7 border-emerald-200 bg-emerald-50/60 px-2.5 text-[10px] font-semibold text-emerald-800 hover:bg-emerald-100"
-                title="Merge organ findings (pathologies, measurements, grid rows) from this finalized report"
-                onClick={() => {
-                  try {
-                    const prior = JSON.parse(p.stateJson ?? "{}") as UsgComposerState;
-                    const { state: next, mergedOrgans } = copyForwardFindings(state, prior);
-                    setState(next);
-                    toast.success(
-                      mergedOrgans > 0
-                        ? `Copied findings from ${label} (${mergedOrgans} organ${mergedOrgans === 1 ? "" : "s"})`
-                        : `No findings to copy from ${label}`,
-                    );
-                  } catch {
-                    toast.error("Could not read prior report");
-                  }
-                }}
-              >
-                Copy findings from {label}
-              </Button>
+              <span key={p.id} className="flex flex-wrap items-center gap-1.5">
+                {onComparePrior ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 border-sky-200 bg-sky-50/60 px-2.5 text-[10px] font-semibold text-sky-800 hover:bg-sky-100"
+                    title={
+                      p.studyKey && p.studyKey !== studyKey
+                        ? `Show what changed since ${label} — a different format, so only the organs both studies have are compared`
+                        : `Show what changed since ${label}: measurements, findings added or resolved, wording and impression`
+                    }
+                    onClick={() => onComparePrior(p)}
+                  >
+                    Compare with {label}
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 border-emerald-200 bg-emerald-50/60 px-2.5 text-[10px] font-semibold text-emerald-800 hover:bg-emerald-100"
+                  title="Merge organ findings (pathologies, measurements, grid rows) from this finalized report"
+                  onClick={() => {
+                    try {
+                      const prior = JSON.parse(p.stateJson ?? "{}") as UsgComposerState;
+                      const { state: next, mergedOrgans } = copyForwardFindings(state, prior);
+                      setState(next);
+                      toast.success(
+                        mergedOrgans > 0
+                          ? `Copied findings from ${label} (${mergedOrgans} organ${mergedOrgans === 1 ? "" : "s"})`
+                          : `No findings to copy from ${label}`,
+                      );
+                    } catch {
+                      toast.error("Could not read prior report");
+                    }
+                  }}
+                >
+                  Copy findings from {label}
+                </Button>
+              </span>
             );
           })}
         </div>

@@ -46,3 +46,6 @@ prisma/dev.db-journal
 # vitest scratch databases
 tests/.tmp
 @eaDir/
+
+# local scratch: probe databases and audit output that carries patient names
+tmp/

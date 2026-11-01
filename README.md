@@ -142,7 +142,7 @@ measurements flow in from Orthanc.
 > The ERP side needs the one-line `REPORTING_STUDIO_API_KEY=` in its
 > `.env`/compose (same key as Settings → Integrations).
 
-### Four operational answers you will want eventually
+### Five operational answers you will want eventually
 
 **What is in a backup.** Settings → Data writes `data/backups/usg-auto-YYYY-MM-DD.json`
 once a day after 02:00 (newest 14 kept, and it now refuses when the volume has
@@ -203,6 +203,26 @@ anywhere, so the whole output can be pasted into a bug report.
 Run it from the image, not from the NAS git folder: a rebuilt image can carry a
 generated client that lags its own schema, and that failure rejected every
 bill-desk write for four days while reads and login kept working.
+
+**How many signed reports disagree with themselves.** Until 1 Nov 2026 saving a
+draft stored the findings and impression it derived but **not** the composer
+state behind them (`stateJson`), and finalizing builds the signed page from that
+state. A report edited after its first save therefore risked being signed from
+the earlier selections: the register's text said one thing, the printed sheet
+another. That is fixed, and every new signature keeps the two together — but the
+reports already in the database are what they are, and this counts them:
+
+```
+docker exec -w /app usg-reporting-studio node scripts/usg-signature-drift.mjs
+```
+
+Read-only, no writes and no PHI on the console (the detail rows, which do carry
+patient names, go to `tmp/signature-drift.tsv` inside the container — that
+directory is not committed). It prints how many signed reports it read, how many
+pages match their own impression text, how many do not, and how many printed no
+impression at all. Use an absolute `DATABASE_URL` (`file:/volume1/docker/…`): a
+relative one is resolved against the working directory, not the schema file, and
+answers "0 signed reports" about a clinic with hundreds.
 
 ### Upgrading from the v1–v3 shared app
 

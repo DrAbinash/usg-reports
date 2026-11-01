@@ -283,6 +283,55 @@ describe("linkOrdersByDemography — the only thing it writes", () => {
     expect(await db.usgCareOrder.count({ where: { patientName: "Sital Jaiswal" } })).toBe(1);
   });
 
+  test("a signed report is never handed a guessed study", async () => {
+    // importCareRows freezes REPORTED rows, so a wrong UID here could never be
+    // corrected by CARE's real one — the link pass must not put itself there.
+    await db.usgCareOrder.create({
+      data: {
+        clinicId: "default",
+        careWorklistId: "4840",
+        patientName: "Test Patient One",
+        patientAge: "44",
+        patientSex: "F",
+        billNumber: "B-4840",
+        modality: "USG",
+        studyDate: new Date(`${DAY}T10:00:00+05:30`),
+        studyInstanceUid: null,
+        status: "REPORTED",
+      },
+    });
+    const stats = await linkOrdersByDemography(
+      [study({ studyInstanceUid: "UID-SIGNED", patientName: "Test Patient One" })],
+      "default",
+    );
+    expect(stats.linked).toBe(0);
+    expect(await db.usgCareOrder.count({ where: { patientName: "Test Patient One", studyInstanceUid: null } })).toBe(1);
+  });
+
+  test("a row the doctor cleared stays cleared", async () => {
+    await db.usgCareOrder.create({
+      data: {
+        clinicId: "default",
+        careWorklistId: "4841",
+        patientName: "Test Patient Two",
+        patientAge: "29",
+        patientSex: "F",
+        billNumber: "B-4841",
+        modality: "USG",
+        studyDate: new Date(`${DAY}T10:00:00+05:30`),
+        studyInstanceUid: null,
+        uidLinkedBy: "unlinked by doctor",
+        status: "PENDING",
+      },
+    });
+    const stats = await linkOrdersByDemography(
+      [study({ studyInstanceUid: "UID-AGAIN", patientName: "Test Patient Two" })],
+      "default",
+    );
+    expect(stats.linked).toBe(0);
+    expect(await db.usgCareOrder.count({ where: { patientName: "Test Patient Two", studyInstanceUid: null } })).toBe(1);
+  });
+
   test("an ambiguous pair writes nothing at all", async () => {
     await db.usgCareOrder.create({
       data: {

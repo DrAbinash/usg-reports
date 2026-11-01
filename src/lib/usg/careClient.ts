@@ -158,12 +158,15 @@ export type FetchWorklistOpts = {
 /**
  * Largest page the ERP will serve (its WORKLIST_INCREMENTAL_MAX_LIMIT).
  *
- * A backfill asks for `limit=` rather than for nothing. The ERP's
- * no-parameter path is a hard 500-row cap ordered by `updated_at DESC` with
- * no truncation flag — so a rebuild silently imports the 500 most recently
- * touched orders and the rest of the backlog never arrives. Sending `limit=`
- * selects the ERP's paginated path instead (`ORDER BY id ASC` plus a keyset
- * cursor), which the loop below already follows until the backlog runs out.
+ * Asking for it by name matters twice. The ERP's truly-no-parameter path is the
+ * legacy hard cap — 500 rows, `updated_at DESC`, no cursor, no truncation flag —
+ * so a rebuild that sends nothing at all imports the 500 most recently touched
+ * orders and the rest of the backlog never arrives. Sending `limit=` (or `since=`,
+ * which also selects the incremental envelope) puts the ERP's keyset paging on
+ * instead: `ORDER BY id ASC` with a cursor, which the loop below follows until
+ * the backlog runs out. A `since`-only pull otherwise pages at the ERP's default
+ * 200, so the two-week window would cost eleven sequential round trips per cycle
+ * where five would do.
  */
 const BACKFILL_PAGE_SIZE = 500;
 
@@ -171,7 +174,7 @@ const BACKFILL_PAGE_SIZE = 500;
 export function worklistQueryPath(opts?: FetchWorklistOpts): string {
   let path = "/api/internal/reporting-studio/worklist?status=all";
   if (opts?.full) return `${path}&limit=${BACKFILL_PAGE_SIZE}`;
-  if (opts?.since) path += `&since=${encodeURIComponent(opts.since)}`;
+  if (opts?.since) path += `&since=${encodeURIComponent(opts.since)}&limit=${BACKFILL_PAGE_SIZE}`;
   return path;
 }
 

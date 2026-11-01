@@ -66,6 +66,95 @@ export type OrthancUsStudyRow = {
   studyTime: string | null;
 };
 
+/**
+ * Does this StudyInstanceUID exist in the PACS, and what does its header say?
+ *
+ * `/tools/lookup` is the only Orthanc endpoint that takes a DICOM UID — the REST
+ * path `/studies/<StudyInstanceUID>` is 404 by construction (that path wants an
+ * Orthanc internal id), which is why an older "is it returned?" check always
+ * answered no. Returns null for "not in the PACS" and for "Orthanc unreachable"
+ * separately, so a caller can never read an outage as an absence.
+ */
+/**
+ * Turn a DICOM StudyInstanceUID into the Orthanc internal id that its REST paths
+ * actually want. `/tools/lookup` is the only endpoint that accepts a UID, so
+ * every `/studies/<id>/…` call has to come through here first — putting a UID
+ * straight into that path is a guaranteed 404 that reads as "not in the PACS".
+ * `found: false, orthancOk: true` is an absence; `orthancOk: false` is an outage,
+ * and the two must never be reported the same way.
+ */
+export async function orthancIdForStudy(
+  studyUid: string,
+): Promise<{ orthancOk: true; orthancId: string | null } | { orthancOk: false; error: string }> {
+  const uid = (studyUid ?? "").trim();
+  if (!/^[0-9.]+$/.test(uid)) return { orthancOk: true, orthancId: null };
+  const s = await getSettings();
+  if (!s.orthancUrl) return { orthancOk: false, error: "Orthanc not configured (Settings → Integrations)" };
+  const base = s.orthancUrl.trim().replace(/\/+$/, "");
+  const headers: Record<string, string> = { "Content-Type": "text/plain" };
+  if (s.orthancUsername) {
+    headers.Authorization = `Basic ${Buffer.from(`${s.orthancUsername}:${s.orthancPassword ?? ""}`).toString("base64")}`;
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(`${base}/tools/lookup`, {
+      method: "POST",
+      headers,
+      body: uid,
+      signal: controller.signal,
+      cache: "no-store",
+    });
+    if (!res.ok) return { orthancOk: false, error: `Orthanc responded ${res.status}` };
+    const ids: unknown = await res.json();
+    const orthancId = Array.isArray(ids) ? String(ids[0] ?? "").split("/")[0] : "";
+    return { orthancOk: true, orthancId: orthancId || null };
+  } catch {
+    return { orthancOk: false, error: "Orthanc unreachable" };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** The headers Orthanc REST wants, or null when it is not configured. */
+export async function orthancHeaders(): Promise<{ base: string; headers: Record<string, string> } | null> {
+  const s = await getSettings();
+  if (!s.orthancUrl) return null;
+  const headers: Record<string, string> = {};
+  if (s.orthancUsername) {
+    headers.Authorization = `Basic ${Buffer.from(`${s.orthancUsername}:${s.orthancPassword ?? ""}`).toString("base64")}`;
+  }
+  return { base: s.orthancUrl.trim().replace(/\/+$/, ""), headers };
+}
+
+/**
+ * Does this StudyInstanceUID exist in the PACS, and what does its header say?
+ *
+ * Returns null-style answers separately for "not in the PACS" and "Orthanc
+ * unreachable", so a caller can never read an outage as an absence.
+ */
+export async function lookupStudyByUid(
+  studyUid: string,
+): Promise<{ found: true; tags: Record<string, string> } | { found: false; orthancOk: boolean; error?: string }> {
+  const id = await orthancIdForStudy(studyUid);
+  if (!id.orthancOk) return { found: false, orthancOk: false, error: id.error };
+  if (!id.orthancId) return { found: false, orthancOk: true };
+  const conf = await orthancHeaders();
+  if (!conf) return { found: false, orthancOk: false, error: "Orthanc not configured" };
+  try {
+    const study = await fetch(`${conf.base}/studies/${id.orthancId}`, {
+      headers: conf.headers,
+      cache: "no-store",
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    }).then((r) => r.json());
+    const tags: Record<string, string> = {};
+    for (const [k, v] of Object.entries(study?.MainDicomTags ?? {})) tags[k] = String(v ?? "");
+    return { found: true, tags };
+  } catch {
+    return { found: false, orthancOk: false, error: "Orthanc unreachable" };
+  }
+}
+
 export function testOrthanc() {
   return orthancFetch<{ Name?: string; Version?: string; DatabaseVersion?: number; StorageAreaName?: string }>("/system");
 }

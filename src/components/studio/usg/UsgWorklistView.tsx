@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { SectionLabel } from "../bits";
 import { UsgPacsQueue } from "./UsgPacsQueue";
 import { UsgFormFDialog, type FormFDefaults, type FormFOrderLite } from "./UsgFormFDialog";
+import { UsgStudyLinkDialog } from "./UsgStudyLinkDialog";
 import { Search, RefreshCw, ChevronRight, Hourglass, CheckCircle2, EyeOff, ScanLine, FileCheck2, CloudOff, Link2, CalendarDays, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -130,13 +131,14 @@ function SexChip({ sex }: { sex: string }) {
 }
 
 function OrderRow({
-  order, onClick, action, focused, onPrefetch,
+  order, onClick, action, focused, onPrefetch, onRelink,
 }: {
   order: Order;
   onClick?: () => void;
   action?: React.ReactNode;
   focused?: boolean;
   onPrefetch?: () => void;
+  onRelink?: (order: Order) => void;
 }) {
   return (
     <div
@@ -184,9 +186,15 @@ function OrderRow({
               // The images on this report were INFERRED, not named: no accession
               // and no Study UID joined them, so patient name + scanning day did.
               // Said on the row because it is the weakest join here and he is the
-              // one who signs the report — the study picker replaces it in a click.
-              <span
-                className="hidden items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-200 md:flex"
+              // one who signs the report — and it is a button, because a confession
+              // you cannot act on is just a warning label.
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRelink?.(order);
+                }}
+                className="hidden items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-200 hover:bg-amber-100 md:flex"
                 title={`Images linked by "${order.uidLinkedBy}" — the USG machine sends no accession, so this study was matched by the patient's name${
                   order.uidLinkedBy.includes("nearest")
                     ? " and the nearest scanning time"
@@ -195,10 +203,10 @@ function OrderRow({
                       : order.uidLinkedBy.includes("±1")
                         ? ", a day either side of the bill"
                         : ""
-                }. Open the study picker to change it.`}
+                }. Click to choose a different study, or to clear this one.`}
               >
-                <ScanLine className="h-3 w-3" /> Images by name
-              </span>
+                <ScanLine className="h-3 w-3" /> Images by name — change
+              </button>
             ) : (
               <span className="hidden items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-700 ring-1 ring-violet-200 md:flex" title={order.uidLinkedBy === "accession" ? "Images linked by accession number" : "Images linked by the Study UID CARE sent"}>
                 <ScanLine className="h-3 w-3" /> PACS
@@ -265,6 +273,8 @@ export function UsgWorklistView() {
   const [formFOpen, setFormFOpen] = useState(false);
   const [formFOrder, setFormFOrder] = useState<Order | null>(null);
   const [defaults, setDefaults] = useState<FormFDefaults | null>(null);
+  /** The row whose image link the doctor is re-choosing (the chip is a button). */
+  const [relinkOrder, setRelinkOrder] = useState<Order | null>(null);
 
   // v6.14: date range filter state — today default (matches Studio queue picker)
   type DatePreset = "all" | "today" | "yesterday" | "week" | "custom";
@@ -760,6 +770,7 @@ export function UsgWorklistView() {
               <OrderRow
                 key={o.id}
                 order={o}
+                onRelink={setRelinkOrder}
                 focused={idx === focusIdx}
                 onClick={() => {
                   setFocusIdx(idx);
@@ -844,6 +855,7 @@ export function UsgWorklistView() {
               <OrderRow
                 key={o.id}
                 order={o}
+                onRelink={setRelinkOrder}
                 onClick={() => o.reportId && openComposer(o.reportId)}
                 action={
                   o.careSyncedAt ? null : (
@@ -869,6 +881,7 @@ export function UsgWorklistView() {
               <OrderRow
                 key={o.id}
                 order={o}
+                onRelink={setRelinkOrder}
                 action={
                   <Button
                     size="sm"
@@ -886,6 +899,19 @@ export function UsgWorklistView() {
             ))}
           </div>
         </section>
+      ) : null}
+
+      {relinkOrder ? (
+        <UsgStudyLinkDialog
+          open
+          onClose={() => setRelinkOrder(null)}
+          orderId={relinkOrder.id}
+          patientName={relinkOrder.patientName}
+          currentUid={relinkOrder.studyInstanceUid}
+          onLinked={() => {
+            void queryClient.invalidateQueries({ queryKey: ["usg", "worklist"] });
+          }}
+        />
       ) : null}
 
       {/* Form F dialog */}

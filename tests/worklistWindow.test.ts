@@ -83,7 +83,7 @@ describe("worklist pull window", () => {
     expect(path).toContain(
       `since=${encodeURIComponent(new Date(NOW - SYNC_LOOKBACK_DAYS * DAY).toISOString())}`,
     );
-    expect(path).not.toContain("limit=");
+    expect(path).toContain("limit=500");
   });
 
   it("bounds the Orthanc sweep to the same order of magnitude as the CARE window", () => {
@@ -115,10 +115,13 @@ describe("worklist query path", () => {
     );
   });
 
-  it("sends only the window on an ordinary pull", () => {
+  it("sends the window and a page size on an ordinary pull", () => {
     const path = worklistQueryPath({ since: "2026-10-02T00:00:00.000Z" });
     expect(path).toContain("since=2026-10-02T00%3A00%3A00.000Z");
-    expect(path).not.toContain("limit=");
+    // The ERP's incremental envelope is chosen by `since` alone, but it then
+    // pages at its default 200: a 14-day window would be ~11 sequential requests
+    // a cycle. Asking for its maximum makes the same read ~5.
+    expect(path).toContain("limit=500");
   });
 
   it("sends neither when there is nothing to constrain", () => {

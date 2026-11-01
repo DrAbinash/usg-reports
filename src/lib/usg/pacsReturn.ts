@@ -21,6 +21,7 @@
 
 import { getSettings } from "@/lib/settings";
 import type { OrthancResult } from "./orthancClient";
+import { orthancHeaders, orthancIdForStudy } from "./orthancClient";
 import type { UsgResolved } from "./types";
 
 export type PacsReturnPayload = {
@@ -266,24 +267,25 @@ export async function uploadToOrthanc(
  */
 export async function checkPacsStatus(
   studyInstanceUid: string,
-): Promise<{ returned: boolean; instanceId?: string }> {
-  const s = await getSettings();
-  if (!s.orthancUrl) return { returned: false };
-
-  const base = s.orthancUrl.trim().replace(/\/+$/, "");
-  const headers: Record<string, string> = {};
-  if (s.orthancUsername) {
-    headers.Authorization = `Basic ${Buffer.from(`${s.orthancUsername}:${s.orthancPassword ?? ""}`).toString("base64")}`;
-  }
+): Promise<{ returned: boolean; instanceId?: string; pacsOk: boolean }> {
+  // The study is looked up by UID through /tools/lookup, then its instances are
+  // read with the internal id that path returns. Asking /studies/<UID>/instances
+  // directly was always a 404 — that route does not speak DICOM UIDs — so this
+  // reported "not returned" forever, outage or not.
+  const look = await orthancIdForStudy(studyInstanceUid);
+  if (!look.orthancOk) return { returned: false, pacsOk: false };
+  if (!look.orthancId) return { returned: false, pacsOk: true };
+  const conf = await orthancHeaders();
+  if (!conf) return { returned: false, pacsOk: false };
 
   try {
-    // Look for SR instances in the study
-    const res = await fetch(
-      `${base}/studies/${studyInstanceUid}/instances`,
-      { headers, cache: "no-store", signal: AbortSignal.timeout(10_000) },
-    );
+    const res = await fetch(`${conf.base}/studies/${look.orthancId}/instances`, {
+      headers: conf.headers,
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    });
 
-    if (!res.ok) return { returned: false };
+    if (!res.ok) return { returned: false, pacsOk: false };
 
     const instances = await res.json() as Array<{
       ID: string;
@@ -298,11 +300,11 @@ export async function checkPacsStatus(
     );
 
     if (srInstance) {
-      return { returned: true, instanceId: srInstance.ID };
+      return { returned: true, instanceId: srInstance.ID, pacsOk: true };
     }
 
-    return { returned: false };
+    return { returned: false, pacsOk: true };
   } catch {
-    return { returned: false };
+    return { returned: false, pacsOk: false };
   }
 }

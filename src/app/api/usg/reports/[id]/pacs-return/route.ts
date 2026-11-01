@@ -168,5 +168,14 @@ export async function GET(
   return NextResponse.json({
     returned: status.returned,
     instanceId: status.instanceId,
+    // "Not returned" and "could not be asked" are different sentences. Telling
+    // the doctor the SR is missing when the PACS was unreachable sent him to look
+    // for a bug that was not there.
+    pacsOk: status.pacsOk,
+    reason: status.pacsOk
+      ? status.returned
+        ? undefined
+        : "No report instance is in the PACS for this study"
+      : "The PACS could not be asked just now",
   });
 }

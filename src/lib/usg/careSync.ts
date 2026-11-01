@@ -465,6 +465,19 @@ function nameKey(name: string | null | undefined): string | null {
   return tokens.length ? tokens.join(" ") : null;
 }
 
+/**
+ * Do these two names, from two different systems, describe one patient?
+ *
+ * Token for token after sorting and stripping DICOM punctuation, so CARE's
+ * "Parween Alfi" and the scanner's "ALFI^parween" agree while "Rani Devi" and
+ * "Rani Kumari" do not. This decides a HAND-PICKED link as well as a guessed
+ * one: choosing a study yourself is not a licence to choose another patient's.
+ */
+export function samePatientName(a: string | null | undefined, b: string | null | undefined): boolean {
+  const key = nameKey(a);
+  return !!key && key === nameKey(b);
+}
+
 /** `[day gap, doctor agreement, minutes apart]` — lower is the stronger claim. */
 type CandidateScore = [number, number, number];
 
@@ -1160,10 +1173,20 @@ export async function linkOrdersByDemography(
   };
   if (!studies.length) return stats;
 
-  const unlinked = await db.usgCareOrder.findMany({
-    where: { clinicId, studyInstanceUid: null },
-    select: { id: true, patientName: true, studyDate: true, referringDoctor: true },
+  const rows = await db.usgCareOrder.findMany({
+    where: {
+      clinicId,
+      studyInstanceUid: null,
+      // A signed report is no place to guess. importCareRows freezes REPORTED
+      // rows, so once a wrong UID lands there CARE's real one can never arrive —
+      // the freeze that protects the doctor's text would be protecting my error.
+      status: { notIn: ["REPORTED", "IGNORED"] },
+    },
+    select: { id: true, patientName: true, studyDate: true, referringDoctor: true, uidLinkedBy: true },
   });
+  // Filtered here, not in the WHERE, because SQL compares NULL with `not` and a
+  // plain `{ not: "…" }` would drop every row that has never been linked.
+  const unlinked = rows.filter((r) => r.uidLinkedBy !== "unlinked by doctor");
   if (!unlinked.length) return stats;
 
   const plan = planDemographicLinks(unlinked, studies);

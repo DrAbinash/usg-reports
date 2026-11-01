@@ -15,7 +15,8 @@
  * days while reads and login kept working). The checks below read the running
  * container's own client and database, so they say what is true right now.
  */
-import { statSync } from "node:fs";
+import { statSync, statfsSync } from "node:fs";
+import { dirname } from "node:path";
 
 import { PrismaClient } from "@prisma/client";
 
@@ -72,6 +73,26 @@ const shm = fileSize(`${DB_PATH}-shm`);
 if (main === null) console.log("size         COULD NOT READ — wrong path or the file is not here");
 else console.log(`size         db=${kb(main)} wal=${wal === null ? "none" : kb(wal)} shm=${shm === null ? "none" : kb(shm)}`);
 console.log(`             (a -wal in the tens of MB means checkpoints are not completing: reads queue behind it)`);
+let lowSpaceVerdict = null;
+{
+  // The volume, not the file. A clinic's whole database plus fourteen nightly
+  // copies of it — each re-embedding every image and the login background —
+  // grows into whatever space is left, and the failure is a write rejected
+  // mid-report, not a warning anybody read in time.
+  const dir = dirname(DB_PATH);
+  try {
+    const st = statfsSync(dir);
+    const free = Number(st.bsize) * Number(st.bavail);
+    const gb = (n) => `${(n / 1024 / 1024 / 1024).toFixed(1)} GB`;
+    console.log(`free space   ${gb(free)} on the volume holding ${dir}`);
+    if (free < 1024 * 1024 * 1024) {
+      console.log("  URGENT: under 1 GB free — the nightly backup refuses to write here, and so will the next report save.");
+      lowSpaceVerdict = `the volume holding ${dir} has ${gb(free)} free; clear space or move USG_BACKUP_DIR off this disk`;
+    }
+  } catch {
+    console.log("free space   could not be read on this platform");
+  }
+}
 
 console.log("\n--- storage layer: how fast is the disk at all? ---");
 // The very first query opens the pool, so it measures Prisma starting up rather
@@ -132,6 +153,8 @@ const cols = [
   ["UsgReport.printSettingsJson (frozen print settings)", () => db.usgReport.findFirst({ select: { id: true, printSettingsJson: true } })],
   ["UsgReport.shareRevokedAt (share withdrawal)", () => db.usgReport.findFirst({ select: { id: true, shareRevokedAt: true } })],
   ["UsgCareOrder.careWorklistId (bill-desk identity)", () => db.usgCareOrder.findFirst({ select: { id: true, careWorklistId: true } })],
+  ["UsgCareOrder.uidLinkedBy (how each scan was joined — the chip's source)", () => db.usgCareOrder.findFirst({ select: { id: true, uidLinkedBy: true } })],
+  ["UsgCriticalCommunication (the log that proves a finding was phoned)", () => db.usgCriticalCommunication.findFirst({ select: { id: true } })],
   ["UsgSyncState (sync state row, added with the flood fix)", () => db.usgSyncState.findFirst({ select: { id: true, lastSyncAt: true } })],
 ];
 for (const [label, fn] of cols) {
@@ -156,7 +179,11 @@ if (sync.error) {
   // since v6.22 every cycle re-reads the same window of days, so a stalled
   // instant cannot hide rows. cursorHoldCount is retired and reads 0.
   console.log("  (lastSyncAt is the clock of the last completed cycle, not a cursor — nothing fetches relative to it)");
-  if (st.lastError) console.log(`  lastError       ${String(st.lastError).slice(0, 160)}`);
+  if (st.lastError) console.log(`  lastError       ${reason(st.lastError)}`);
+  // Rows written before the sync started summarising can still hold a raw
+  // Prisma message, and that message reproduces the row it rejected — patient
+  // name included. `reason` returns one line, so a stored dump never reaches
+  // the output this tool exists to make shareable.
   if (st.lastSyncAt && Date.now() - new Date(st.lastSyncAt).getTime() > 30 * MIN) {
     console.log("  WARN: nothing has synced for over 30 minutes.");
   }
@@ -249,6 +276,7 @@ else {
 
 console.log("\n--- what this means ---");
 const verdicts = [];
+if (lowSpaceVerdict) verdicts.push(lowSpaceVerdict);
 if (main === null) verdicts.push("the database file could not be read — check the DATABASE_URL/volume mount");
 if (rawMs > 30) verdicts.push(`SELECT 1 medians ${rawMs}ms — the storage itself is slow or contended; this is not application code`);
 if (wal && wal > 8 * 1024 * 1024) verdicts.push(`the -wal is ${kb(wal)} — checkpoint starvation makes every reader wait`);

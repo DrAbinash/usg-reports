@@ -35,6 +35,21 @@ import { audit } from "@/lib/usg/audit";
 
 export type WorklistSyncOutcome = Record<string, unknown>;
 
+/**
+ * The reason an operation failed, without the echo.
+ *
+ * A Prisma validation error reproduces the object it rejected — so its message
+ * contains the patient name of the row that failed. `lastError` is shown in the
+ * worklist banner and printed by the read-only health probe, whose output is
+ * meant to be pasted into a bug report, so the reason is kept and the dump is
+ * dropped: Prisma puts the summary on the last line.
+ */
+export function errorReason(e: unknown): string {
+  const message = e instanceof Error ? e.message : typeof e === "string" ? e : "";
+  const lines = message.split("\n").map((l) => l.trim()).filter(Boolean);
+  return (lines.at(-1) ?? "unknown").slice(0, 160);
+}
+
 let inFlight: Promise<WorklistSyncOutcome> | null = null;
 
 export function runWorklistSync(opts: { clinicId: string; fullRequested: boolean }): Promise<WorklistSyncOutcome> {
@@ -91,7 +106,7 @@ async function run(clinicId: string, fullRequested: boolean): Promise<WorklistSy
       try {
         importStats = await importCareRows(r.data, clinicId);
       } catch (e: any) {
-        lastError = `import failed: ${e?.message ?? String(e)}`;
+        lastError = `import failed: ${errorReason(e)}`;
         console.error('[sync] importCareRows threw:', e);
       }
       if (importStats.errors > 0) {
@@ -131,7 +146,7 @@ async function run(clinicId: string, fullRequested: boolean): Promise<WorklistSy
       try {
         attachStats = await attachOrthancStudies(orthancRowsToStudies(us.data), clinicId);
       } catch (e: any) {
-        lastError = lastError ?? `attach failed: ${e?.message ?? String(e)}`;
+        lastError = lastError ?? `attach failed: ${errorReason(e)}`;
         console.error('[sync] attachOrthancStudies threw:', e);
       }
       // 2b. Whatever the identifiers could not reach, demographics can: the
@@ -155,7 +170,7 @@ async function run(clinicId: string, fullRequested: boolean): Promise<WorklistSy
           console.warn("[sync] demographic link failures:", demoStats.reasons.slice(0, 3).join(" | "));
         }
       } catch (e: any) {
-        lastError = lastError ?? `demographic link failed: ${e?.message ?? String(e)}`;
+        lastError = lastError ?? `demographic link failed: ${errorReason(e)}`;
         console.error("[sync] linkOrdersByDemography threw:", e);
       }
       try {
@@ -178,7 +193,7 @@ async function run(clinicId: string, fullRequested: boolean): Promise<WorklistSy
           );
         }
       } catch (e: any) {
-        lastError = lastError ?? `safety-net import failed: ${e?.message ?? String(e)}`;
+        lastError = lastError ?? `safety-net import failed: ${errorReason(e)}`;
         console.error("[sync] importOrthancOrphans threw:", e);
       }
     } else {

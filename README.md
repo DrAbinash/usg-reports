@@ -142,7 +142,7 @@ measurements flow in from Orthanc.
 > The ERP side needs the one-line `REPORTING_STUDIO_API_KEY=` in its
 > `.env`/compose (same key as Settings → Integrations).
 
-### Three operational answers you will want eventually
+### Four operational answers you will want eventually
 
 **What is in a backup.** Settings → Data writes `data/backups/usg-auto-YYYY-MM-DD.json`
 once a day after 02:00 (newest 14 kept, and it now refuses when the volume has
@@ -184,6 +184,25 @@ handle /api/auth/* {
 Also worth setting in compose while you are in it: `STUDIO_INTERNAL_SECRET`
 (`openssl rand -hex 32`). Without it the studio mints its own into `data/` —
 which is fine — but a key you own survives a rebuilt container and a moved disk.
+
+**What to run when it is slow, or the worklist stopped filling.** One read-only
+command, safe to run while the clinic is reporting:
+
+```
+docker exec -w /app usg-reporting-studio node scripts/usg-sync-health.mjs
+```
+
+It prints the database and `-wal` sizes, free space on the volume that holds
+them, `journal_mode` (delete = the sync's writes lock the doctors' reads out),
+how long three plain `SELECT 1`s took, whether the running image's Prisma client
+knows every column the code asks for, the sync state row, the worklist counts
+split by how each scan was joined to its bill, and the last few sync audit
+reasons. Then it states what the combination means. It selects no patient name
+anywhere, so the whole output can be pasted into a bug report.
+
+Run it from the image, not from the NAS git folder: a rebuilt image can carry a
+generated client that lags its own schema, and that failure rejected every
+bill-desk write for four days while reads and login kept working.
 
 ### Upgrading from the v1–v3 shared app
 

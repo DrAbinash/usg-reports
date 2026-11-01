@@ -41,6 +41,7 @@ import { type BiradsCategory } from "@/lib/usg/birads";
 import { ComposerToolbar, ComposerHotkeys, pullFromMachine as pullFromMachineFn } from "./composer/ComposerToolbar";
 import { OrganCard, saveNormalOverride, resetNormalOverride } from "./composer/OrganCard";
 import { FindingSearch } from "./composer/FindingSearch";
+import { createUndoStack, recordChange, redo, undo } from "@/lib/usg/undoHistory";
 import { ImpressionZone, type PriorFinalizedRow } from "./composer/ImpressionZone";
 import {
   PreviewZone,
@@ -204,11 +205,52 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     [studyKey, normalOverrides],
   );
   const [technique, setTechnique] = useState(report?.technique ?? study.technique);
-  const [state, setState] = useState<UsgComposerState>(() => {
+  const [state, setRawState] = useState<UsgComposerState>(() => {
     if (initial) return initial;
     if (!studyKey0) return { studyKey: "", organs: [], impressionOverride: null };
     return freshComposerState(studyKey0, normalOverrides);
   });
+
+  /**
+   * Ctrl+Z, for real.
+   *
+   * Every write to the composer state goes through this `setState`, which is why
+   * one wrapper is enough: the stack sees chip toggles, macros, copy-forward,
+   * measurement edits and the study switch alike. The state is mirrored into a
+   * ref so a burst of writes in one handler each sees the previous one, instead
+   * of all of them reading the state React has not committed yet.
+   */
+  const stateRef = useRef<UsgComposerState>(state);
+  const undoStack = useRef(createUndoStack<UsgComposerState>());
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  const setState = useCallback((next: React.SetStateAction<UsgComposerState>) => {
+    const from = stateRef.current;
+    const to =
+      typeof next === "function" ? (next as (prev: UsgComposerState) => UsgComposerState)(from) : next;
+    if (to === from) return;
+    recordChange(undoStack.current, from, to, Date.now());
+    stateRef.current = to;
+    setRawState(to);
+  }, []);
+
+  const undoChange = useCallback(() => {
+    const target = undo(undoStack.current, stateRef.current);
+    if (target === undefined) return false;
+    stateRef.current = target;
+    setRawState(target);
+    return true;
+  }, []);
+
+  const redoChange = useCallback(() => {
+    const target = redo(undoStack.current, stateRef.current);
+    if (target === undefined) return false;
+    stateRef.current = target;
+    setRawState(target);
+    return true;
+  }, []);
   const [scanDate, setScanDate] = useState(() => toScanDateInput(report?.scanDate ? new Date(report.scanDate) : null));
 
   useEffect(() => {
@@ -921,6 +963,8 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         study={study}
         state={state}
         setState={setState}
+        undo={undoChange}
+        redo={redoChange}
         pathologies={pathologies}
         focusedOrganIdx={focusedOrganIdx}
         setFocusedOrganIdx={setFocusedOrganIdx}

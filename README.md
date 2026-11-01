@@ -363,8 +363,11 @@ says out loud which finding it matched on. Pressing a bar under
 **Insights → Most frequent findings** opens exactly the reports behind that
 number.
 
-Drafts save themselves. Finalized reports are frozen snapshots —
-reprintable from the list even years later.
+Drafts save themselves. **Ctrl+Z** takes back the last change — a chip, a
+measurement, or a whole `N` normal sweep — and **Ctrl+Shift+Z** puts it back;
+while the caret is inside a text field Ctrl+Z stays the browser's own
+letter-by-letter undo, so the two never fight. Finalized reports are frozen
+snapshots — reprintable from the list even years later.
 
 ---
 

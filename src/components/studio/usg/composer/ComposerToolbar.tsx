@@ -281,6 +281,9 @@ export function ComposerHotkeys(props: {
   study: UsgStudyDef;
   state: UsgComposerState;
   setState: Dispatch<SetStateAction<UsgComposerState>>;
+  /** Ctrl+Z / Ctrl+Shift+Z over the whole report — see src/lib/usg/undoHistory.ts. */
+  undo: () => boolean;
+  redo: () => boolean;
   pathologies: UsgPathologyDef[];
   focusedOrganIdx: number;
   setFocusedOrganIdx: Dispatch<SetStateAction<number>>;
@@ -293,7 +296,7 @@ export function ComposerHotkeys(props: {
   busyRef: MutableRefObject<string>;
 }) {
   const {
-    isFinal, study, state, setState, pathologies, focusedOrganIdx, setFocusedOrganIdx,
+    isFinal, study, state, setState, undo, redo, pathologies, focusedOrganIdx, setFocusedOrganIdx,
     setQualityOpen, setPickerOpen, persistRef, printRefFn, finalizeFastRef, togglePathologyRef, busyRef,
   } = props;
 
@@ -376,6 +379,18 @@ export function ComposerHotkeys(props: {
       }
 
       if (!mod) return;
+      if (e.key.toLowerCase() === "z" && !e.altKey) {
+        // Inside a field the browser's own undo is the better one: it takes back
+        // letters, and the change reaches the stack as a normal edit. Everywhere
+        // else — on a chip, after a macro, after Space — the browser has nothing
+        // to undo and this does.
+        if (typing || isFinal) return;
+        e.preventDefault();
+        const back = e.shiftKey ? redo : undo;
+        if (back()) toast.success(e.shiftKey ? "Redone" : "Undone one change", { duration: 3_000 });
+        else toast.message(e.shiftKey ? "Nothing to redo" : "Nothing left to undo", { duration: 2_000 });
+        return;
+      }
       if (e.key.toLowerCase() === "k") {
         e.preventDefault();
         if (!isFinal) setPickerOpen(true);
@@ -394,7 +409,7 @@ export function ComposerHotkeys(props: {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [isFinal, study.organs, focusedOrganIdx, pathologies, setFocusedOrganIdx, setQualityOpen, setPickerOpen, persistRef, printRefFn, finalizeFastRef, togglePathologyRef, busyRef, state, setState, study]);
+  }, [isFinal, study.organs, focusedOrganIdx, pathologies, setFocusedOrganIdx, setQualityOpen, setPickerOpen, persistRef, printRefFn, finalizeFastRef, togglePathologyRef, busyRef, state, setState, undo, redo, study]);
   return null;
 }
 

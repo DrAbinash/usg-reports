@@ -24,7 +24,17 @@ jobs:
     - run: npm ci
     # Validate the schema before anything touches it: a typo in a column or a
     # relation currently fails later, inside `db push`, on the NAS at 07:50.
+    #
+    # `prisma validate` resolves env("DATABASE_URL") while it parses, and exits
+    # P1012 when it is not in the environment — it never connects, so this is a
+    # placeholder, not a secret. Without it the step has failed on every push
+    # for as long as this file has existed, and because a failed step skips the
+    # rest of the job, `prisma generate`, `tsc --noEmit`, `vitest run` and
+    # `npm run build` have never actually run in CI. The pipeline reported
+    # "failure" and looked like a check while only ever checking `npm ci`.
     - run: npx prisma validate
+      env:
+        DATABASE_URL: file:./ci-validate.db
     - run: npx prisma generate
     - run: npx tsc --noEmit
     - run: npx vitest run

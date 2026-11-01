@@ -352,6 +352,15 @@ Hospital / USG Studio) stores it inside the studio — no hosting needed.
 4. Follow-up visit? **↻ on the list row** → the full report returns as an
    editable draft with today's scan date
 
+**Searching the list** (`/`) asks the database, not the page you can see: a
+patient's name, the study, the referring doctor, the impression *and the body of
+the report*. Words that all fit one chip are read as a finding instead — typing
+`fatty gr ii` returns every report tagged grade-II fatty liver, including one
+whose printed wording was later rewritten to say something else, and the list
+says out loud which finding it matched on. Pressing a bar under
+**Insights → Most frequent findings** opens exactly the reports behind that
+number.
+
 Drafts save themselves. Finalized reports are frozen snapshots —
 reprintable from the list even years later.
 

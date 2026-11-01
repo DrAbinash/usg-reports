@@ -38,6 +38,10 @@ type StudioState = {
   view: View;
   /** Report id the USG Studio view should open in the composer on next mount. */
   openReportId: string | null;
+  /** A query the register should run when the USG Studio view next mounts.
+   *  Set by an Insights bar — a count there is an aggregate, and the doctor who
+   *  wants to know which reports make up that number had no way to ask. */
+  registerQuery: string | null;
   /** Report currently open in the composer (for queue jump highlight). */
   activeReportId: string | null;
   /** Active composer patient strip for the pink header (null = not composing). */
@@ -57,6 +61,8 @@ type StudioState = {
   setSettingsUnsaved: (n: number) => void;
   openComposer: (reportId: string) => void;
   clearOpenReport: () => void;
+  openRegisterSearch: (q: string) => void;
+  clearRegisterSearch: () => void;
   setActiveReportId: (id: string | null) => void;
   setComposerStrip: (s: ComposerStrip | null) => void;
   setComposerBack: (fn: (() => void) | null) => void;
@@ -93,6 +99,7 @@ export const useStudio = create<StudioState>((set, get) => {
     authenticated: false,
     view: "usg",
     openReportId: null,
+    registerQuery: null,
     activeReportId: null,
     composerStrip: null,
     composerBack: null,
@@ -111,6 +118,13 @@ export const useStudio = create<StudioState>((set, get) => {
       set({ openReportId: reportId, activeReportId: reportId, view: "usg" });
     },
     clearOpenReport: () => set({ openReportId: null }),
+    // Same handoff shape as openComposer: the target view owns its own search
+    // box, so this only states what to look for and lets the register pick it up.
+    openRegisterSearch: (q) => {
+      if (!leaveSettings("usg")) return;
+      set({ registerQuery: q, view: "usg" });
+    },
+    clearRegisterSearch: () => set({ registerQuery: null }),
     setActiveReportId: (activeReportId) => set({ activeReportId }),
     setComposerStrip: (composerStrip) => set({ composerStrip }),
     setComposerBack: (composerBack) => set({ composerBack }),

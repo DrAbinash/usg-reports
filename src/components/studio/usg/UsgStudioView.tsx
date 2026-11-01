@@ -76,10 +76,20 @@ async function fetchPatientsList() {
 /** Rows the register renders before the doctor asks for the rest. */
 const REGISTER_PAGE = 100;
 
-async function fetchReportsList() {
-  const res = await fetch("/api/usg/reports");
+/**
+ * The register's rows, and the finding keys the server matched them on.
+ * `q` empty is the plain list; with a `q` the search runs in SQL — see
+ * src/lib/usg/findingSearch.ts for what a query can mean there.
+ */
+async function fetchReportsList(q = "", status = ""): Promise<{ rows: UsgReportRow[]; matchedFindings: string[] }> {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  if (status) params.set("status", status);
+  params.set("limit", "500");
+  const res = await fetch(`/api/usg/reports?${params.toString()}`);
   if (!res.ok) throw new Error("reports");
-  return ((await res.json()).reports ?? []) as UsgReportRow[];
+  const body = await res.json();
+  return { rows: (body.reports ?? []) as UsgReportRow[], matchedFindings: (body.matchedFindings ?? []) as string[] };
 }
 
 async function fetchSettingsBundle(): Promise<SettingsBundle> {
@@ -186,10 +196,30 @@ export function UsgStudioView() {
     queryFn: fetchSettingsBundle,
     staleTime: 60_000,
   });
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"" | "DRAFT" | "FINALIZED">("");
+
+  // Ask the server once the doctor has stopped typing, not on every keystroke:
+  // a search box in a register of hundreds of reports is otherwise a query per
+  // letter, and the last letter is the only one he cares about.
+  const [settledQuery, setSettledQuery] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setSettledQuery(query.trim()), 300);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  // The register is searched by the server, not by the browser. Two different
+  // reasons: (a) only the database has the 500-row cap in front of it, so a
+  // client-side filter can only ever search the page it was given; and (b) the
+  // finding a report was tagged with is not prose — a search box that filters
+  // the visible rows in JavaScript cannot match a chip key at all, because the
+  // row it fetched was never selected by one.
   const reportsQ = useQuery({
-    queryKey: ["usg", "reports"],
-    queryFn: fetchReportsList,
-    staleTime: 30_000,
+    queryKey: settledQuery
+      ? ["usg", "reports", "search", settledQuery.toLowerCase(), statusFilter]
+      : ["usg", "reports", "list", statusFilter],
+    queryFn: () => fetchReportsList(settledQuery, statusFilter),
+    staleTime: 15_000,
   });
   const normalsQ = useQuery({
     queryKey: ["usg", "normals"],
@@ -202,8 +232,6 @@ export function UsgStudioView() {
     staleTime: 5 * 60_000,
   });
 
-  const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"" | "DRAFT" | "FINALIZED">("");
   const [editing, setEditing] = useState<UsgReportRow | null>(null);
   const [creating, setCreating] = useState(false);
   const [reprintHtml, setReprintHtml] = useState<string | null>(null);
@@ -232,7 +260,10 @@ export function UsgStudioView() {
   const pathologies = pathologiesQ.data ?? [];
   const settings = settingsQ.data?.settings ?? null;
   const formFDefaults = settingsQ.data?.formFDefaults ?? null;
-  const reports = reportsQ.data ?? [];
+  const reports = reportsQ.data?.rows ?? [];
+  const matchedFindings = reportsQ.data?.matchedFindings ?? [];
+  /** What the doctor sees for a chip key the server matched on. */
+  const findingLabel = (key: string) => pathologies.find((p) => p.key === key)?.label ?? key;
   const normalOverrides = normalsQ.data ?? {};
   const pathologyWording = pathologyWordingQ.data ?? { impressions: {}, advice: {} };
   const patients = patientsQ.data ?? [];
@@ -297,6 +328,24 @@ export function UsgStudioView() {
 
   const openReportId = useStudio((s) => s.openReportId);
   const clearOpenReport = useStudio((s) => s.clearOpenReport);
+
+  // An Insights bar counted the reports carrying one finding; pressing it asks
+  // the register to list them. Consumed immediately and forgotten, so typing in
+  // the box afterwards is never fighting a stale handover.
+  const registerQuery = useStudio((s) => s.registerQuery);
+  const clearRegisterSearch = useStudio((s) => s.clearRegisterSearch);
+  useEffect(() => {
+    if (registerQuery === null) return;
+    setMode("reports");
+    setQuery(registerQuery);
+    // He pressed a bar counted over finalized reports, so the tab has to agree
+    // with the number he just acted on — landing on "Drafts" would show zero and
+    // make the count look like a lie.
+    setStatusFilter("FINALIZED");
+    setSettledQuery(registerQuery);
+    clearRegisterSearch();
+  }, [registerQuery, clearRegisterSearch]);
+
   useEffect(() => {
     if (!openReportId || !composerReady) return;
     let alive = true;
@@ -493,20 +542,13 @@ export function UsgStudioView() {
   });
 
 
+  // The server has already chosen the rows for a query. Filtering them again in
+  // JavaScript would undo the point: a report found by the chip it carries does
+  // not contain the typed words anywhere in its text. Only the status tab is
+  // re-checked here, so a cached page cannot contradict the tab he is on.
   const filtered = useMemo(
-    () =>
-      reports.filter((r) => {
-        if (statusFilter && r.status !== statusFilter) return false;
-        if (!query.trim()) return true;
-        const q = query.trim().toLowerCase();
-        return (
-          r.patientName.toLowerCase().includes(q) ||
-          (r.studyTitle ?? "").toLowerCase().includes(q) ||
-          r.referredBy.toLowerCase().includes(q) ||
-          (r.impression ?? "").toLowerCase().includes(q)
-        );
-      }),
-    [reports, query, statusFilter],
+    () => (statusFilter ? reports.filter((r) => r.status === statusFilter) : reports),
+    [reports, statusFilter],
   );
 
   // A register row is a card with a dozen elements in it, and the list is every
@@ -816,7 +858,7 @@ export function UsgStudioView() {
                 ref={searchRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search patient, study, doctor, impression… ( / )"
+                placeholder="Search patient, study, doctor, impression, finding… ( / )"
                 className="h-9 border-border bg-panel pl-8 text-[13px]"
               />
             </div>
@@ -836,24 +878,77 @@ export function UsgStudioView() {
             ))}
           </div>
 
+          {/* A finding match has to be explained, not just shown. The rows under
+              this line may contain none of the words that were typed — they were
+              picked up by the chip they carry, and a report whose wording was
+              overridden says something else on the page while being exactly the
+              finding that was asked for. Without this the list looks broken. */}
+          {settledQuery && matchedFindings.length > 0 ? (
+            <div
+              role="status"
+              className="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-[11.5px] text-violet-900"
+            >
+              <Stethoscope className="h-3.5 w-3.5 shrink-0 text-violet-600" />
+              <span className="font-bold">Also matched by finding:</span>
+              {matchedFindings.map((k) => (
+                <span key={k} className="rounded bg-white px-1.5 py-0.5 font-semibold ring-1 ring-violet-200">
+                  {findingLabel(k)}
+                </span>
+              ))}
+              <span className="text-violet-700/90">
+                so reports tagged with it appear even when their text says something else.
+              </span>
+            </div>
+          ) : null}
+
           {/* Reports */}
           {filtered.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-border bg-card p-10 text-center">
-              <FileText className="mx-auto mb-2 h-8 w-8 text-faint" />
-              <p className="text-[13px] font-semibold text-muted-foreground">No USG reports yet</p>
-              <p className="mt-1 text-[12px] text-faint">
-                Start a whole-abdomen report — pick pathologies per organ, print on the clinic letterhead.
-              </p>
-              <Button
-                onClick={() => {
-                  setPrefill(null);
-                  setCreating(true);
-                }}
-                className="mt-4 h-9 bg-rose-600 hover:bg-rose-700"
-              >
-                <Plus className="mr-1.5 h-4 w-4" /> New Report
-              </Button>
-            </div>
+            settledQuery ? (
+              <div className="rounded-xl border border-dashed border-border bg-card p-10 text-center">
+                <Search className="mx-auto mb-2 h-8 w-8 text-faint" />
+                <p className="text-[13px] font-semibold text-muted-foreground">
+                  Nothing matches “{settledQuery}”
+                  {statusFilter
+                    ? ` among the ${statusFilter === "DRAFT" ? "drafts" : "finalized reports"}`
+                    : ""}
+                  .
+                </p>
+                <p className="mx-auto mt-1 max-w-md text-[12px] text-faint">
+                  Names, studies, referring doctors, impressions and the body of every report are searched
+                  {matchedFindings.length > 0
+                    ? `, and no report carries the finding${matchedFindings.length > 1 ? "s" : ""} ${matchedFindings
+                        .map((k) => findingLabel(k))
+                        .join(", ")}`
+                    : ""}
+                  . A finding needs all of its words to fit one chip — “fatty gr ii” is a finding, “fatty stone”
+                  is not. Try fewer words.
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={() => setQuery("")}
+                  className="mt-4 h-9 text-[12px]"
+                >
+                  Clear search
+                </Button>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-border bg-card p-10 text-center">
+                <FileText className="mx-auto mb-2 h-8 w-8 text-faint" />
+                <p className="text-[13px] font-semibold text-muted-foreground">No USG reports yet</p>
+                <p className="mt-1 text-[12px] text-faint">
+                  Start a whole-abdomen report — pick pathologies per organ, print on the clinic letterhead.
+                </p>
+                <Button
+                  onClick={() => {
+                    setPrefill(null);
+                    setCreating(true);
+                  }}
+                  className="mt-4 h-9 bg-rose-600 hover:bg-rose-700"
+                >
+                  <Plus className="mr-1.5 h-4 w-4" /> New Report
+                </Button>
+              </div>
+            )
           ) : (
             <div className="space-y-2">
               {visibleReports.map((r) => (

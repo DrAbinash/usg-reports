@@ -12,13 +12,15 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { BarChart3, Loader2, RefreshCw, Stethoscope, TrendingUp, UserRound, Activity } from "lucide-react";
+import { useStudio } from "@/lib/store";
+import { BarChart3, Loader2, RefreshCw, Search, Stethoscope, TrendingUp, UserRound, Activity } from "lucide-react";
 import type { UsgAnalytics } from "@/lib/usg/analytics";
 import { UsgDailySummary } from "./UsgDailySummary";
 
 export function UsgInsightsView() {
   const [analytics, setAnalytics] = useState<UsgAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
+  const openRegisterSearch = useStudio((s) => s.openRegisterSearch);
 
   const load = async () => {
     setLoading(true);
@@ -124,13 +126,27 @@ export function UsgInsightsView() {
         </Card>
 
         {/* Pathology frequency */}
-        <Card title="Most frequent findings" hint="quick-select pathology chips on finalized reports">
+        <Card
+          title="Most frequent findings"
+          hint="quick-select pathology chips on finalized reports — press a bar to open those reports"
+        >
           {analytics.topPathologies.length === 0 ? (
             <Empty text="All finalized reports were normal scans." />
           ) : (
             <div className="space-y-1.5">
               {analytics.topPathologies.slice(0, 10).map((p) => (
-                <Bar key={p.key} label={p.label} count={p.count} pct={(p.count / maxPath) * 100} tone="violet" />
+                <Bar
+                  key={p.key}
+                  label={p.label}
+                  count={p.count}
+                  pct={(p.count / maxPath) * 100}
+                  tone="violet"
+                  // Looked up by the chip key, not the label: the wording a chip
+                  // prints is editable, so the prose can no longer be trusted to
+                  // name the finding. The register's search matches the key.
+                  onPress={() => openRegisterSearch(p.key)}
+                  pressTitle={`Open the ${p.count} finalized report${p.count === 1 ? "" : "s"} tagged ${p.label}`}
+                />
               ))}
             </div>
           )}
@@ -183,9 +199,19 @@ function Card({ title, hint, children }: { title: string; hint: string; children
   );
 }
 
-function Bar({ label, count, pct, tone }: { label: string; count: number; pct: number; tone: "rose" | "violet" }) {
-  return (
-    <div className="flex items-center gap-2">
+function Bar({
+  label, count, pct, tone, onPress, pressTitle,
+}: {
+  label: string;
+  count: number;
+  pct: number;
+  tone: "rose" | "violet";
+  /** Set on the findings bars: a count with no way to see behind it is a number, not an answer. */
+  onPress?: () => void;
+  pressTitle?: string;
+}) {
+  const row = (
+    <>
       <span className="w-[46%] truncate text-right text-[11px] font-semibold text-foreground" title={label}>{label}</span>
       <div className="h-4 flex-1 overflow-hidden rounded-full bg-muted">
         <div
@@ -194,7 +220,20 @@ function Bar({ label, count, pct, tone }: { label: string; count: number; pct: n
         />
       </div>
       <span className="w-6 text-[11px] font-bold text-muted-foreground">{count}</span>
-    </div>
+    </>
+  );
+  if (!onPress) return <div className="flex items-center gap-2">{row}</div>;
+  return (
+    <button
+      type="button"
+      onClick={onPress}
+      title={pressTitle}
+      aria-label={pressTitle ?? label}
+      className="group flex w-full items-center gap-2 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+    >
+      {row}
+      <Search className="h-3 w-3 shrink-0 text-violet-500 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+    </button>
   );
 }
 

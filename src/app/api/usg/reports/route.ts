@@ -3,7 +3,8 @@ import { requireSession, getActiveClinicId } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getStudy } from "@/lib/usg/studies";
 import { normaliseState } from "@/lib/usg/composer";
-import { resolveColumns } from "@/lib/usg/server";
+import { resolveColumns, loadAllPathologies } from "@/lib/usg/server";
+import { exactKeyOf, findingKeysForQuery, findingStateTokens } from "@/lib/usg/findingSearch";
 import { parseScanDate } from "@/lib/usg/dates";
 import { linkPatient } from "@/lib/usg/patients";
 import { audit } from "@/lib/usg/audit";
@@ -59,6 +60,9 @@ const LIST_COLUMNS = [
   "updatedAt",
 ];
 
+/** The columns a typed query is matched against, words first. */
+const TEXT_SEARCH_COLUMNS = ["patientName", "studyTitle", "referredBy", "impression", "findings"];
+
 /** The two frozen-document columns no list row ever carries. */
 const LIST_OMIT = {
   reportHtml: true,
@@ -87,34 +91,39 @@ export async function GET(req: Request) {
   if (q) {
     // Push the search into SQL so we only fetch rows that match — not the
     // prior "fetch 500 + include:patient + filter in JS" path. SQLite LIKE
-    // is case-insensitive for ASCII by default. The search fields
-    // (patientName, studyTitle, referredBy, impression) are denormalized
-    // onto UsgReport itself — no JOIN, no `include: { patient: true }`.
+    // is case-insensitive for ASCII by default.
+    //
+    // Two kinds of match, because a doctor asks two kinds of question:
+    //   - the words, over name / study / referrer / impression AND `findings`,
+    //     which is the body of the report and used to be unsearchable;
+    //   - the finding itself, the chip key inside `stateJson`. The prose a chip
+    //     prints is editable (normal overrides, per-clinic wording, custom
+    //     findings), so searching words alone can miss the very report tagged
+    //     with what he is looking for; the key is the stable fact. See
+    //     src/lib/usg/findingSearch.ts for why that is a quoted-substring test
+    //     and not json_each().
     // v6.10 — scoped by clinicId so a multi-clinic install never leaks
     // cross-clinic patient names in search.
     const token = `%${escapeLike(q)}%`;
+    const catalog = await loadAllPathologies();
+    // A key typed — or linked in from an Insights bar — means that key and
+    // nothing else. Left to the word search it would widen, because the longer
+    // key `liver-fatty-g1-nosize` contains every word of `liver-fatty-g1`, and
+    // the count he pressed was for one chip, not two.
+    const exact = exactKeyOf(q, catalog);
+    const keys = exact ? [exact] : findingKeysForQuery(q, catalog);
     const cols = Prisma.raw(LIST_COLUMNS.join(", "));
+    const parts = TEXT_SEARCH_COLUMNS.map((c) => Prisma.sql`${Prisma.raw(c)} LIKE ${token} ESCAPE '\\'`);
+    for (const stateToken of findingStateTokens(keys)) {
+      parts.push(Prisma.sql`stateJson LIKE ${`%${escapeLike(stateToken)}%`} ESCAPE '\\'`);
+    }
+    const where = Prisma.sql`clinicId = ${clinicId} AND (${Prisma.join(parts, " OR ")})${
+      statusFilter ? Prisma.sql` AND status = ${statusFilter}` : Prisma.empty
+    }`;
     const rows = await db.$queryRaw<Array<Record<string, unknown>>>(
-      statusFilter
-        ? Prisma.sql`SELECT ${cols} FROM UsgReport
-            WHERE clinicId = ${clinicId}
-              AND (patientName LIKE ${token} ESCAPE '\\'
-                OR studyTitle LIKE ${token} ESCAPE '\\'
-                OR referredBy LIKE ${token} ESCAPE '\\'
-                OR impression LIKE ${token} ESCAPE '\\')
-              AND status = ${statusFilter}
-            ORDER BY createdAt DESC
-            LIMIT 500`
-        : Prisma.sql`SELECT ${cols} FROM UsgReport
-            WHERE clinicId = ${clinicId}
-              AND (patientName LIKE ${token} ESCAPE '\\'
-                OR studyTitle LIKE ${token} ESCAPE '\\'
-                OR referredBy LIKE ${token} ESCAPE '\\'
-                OR impression LIKE ${token} ESCAPE '\\')
-            ORDER BY createdAt DESC
-            LIMIT 500`,
+      Prisma.sql`SELECT ${cols} FROM UsgReport WHERE ${where} ORDER BY createdAt DESC LIMIT 500`,
     );
-    return Response.json({ reports: rows });
+    return Response.json({ reports: rows, matchedFindings: keys });
   }
 
   const where: Prisma.UsgReportWhereInput = { clinicId };

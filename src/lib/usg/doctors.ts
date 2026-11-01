@@ -98,6 +98,19 @@ export async function deleteDoctor(id: string): Promise<void> {
   await db.usgDoctor.delete({ where: { id } });
 }
 
+/**
+ * Ceilings for the CSV import. A referring-doctor list is hundreds of rows;
+ * anything larger is the wrong file, and the importer reads it whole and writes
+ * it one upsert at a time on the same SQLite file the clinic is reporting from.
+ */
+export const MAX_DOCTOR_CSV_BYTES = 2 * 1024 * 1024;
+export const MAX_DOCTOR_CSV_ROWS = 5000;
+
+/** Non-empty lines after the header — the same set the importer walks. */
+export function doctorCsvRowCount(csvText: string): number {
+  return Math.max(0, csvText.split(/\r?\n/).filter((l) => l.trim()).length - 1);
+}
+
 /** Parse a CARE ERP doctors CSV and import all rows. Idempotent (upserts by name). */
 export async function importDoctorsFromCsv(csvText: string): Promise<{ imported: number; skipped: number; total: number }> {
   const clinicId = await getActiveClinicId().catch(() => "default");

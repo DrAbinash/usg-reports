@@ -73,6 +73,9 @@ async function fetchPatientsList() {
   return ((await res.json()).patients ?? []) as PatientRow[];
 }
 
+/** Rows the register renders before the doctor asks for the rest. */
+const REGISTER_PAGE = 100;
+
 async function fetchReportsList() {
   const res = await fetch("/api/usg/reports");
   if (!res.ok) throw new Error("reports");
@@ -286,9 +289,11 @@ export function UsgStudioView() {
     });
   }, [queryClient]);
 
-  useEffect(() => {
-    for (const r of reports.slice(0, 20)) prefetchReport(r.id);
-  }, [reports, prefetchReport]);
+  // The register used to warm the 20 newest reports here on every mount. Each
+  // one is the full payload — frozen print HTML with the stills inside it, plus
+  // the stills again as `dataUrl` — so opening the register asked for tens of
+  // megabytes the doctor would never look at. `ReportCard` prefetches the row it
+  // is pointed at, which is the one that is about to be opened.
 
   const openReportId = useStudio((s) => s.openReportId);
   const clearOpenReport = useStudio((s) => s.clearOpenReport);
@@ -503,6 +508,15 @@ export function UsgStudioView() {
       }),
     [reports, query, statusFilter],
   );
+
+  // A register row is a card with a dozen elements in it, and the list is every
+  // report the clinic has — 500 at most, older than the screen long before that.
+  // Building all of them to show the twelve a doctor can see is the part of
+  // opening the studio that feels slow on the scan-room PC. Searching is
+  // unaffected: a typed query almost never leaves more than a page standing.
+  const [registerLimit, setRegisterLimit] = useState(REGISTER_PAGE);
+  useEffect(() => setRegisterLimit(REGISTER_PAGE), [query, statusFilter]);
+  const visibleReports = filtered.slice(0, registerLimit);
 
   const filteredPatients = useMemo(() => {
     if (!patientQuery.trim()) return patients;
@@ -842,9 +856,19 @@ export function UsgStudioView() {
             </div>
           ) : (
             <div className="space-y-2">
-              {filtered.map((r) => (
+              {visibleReports.map((r) => (
                 <ReportCard key={r.id} r={r} onOpen={() => openReport(r)} onDuplicate={() => duplicate(r)} onDelete={() => del(r)} onPrefetch={() => prefetchReport(r.id)} />
               ))}
+              {filtered.length > visibleReports.length ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-[12px]"
+                  onClick={() => setRegisterLimit(filtered.length)}
+                >
+                  Show all {filtered.length} reports — {filtered.length - visibleReports.length} older ones hidden
+                </Button>
+              ) : null}
             </div>
           )}
         </>

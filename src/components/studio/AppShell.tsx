@@ -1,11 +1,10 @@
 "use client";
 /** App shell: brand + top nav + optional composer patient strip (no left sidebar). */
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useStudio } from "@/lib/store";
-import { SettingsView } from "./SettingsView";
 import { UsgStudioView } from "./usg/UsgStudioView";
-import { UsgInsightsView } from "./usg/UsgInsightsView";
 import { UsgWorklistView } from "./usg/UsgWorklistView";
 import { UsgDarkModeToggle } from "./usg/UsgDarkModeToggle";
 import { UsgCommandPalette } from "./usg/UsgCommandPalette";
@@ -35,6 +34,26 @@ import {
 import { useRouter } from "next/navigation";
 import type { View } from "@/lib/store";
 import { clinicDisplayName, studioProductTitle } from "@/lib/usg/branding";
+
+/**
+ * Settings and Insights are the two screens a doctor opens once a day, and the
+ * two heaviest components in the app: the signature/background cropper with its
+ * canvas code, and the analytics charts. They used to travel in the bundle that
+ * paints the worklist, so the scan-room PC downloaded and parsed them for every
+ * patient it never looked at. Split out, they arrive when the tab is pressed —
+ * from the same server, over the LAN, in a fraction of the time the first
+ * report takes to render.
+ */
+const viewLoading = () => <div className="p-6 text-[12px] text-faint">Opening…</div>;
+
+const SettingsView = dynamic(() => import("./SettingsView").then((m) => m.SettingsView), {
+  ssr: false,
+  loading: viewLoading,
+});
+const UsgInsightsView = dynamic(() => import("./usg/UsgInsightsView").then((m) => m.UsgInsightsView), {
+  ssr: false,
+  loading: viewLoading,
+});
 
 const NAV: { id: View; label: string; icon: typeof Waves }[] = [
   { id: "worklist", label: "Worklist", icon: ClipboardList },

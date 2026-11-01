@@ -168,9 +168,11 @@ export function UsgQueuePicker({ compact = false, className, currentReportId }: 
     [queryClient],
   );
 
-  useEffect(() => {
-    for (const o of studies.slice(0, 25)) prefetchReport(o.reportId);
-  }, [studies, prefetchReport]);
+  // Nothing warms up in bulk any more. A report fetch is the whole payload —
+  // the frozen print HTML with the stills embedded, plus the stills again as
+  // `dataUrl` — so the old loops (25 on render, 10 on focus) asked for tens of
+  // megabytes to prepare rows the doctor mostly does not open. Only the row
+  // that is actually chosen is prefetched, in `openOrder`.
 
   const openOrder = useCallback(
     async (orderId: string) => {
@@ -297,9 +299,6 @@ export function UsgQueuePicker({ compact = false, className, currentReportId }: 
         onChange={(e) => {
           const id = e.target.value;
           if (id) void openOrder(id);
-        }}
-        onFocus={() => {
-          for (const o of studies.slice(0, 10)) prefetchReport(o.reportId);
         }}
         aria-label="Select study"
         data-testid="queue-study"

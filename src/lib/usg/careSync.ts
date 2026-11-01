@@ -125,8 +125,13 @@ export type CarePullRequest = { full: boolean; since: string | null };
  * cycle. Nothing can hide behind a cursor because there is no cursor. At roughly
  * 150 studies a day the extra read costs almost nothing; the failure mode it
  * removes is what this clinic just spent 18 days in.
+ *
+ * Two weeks, not three days. The window is the only thing that repairs a row
+ * this studio failed to write, so widening it costs one bigger read per cycle
+ * and buys back anything that landed late: a bill raised after the scan, an
+ * order rejected by a restart, a study from the day before a weekend outage.
  */
-export const SYNC_LOOKBACK_DAYS = 3;
+export const SYNC_LOOKBACK_DAYS = 14;
 
 /**
  * Decide what this cycle reads. A Studio holding no orders, or an explicit
@@ -155,6 +160,11 @@ export function planWorklistPull(opts: {
  * two-minute cycle were ones the very next step refused to act on, and the
  * sweep was one of the things timing out (`listRecentUltrasoundStudies: Orthanc
  * DICOMweb timed out`). One number, matching the rule that actually uses it.
+ *
+ * This one stays at 7 while the CARE window widens: the sweep is not a retry
+ * window, it is a per-cycle read of the PACS, and 14 days of it is what timed
+ * out. A study older than the sweep keeps the UID it already has; it simply
+ * cannot be *discovered* here.
  */
 export const ORTHANC_SWEEP_DAYS = 7;
 
@@ -309,8 +319,16 @@ export const emptyOrphanImportStats = (): OrphanImportStats => ({
  * Measured 2026-10-06 with the sync cursor stuck: one 14-day sweep wrote ~1,400
  * of these onto a list that carries about 100 real patients a day, and the
  * bill-desk rows vanished underneath them.
+ *
+ * A week, matching the sweep that feeds it — and the flood it caused is not this
+ * number's doing. The rows that buried that list were built from Orthanc with an
+ * invented bill identity; a fallback row now claims no accession, no worklist id
+ * and no test name, and `skippedBilledRowExists` suppresses one whenever CARE
+ * already has a row for that patient on that day. Reaching seven days instead of
+ * three means a week-long CARE outage costs him seven days of reportable scans,
+ * not three.
  */
-export const ORPHAN_MAX_AGE_DAYS = 3;
+export const ORPHAN_MAX_AGE_DAYS = 7;
 
 /** The clinic's calendar day, read as IST wall time (the scanner's own clock). */
 export function istDayOfDate(d: Date | null | undefined): string | null {
@@ -361,9 +379,19 @@ export function normalizeDoctor(d: string | null | undefined): string {
 // bill row and its scan share no identifier until CARE's own intake delivers one.
 // What they DO share is the patient's name, the scanning day and — when both
 // sides know it — the doctor's reference. That is enough to LINK a study to the
-// row CARE already sent, and it is not enough to merge two patients' records, so
-// this function only ever writes a StudyInstanceUID onto an existing bill row,
-// and only when one row and one study point at each other.
+// row CARE already sent, and this function only ever writes a StudyInstanceUID
+// onto an existing bill row.
+//
+// The law here was "one row and one study, or nothing". For a trial run by the
+// doctor who reads every report himself, that made him do the joining: two scans
+// on one day for one patient, or a bill raised the morning after an evening
+// scan, each came back as "left for you to match". It now takes the best
+// candidate it can defend — same day first, then the nearest scanning time, then
+// one day either side — and records WHICH rule made the link, on the row itself,
+// so the worklist can show a chip instead of filling silently. It still refuses
+// the one case that is a coin flip: two scans for one name at the same minute.
+// A wrong link puts this patient's pictures inside another patient's report, and
+// a guessed link is one he can see and undo with the study picker.
 
 export type DemographicOrder = {
   id: string;
@@ -377,93 +405,258 @@ export type DemographicStudy = {
   patientName?: string | null;
   /** `yyyy-mm-dd` as the DICOM header gave it. */
   studyDate?: string | null;
+  /** `HHMMSS…` or `HH:MM`. Only the minute is read; absent means "no opinion". */
+  studyTime?: string | null;
   referringDoctor?: string | null;
 };
 
+/**
+ * How a demographic link was decided, stored verbatim on the row as
+ * `uidLinkedBy`. The worklist shows a chip for anything that is not the plain
+ * same-day unique hit, so the doctor reading the report can tell CARE naming
+ * his study apart from the studio inferring it.
+ */
+export type DemographicRule =
+  | "name+day"
+  | "name+day, nearest"
+  | "name+day, referral"
+  | "name+day ±1";
+
 export type DemographicPlan = {
-  links: { orderId: string; studyInstanceUid: string }[];
-  /** Name + day agreed, but more than one row or more than one study did. */
+  links: { orderId: string; studyInstanceUid: string; rule: DemographicRule }[];
+  /** Only a true coin flip counts here: one name, two scans, the same minute. */
   ambiguous: number;
-  /** A bill row with no study date: nothing to place the scan on. */
+  /** A bill row with nothing to place a scan on — no name, or no study date. */
   skippedNoDay: number;
+};
+
+const DAY_MS = 86_400_000;
+const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
+
+/** The scanner's wall-clock day and minute for a studio timestamp (see istDayOfDate). */
+function istDayAndMinute(ms: number): { ymd: string; minute: number } {
+  const shifted = new Date(ms + IST_OFFSET_MS);
+  return {
+    ymd: shifted.toISOString().slice(0, 10),
+    minute: shifted.getUTCHours() * 60 + shifted.getUTCMinutes(),
+  };
+}
+
+/** Whole days since the epoch, so a day gap is 0 or 1 and never a float. */
+function ymdIndex(ymd: string): number {
+  return Math.floor(Date.parse(`${ymd}T00:00:00Z`) / DAY_MS);
+}
+
+/** DICOM `HHMMSS.fff` or `HH:MM` → minutes past midnight; null when unusable. */
+function minutesFromDicomTime(time: string | null | undefined): number | null {
+  const d = (time ?? "").replace(/[^0-9]/g, "");
+  if (d.length < 2) return null;
+  const hh = Number(d.slice(0, 2));
+  const mm = Number(d.slice(2, 4));
+  if (!Number.isFinite(hh) || hh > 23) return null;
+  return hh * 60 + (Number.isFinite(mm) ? mm : 0);
+}
+
+/** Name tokens alone, sorted, so "First Last" and "LAST^FIRST" agree. The day is
+ *  COMPARED rather than hashed — that is what lets an evening scan reach the
+ *  bill raised for it after midnight. */
+function nameKey(name: string | null | undefined): string | null {
+  const tokens = nameTokens(name);
+  return tokens.length ? tokens.join(" ") : null;
+}
+
+/** `[day gap, doctor agreement, minutes apart]` — lower is the stronger claim. */
+type CandidateScore = [number, number, number];
+
+function compareScore(a: CandidateScore, b: CandidateScore): number {
+  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return (a[i] ?? 0) - (b[i] ?? 0);
+  return 0;
+}
+
+type DemographicCandidate = {
+  orderId: string;
+  uid: string;
+  /** Same-day scans this row could pick between (after the referral veto). */
+  sameDayStudies: number;
+  /** Same-day bills picking between this study and others (after the veto). */
+  sameDayOrders: number;
+  /** Same-day scans for this name BEFORE the veto — >1 means the referral chose. */
+  contestedStudies: number;
+  /** Same-day bills for this study before the veto. */
+  contestedOrders: number;
+  score: CandidateScore;
+};
+
+type StudyPoint = {
+  uid: string;
+  key: string;
+  ymd: string;
+  minute: number | null;
+  doctor: string;
 };
 
 /**
  * Decide which scans may be written onto which bill rows, by demographics.
  *
- * One order and one study for the same name on the same clinic day → link.
- * Anything else (two scans that day, two bills that day, or both) is refused
- * unless the doctor's reference name picks exactly one of the candidates — and
- * if it cannot, nothing is guessed. A wrong link would put this patient's
- * pictures inside another patient's report, which is the one error here that
- * cannot be talked out of the record afterwards.
+ * Every row takes its best-defensible scan and every scan is claimed once: the
+ * same clinic day first, the referring doctor's name as agreement rather than a
+ * requirement, then the nearest scanning minute; a row with no same-day scan may
+ * reach exactly one day either side. Whoever wins carries its rule in
+ * `uidLinkedBy`, so a guessed link is visible on the row instead of silent.
+ *
+ * Two cases still get nothing: a row whose name matches no study in the sweep,
+ * and the coin flip — one name, one day, the same minute, nothing else to
+ * separate them. That is the only link here that cannot be talked out of the
+ * record afterwards, because a wrong UID puts this patient's pictures inside
+ * another patient's report.
  */
 export function planDemographicLinks(
   orders: DemographicOrder[],
   studies: DemographicStudy[],
 ): DemographicPlan {
-  const links: { orderId: string; studyInstanceUid: string }[] = [];
+  const links: DemographicPlan["links"] = [];
   let ambiguous = 0;
   let skippedNoDay = 0;
 
-  const ordersByKey = new Map<string, DemographicOrder[]>();
+  const points: StudyPoint[] = [];
+  for (const s of studies) {
+    const uid = (s.studyInstanceUid ?? "").trim();
+    const key = nameKey(s.patientName);
+    const ymd = (s.studyDate ?? "").slice(0, 10);
+    if (!uid || !key || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) continue;
+    points.push({
+      uid,
+      key,
+      ymd,
+      minute: minutesFromDicomTime(s.studyTime),
+      doctor: normalizeDoctor(s.referringDoctor),
+    });
+  }
+
+  const candidates: DemographicCandidate[] = [];
   for (const o of orders) {
-    const key = nameDayKey(o.patientName, istDayOfDate(o.studyDate));
-    if (!key) {
+    const key = nameKey(o.patientName);
+    if (!key || !o.studyDate) {
       skippedNoDay++;
       continue;
     }
-    const list = ordersByKey.get(key);
-    if (list) list.push(o);
-    else ordersByKey.set(key, [o]);
+    const { ymd, minute } = istDayAndMinute(o.studyDate.getTime());
+    const orderDoctor = normalizeDoctor(o.referringDoctor);
+    const orderDay = ymdIndex(ymd);
+
+    const mine: { uid: string; dayGap: number; score: CandidateScore }[] = [];
+    let sameDayAll = 0;
+    for (const p of points) {
+      if (p.key !== key) continue;
+      const dayGap = Math.abs(ymdIndex(p.ymd) - orderDay);
+      if (dayGap > 1) continue;
+      if (dayGap === 0) sameDayAll++;
+      // Both sides naming a referrer and disagreeing is the one veto that stays:
+      // two same-named patients referred by different doctors are different
+      // people, and no amount of closeness in time makes that a guess.
+      if (orderDoctor && p.doctor && orderDoctor !== p.doctor) continue;
+      const doctorAgrees = orderDoctor && p.doctor ? 0 : 1;
+      const minuteGap =
+        dayGap === 0 && minute !== null && p.minute !== null ? Math.abs(minute - p.minute) : 0;
+      mine.push({ uid: p.uid, dayGap, score: [dayGap, doctorAgrees, minuteGap] });
+    }
+    if (!mine.length) continue;
+    const sameDayStudies = mine.filter((m) => m.dayGap === 0).length;
+    for (const m of mine) {
+      candidates.push({
+        orderId: o.id,
+        uid: m.uid,
+        sameDayStudies,
+        sameDayOrders: 1,
+        contestedStudies: sameDayAll,
+        contestedOrders: 1,
+        score: m.score,
+      });
+    }
   }
 
-  const studiesByKey = new Map<string, DemographicStudy[]>();
-  for (const s of studies) {
-    const uid = (s.studyInstanceUid ?? "").trim();
-    if (!uid) continue;
-    const key = nameDayKey(s.patientName, s.studyDate);
-    if (!key) continue;
-    const list = studiesByKey.get(key);
-    if (list) list.push(s);
-    else studiesByKey.set(key, [s]);
+  const ordersPerUid = new Map<string, Set<string>>();
+  const allOrdersPerUid = new Map<string, Set<string>>();
+  for (const o of orders) {
+    const key = nameKey(o.patientName);
+    if (!key || !o.studyDate) continue;
+    const { ymd } = istDayAndMinute(o.studyDate.getTime());
+    const orderDay = ymdIndex(ymd);
+    const orderDoctor = normalizeDoctor(o.referringDoctor);
+    for (const p of points) {
+      if (p.key !== key || ymdIndex(p.ymd) !== orderDay) continue;
+      const set = allOrdersPerUid.get(p.uid) ?? new Set<string>();
+      set.add(o.id);
+      allOrdersPerUid.set(p.uid, set);
+      if (orderDoctor && p.doctor && orderDoctor !== p.doctor) continue;
+      const allowed = ordersPerUid.get(p.uid) ?? new Set<string>();
+      allowed.add(o.id);
+      ordersPerUid.set(p.uid, allowed);
+    }
+  }
+  for (const c of candidates) {
+    c.sameDayOrders = ordersPerUid.get(c.uid)?.size ?? 1;
+    c.contestedOrders = allOrdersPerUid.get(c.uid)?.size ?? 1;
   }
 
-  // Only the doctor's name can separate two same-named patients on one day, and
-  // only when BOTH sides recorded it. Used as a filter, so a missing value on
-  // either side leaves the candidate set unchanged rather than emptying it.
-  const byDoctor = <T extends { referringDoctor?: string | null }>(
-    items: T[],
-    against: string | null | undefined,
-  ): T[] => {
-    const want = normalizeDoctor(against);
-    if (!want) return items;
-    return items.filter((i) => normalizeDoctor(i.referringDoctor) === want);
-  };
+  const byOrder = new Map<string, DemographicCandidate[]>();
+  const byUid = new Map<string, DemographicCandidate[]>();
+  for (const c of candidates) {
+    const os = byOrder.get(c.orderId);
+    if (os) os.push(c);
+    else byOrder.set(c.orderId, [c]);
+    const us = byUid.get(c.uid);
+    if (us) us.push(c);
+    else byUid.set(c.uid, [c]);
+  }
 
-  for (const [key, orderList] of ordersByKey) {
-    const studyList = studiesByKey.get(key);
-    if (!studyList?.length) continue;
+  candidates.sort(
+    (a, b) =>
+      compareScore(a.score, b.score) ||
+      a.orderId.localeCompare(b.orderId) ||
+      a.uid.localeCompare(b.uid),
+  );
 
-    if (orderList.length === 1 && studyList.length === 1) {
-      links.push({ orderId: orderList[0]!.id, studyInstanceUid: studyList[0]!.studyInstanceUid });
+  const assignedOrder = new Set<string>();
+  const refusedOrder = new Set<string>();
+  const claimedUid = new Set<string>();
+  /** A study on the losing side of a coin flip is not handed to the next row. */
+  const blockedUid = new Set<string>();
+
+  for (const c of candidates) {
+    if (assignedOrder.has(c.orderId) || refusedOrder.has(c.orderId)) continue;
+    if (claimedUid.has(c.uid) || blockedUid.has(c.uid)) continue;
+
+    // The coin flip: something still free on this row's other options, or one of
+    // the other rows wanting this study, scores identically. Nothing separates
+    // them, so neither side is written and the count says so out loud — this is
+    // the one link that cannot be talked out of a report afterwards.
+    const tied = [
+      ...(byOrder.get(c.orderId) ?? []).filter(
+        (d) => d.uid !== c.uid && !claimedUid.has(d.uid) && !blockedUid.has(d.uid),
+      ),
+      ...(byUid.get(c.uid) ?? []).filter(
+        (d) => d.orderId !== c.orderId && !assignedOrder.has(d.orderId) && !refusedOrder.has(d.orderId),
+      ),
+    ].some((d) => compareScore(d.score, c.score) === 0);
+    if (tied) {
+      refusedOrder.add(c.orderId);
+      blockedUid.add(c.uid);
+      ambiguous++;
       continue;
     }
-    if (orderList.length === 1) {
-      const picked = byDoctor(studyList, orderList[0]!.referringDoctor);
-      if (picked.length === 1) {
-        links.push({ orderId: orderList[0]!.id, studyInstanceUid: picked[0]!.studyInstanceUid });
-      } else ambiguous++;
-      continue;
-    }
-    if (studyList.length === 1) {
-      const picked = byDoctor(orderList, studyList[0]!.referringDoctor);
-      if (picked.length === 1) {
-        links.push({ orderId: picked[0]!.id, studyInstanceUid: studyList[0]!.studyInstanceUid });
-      } else ambiguous++;
-      continue;
-    }
-    ambiguous++;
+
+    const rule: DemographicRule =
+      c.score[0] === 1
+        ? "name+day ±1"
+        : c.sameDayStudies > 1 || c.sameDayOrders > 1
+          ? "name+day, nearest"
+          : c.contestedStudies > 1 || c.contestedOrders > 1
+            ? "name+day, referral"
+            : "name+day";
+    links.push({ orderId: c.orderId, studyInstanceUid: c.uid, rule });
+    assignedOrder.add(c.orderId);
+    claimedUid.add(c.uid);
   }
 
   return { links, ambiguous, skippedNoDay };
@@ -499,6 +692,8 @@ type CareOrderRow = {
   accessionNumber: string | null;
   careWorklistId: string | null;
   studyInstanceUid: string | null;
+  /** Which rule wrote that UID; null when CARE named the study itself. */
+  uidLinkedBy?: string | null;
   status: string;
   patientName: string;
   patientAge: string;
@@ -647,6 +842,9 @@ export async function importCareRows(rows: CareWorklistItem[], clinicId: string 
               billingUpdatedAt: w.billingStatus ? new Date() : undefined,
               careWorklistId: n.wlId ?? target.careWorklistId,
               studyInstanceUid: n.uid ?? target.studyInstanceUid,
+              // CARE naming the study outranks anything the studio inferred: the
+              // guess is cleared, not left to shadow the real identifier.
+              uidLinkedBy: n.uid ? null : target.uidLinkedBy,
               studyDate: parseStudyDateTime(w.studyDate, (w as any).studyTime) ?? target.studyDate,
             },
           });
@@ -892,7 +1090,7 @@ export async function attachOrthancStudies(studies: OrthancStudy[], clinicId: st
         if (order.studyInstanceUid !== uid) {
           await db.usgCareOrder.update({
             where: { id: order.id },
-            data: { studyInstanceUid: uid },
+            data: { studyInstanceUid: uid, uidLinkedBy: "accession" },
           });
         }
         stats.matchedByAccession++;
@@ -928,6 +1126,8 @@ export async function attachOrthancStudies(studies: OrthancStudy[], clinicId: st
 
 export type DemographicLinkStats = {
   linked: number;
+  /** Links made by nearest-time or across midnight — the ones shown as a chip. */
+  guessed: number;
   ambiguous: number;
   skippedNoDay: number;
   errors: number;
@@ -942,16 +1142,22 @@ export type DemographicLinkStats = {
  *
  * Runs after the identifier passes, so it can never override a UID or accession
  * match, and before the safety net, so a study that reaches its own bill row
- * does not also get a duplicate row. It touches `studyInstanceUid` and nothing
- * else: no name, no test, no status, no accession. A wrong link would put this
- * patient's pictures inside another patient's report, so anything that is not a
- * unique hit is left unlinked and COUNTED — see planDemographicLinks.
+ * does not also get a duplicate row. It touches `studyInstanceUid`, the rule
+ * that decided it, and nothing else: no name, no test, no status, no accession.
+ * See planDemographicLinks for what it is allowed to guess and what it refuses.
  */
 export async function linkOrdersByDemography(
   studies: DemographicStudy[],
   clinicId: string = "default",
 ): Promise<DemographicLinkStats> {
-  const stats: DemographicLinkStats = { linked: 0, ambiguous: 0, skippedNoDay: 0, errors: 0, reasons: [] };
+  const stats: DemographicLinkStats = {
+    linked: 0,
+    guessed: 0,
+    ambiguous: 0,
+    skippedNoDay: 0,
+    errors: 0,
+    reasons: [],
+  };
   if (!studies.length) return stats;
 
   const unlinked = await db.usgCareOrder.findMany({
@@ -968,9 +1174,10 @@ export async function linkOrdersByDemography(
     try {
       await db.usgCareOrder.update({
         where: { id: link.orderId },
-        data: { studyInstanceUid: link.studyInstanceUid },
+        data: { studyInstanceUid: link.studyInstanceUid, uidLinkedBy: link.rule },
       });
       stats.linked++;
+      if (link.rule !== "name+day") stats.guessed++;
     } catch (e) {
       stats.errors++;
       stats.reasons.push(`order ${link.orderId.slice(-8)}: link failed (${prismaErrorSummary(e)})`);

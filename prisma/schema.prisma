@@ -444,6 +444,12 @@ model UsgCareOrder {
 
   // PACS link (matched by accession during sync)
   studyInstanceUid String?
+  // How the Study UID above arrived. Null means it was never a guess: CARE sent
+  // it, or it was typed in by hand. Otherwise it names the rule — "accession",
+  // "name+day", "name+day, nearest", "name+day ±1" — and the worklist shows a
+  // chip for the name rules, because a link made from a patient's name is one
+  // the doctor is entitled to see and undo.
+  uidLinkedBy      String?
 
   billingStatus   String?   // PAID | DUE | UPI_PENDING | null
   billingUpdatedAt DateTime?

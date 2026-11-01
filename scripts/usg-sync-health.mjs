@@ -192,6 +192,22 @@ const careWithUid = await count("care_rows_with_uid", () =>
 console.log(`  ${careRows} | ${careWithUid} carry a Study UID from CARE | ${await count("no_uid", () =>
   db.usgCareOrder.count({ where: { careWorklistId: { not: null }, studyInstanceUid: null } }),
 )} have none`);
+// Where each linked row's images came from. `uidLinkedBy` is null when CARE named
+// the study itself; anything starting with "name" is an inference the worklist
+// marks with a chip, and a large share of those means the identifiers are not
+// arriving — not that the join is broken.
+const uidFromCare = await count("uid_named_by_care", () =>
+  db.usgCareOrder.count({ where: { studyInstanceUid: { not: null }, uidLinkedBy: null } }),
+);
+const uidByAccession = await count("uid_by_accession", () =>
+  db.usgCareOrder.count({ where: { uidLinkedBy: "accession" } }),
+);
+const uidByName = await count("uid_by_name", () =>
+  db.usgCareOrder.count({ where: { uidLinkedBy: { startsWith: "name" } } }),
+);
+console.log(
+  `  image links by provenance | ${uidFromCare} | ${uidByAccession} | ${uidByName} (the last are shown as a chip in the worklist)`,
+);
 const fallbackRows = Number(/^fallback=(\d+)$/.exec(fallback)?.[1] ?? NaN);
 const newest = await timed("newest", () => db.usgCareOrder.findFirst({ orderBy: { createdAt: "desc" }, select: { createdAt: true } }));
 if (newest.error) console.log(`  newest order     UNREADABLE — ${reason(newest.error)}`);

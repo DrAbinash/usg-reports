@@ -16,7 +16,7 @@
  */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { ORTHANC_SWEEP_DAYS, planWorklistPull, SYNC_LOOKBACK_DAYS } from "../src/lib/usg/careSync";
+import { ORPHAN_MAX_AGE_DAYS, ORTHANC_SWEEP_DAYS, planWorklistPull, SYNC_LOOKBACK_DAYS } from "../src/lib/usg/careSync";
 import { worklistQueryPath } from "../src/lib/usg/careClient";
 
 const NOW = Date.parse("2026-10-30T10:00:00.000Z");
@@ -57,8 +57,21 @@ describe("worklist pull window", () => {
     expect(Date.parse(b.since!)).toBe(NOW + 90_000 - SYNC_LOOKBACK_DAYS * DAY);
   });
 
-  it("keeps the window short enough that a stalled cycle costs minutes, not a fortnight", () => {
-    expect(SYNC_LOOKBACK_DAYS).toBeLessThanOrEqual(7);
+  it("re-reads two weeks of CARE so a late bill still lands", () => {
+    // The window is the only retry this design has: a row rejected by a timeout
+    // or a restart is served again while it is still inside it. Widened from 3
+    // days for the trial — at ~150 studies a day the extra read is page-sized,
+    // and a fortnight of self-healing is what an outage weekend costs.
+    expect(SYNC_LOOKBACK_DAYS).toBe(14);
+    expect(SYNC_LOOKBACK_DAYS).toBeLessThanOrEqual(14);
+  });
+
+  it("keeps the PACS sweep at a week, because that read is the one that timed out", () => {
+    // Widening this is NOT the same as widening the CARE window: the sweep is a
+    // DICOMweb date-range query per cycle, and 14 days of it is what produced
+    // "Orthanc DICOMweb timed out". The safety net follows it, not the ERP window.
+    expect(ORTHANC_SWEEP_DAYS).toBeLessThanOrEqual(7);
+    expect(ORPHAN_MAX_AGE_DAYS).toBeLessThanOrEqual(ORTHANC_SWEEP_DAYS);
   });
 
   it("carries the window through to the URL CARE is asked for", () => {

@@ -31,11 +31,11 @@ import { audit } from "@/lib/usg/audit";
  *      is served again next cycle.
  *   2. Orthanc studies → attach by exact StudyInstanceUID, then exact
  *      single-hit AccessionNumber. Whatever the identifiers could not reach is
- *      then linked by demographics (patient name + the clinic's scanning day,
- *      with the referring doctor's name as the only tie-breaker) — a UNIQUE hit
- *      writes the Study UID onto the bill row CARE already sent; two candidates
- *      and nothing is guessed, but it is counted and shown. This pass exists
- *      because the USG machine follows no MWL and writes no accession. Orders
+ *      then linked by demographics (patient name + the clinic's scanning day, the
+ *      referring doctor's name and the scanning minute as tie-breakers, one day
+ *      either side as a last resort). Each link writes the rule onto the row as
+ *      `uidLinkedBy`, so the worklist can show which ones are inferences; the
+ *      only refusal left is two scans for one name at the same minute. Orders
  *      with no study at all stay visible as "Awaiting images".
  *   3. Outage safety net (importOrthancOrphans): a study in the PACS that CARE
  *      has not served YET becomes a reportable row carrying only the patient's
@@ -71,7 +71,14 @@ export async function POST(req: NextRequest) {
   let importStats = emptySyncStats();
   let attachStats = emptyAttachStats();
   let orphanStats = emptyOrphanImportStats();
-  let demoStats: DemographicLinkStats = { linked: 0, ambiguous: 0, skippedNoDay: 0, errors: 0, reasons: [] };
+  let demoStats: DemographicLinkStats = {
+    linked: 0,
+    guessed: 0,
+    ambiguous: 0,
+    skippedNoDay: 0,
+    errors: 0,
+    reasons: [],
+  };
 
   // 1. CARE worklist → import ultrasound orders by identity
   let backfillRan = false;
@@ -142,13 +149,15 @@ export async function POST(req: NextRequest) {
       // 2b. Whatever the identifiers could not reach, demographics can: the
       // scanner follows no MWL and writes no accession, so a bill row and its
       // study share only a name, a day and (sometimes) the doctor's reference.
-      // Unique hits are linked; anything else is counted, never guessed.
+      // The best-defensible candidate is linked and the rule is recorded on the
+      // row; only a same-minute coin flip is refused, and it is counted.
       try {
         demoStats = await linkOrdersByDemography(us.data, clinicId);
         if (demoStats.linked || demoStats.ambiguous || demoStats.errors) {
           console.log(
             "[sync] demographic link:",
             `linked=${demoStats.linked}`,
+            `guessed=${demoStats.guessed}`,
             `ambiguous=${demoStats.ambiguous}`,
             `noStudyDate=${demoStats.skippedNoDay}`,
             `errors=${demoStats.errors}`,
@@ -337,6 +346,7 @@ export async function POST(req: NextRequest) {
     orphanSkippedTooOld: orphanStats.skippedTooOld,
     orphanErrors: orphanStats.errors,
     demographyLinked: demoStats.linked,
+    demographyGuessed: demoStats.guessed,
     demographyAmbiguous: demoStats.ambiguous,
     demographyNoStudyDate: demoStats.skippedNoDay,
     demographyErrors: demoStats.errors,
@@ -361,7 +371,12 @@ export async function POST(req: NextRequest) {
     if (stats.erpFinalizedNotLocal) bits.push(`${stats.erpFinalizedNotLocal} already finalized in ERP`);
     if (stats.matchedByStudyUid) bits.push(`${stats.matchedByStudyUid} linked by StudyInstanceUID`);
     if (stats.matchedByAccession) bits.push(`${stats.matchedByAccession} linked by accession`);
-    if (stats.demographyLinked) bits.push(`${stats.demographyLinked} linked by patient + date`);
+    if (stats.demographyLinked)
+      bits.push(
+        `${stats.demographyLinked} linked by patient + date${stats.demographyGuessed ? ` (${stats.demographyGuessed} inferred by nearest scan / next day)` : ""}`,
+      );
+    if (stats.demographyAmbiguous)
+      bits.push(`${stats.demographyAmbiguous} same name at the same minute — not linked`);
     if (stats.awaitingImages) bits.push(`${stats.awaitingImages} awaiting images`);
     if (stats.uidOutsideSweep) bits.push(`${stats.uidOutsideSweep} outside the sweep window (images exist)`);
     if (skippedTotal) bits.push(`${skippedTotal} skipped`);

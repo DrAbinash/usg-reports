@@ -176,6 +176,20 @@ export function scanForCriticalFindings(
   return alerts;
 }
 
+/**
+ * The findings that need a recorded call before the report can be signed.
+ *
+ * Only `critical` — the ones where an untreated patient can come to harm
+ * within hours (ectopic, fetal demise, appendicitis, obstruction, an
+ * intracranial occlusion). `urgent` and `significant` show the banner and are
+ * recommended to be phoned, but signing is not held up for them: a gate that
+ * asks for a log on every amber finding gets dismissed as noise, and then the
+ * real one is dismissed too.
+ */
+export function needsCommunication(alerts: CriticalFindingAlert[]): CriticalFindingAlert[] {
+  return alerts.filter((a) => a.severity === "critical");
+}
+
 /** Severity → display colour (Tailwind classes). */
 export function severityColour(severity: CriticalSeverity): string {
   switch (severity) {

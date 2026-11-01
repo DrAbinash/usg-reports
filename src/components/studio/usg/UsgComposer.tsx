@@ -703,7 +703,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const persistDeps = () => ({
     patientName, patientPhone, patientAge, patientSex, referredBy, studyKey, technique, state, scanDate,
     savedIdRef, frozenHtmlRef, dirtyRef, dKey, pendingImages, setPendingImages, setImages,
-    setBusy, setSerial, setFinalizedHere: markFinalized, onSaved,
+    setBusy, setSerial, setFinalizedHere: markFinalized, setCommOpen, onSaved,
   });
   const persistMutation = useMutation({
     mutationFn: async (status: "" | "finalize") => persistReport(status, persistDeps()),

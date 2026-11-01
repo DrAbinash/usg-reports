@@ -1,7 +1,8 @@
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
-import { normaliseState, makeLookup, resolve } from "@/lib/usg/composer";
+import { normaliseState, makeLookup, resolve, selectedPathologies } from "@/lib/usg/composer";
+import { needsCommunication, scanForCriticalFindings } from "@/lib/usg/criticalFindings";
 import { loadAllPathologies, loadNormalOverrides } from "@/lib/usg/server";
 import { buildUsgReportHtml, formatUsgSerial, toUsgPrintSettings } from "@/lib/usg/print";
 import { audit } from "@/lib/usg/audit";
@@ -23,11 +24,70 @@ export async function POST(req: Request, ctx: Ctx) {
   const report = await db.usgReport.findUnique({ where: { id } });
   if (!report) return Response.json({ error: "Not found" }, { status: 404 });
 
+  // Re-finalize allowed: rebuilds the snapshot from the CURRENT state + settings.
+  const settings = await getSettings();
+  const all = await loadAllPathologies();
+  const lookup = makeLookup(all);
+  const overrides = await loadNormalOverrides();
+  const state = normaliseState(safeParse(report.stateJson), report.studyKey, overrides);
+  const resolved = resolve(state, lookup, report.technique, overrides);
+
+  // A critical finding is a phone call, not a page in a file. PCPNDT/NMC and
+  // ACR guidance expects the referring clinician to be told — and for that to be
+  // documented — before the report is signed. The studio already carries the
+  // log (the red banner's "Log call"), so this is not a new chore: it is the one
+  // place where signing waits for the record, and the composer opens that same
+  // form on this refusal so the doctor finishes it in one step and signs. The
+  // draft is saved either way.
+  //
+  // `critical` severity only, and only while the clinic keeps the communication
+  // log switched on — an urgent or significant finding never blocks a signature,
+  // because a gate that cries wolf gets worked around rather than respected.
+  const criticalAlerts = needsCommunication(
+    scanForCriticalFindings(
+      state.organs.flatMap((o) =>
+        selectedPathologies(o).map((key) => ({ key, label: lookup(key)?.label ?? key, organ: o.organ })),
+      ),
+    ),
+  );
+  if (criticalAlerts.length && settings.enableCriticalComm !== false) {
+    const logged = await db.usgCriticalCommunication.count({ where: { reportId: id } });
+    if (logged === 0) {
+      const names = criticalAlerts.map((a) => a.pathologyLabel).join(", ");
+      await audit({
+        action: "report.finalizeBlocked",
+        reportId: id,
+        patientName: report.patientName,
+        detail: `critical finding not yet communicated (${names}) — signing held until the call is logged`,
+      });
+      return Response.json(
+        {
+          error: `Critical finding — ${names}. Log the call to the referring doctor, then finalize.`,
+          code: "critical_comm_required",
+          findings: criticalAlerts.map((a) => ({
+            key: a.pathologyKey,
+            label: a.pathologyLabel,
+            organ: a.organ,
+            message: a.message,
+          })),
+        },
+        { status: 409 },
+      );
+    }
+  }
+
   // Register discipline: the sequential number is stamped at FIRST
   // finalization and never changes afterwards — re-finalize rebuilds the
   // snapshot but keeps the same register number (no renumbering, ever, even
   // if an earlier report is deleted — the max+1 rule leaves gaps, never
   // reuses a printed number).
+  //
+  // It is taken AFTER the critical gate. The transaction below only reads the
+  // high-water mark, so a refusal spent nothing even when it stood above the
+  // gate — but `serialNo` is what the toolbar, the PDF filename, the PACS
+  // return and a duplicate all read as "this one was signed", so the shape
+  // that cannot put a number on an unsigned report is the one to keep, and a
+  // test pins the order.
   let serialNo = report.serialNo;
   if (serialNo == null) {
     serialNo = await db.$transaction(async (tx) => {
@@ -37,14 +97,6 @@ export async function POST(req: Request, ctx: Ctx) {
       return (max._max.serialNo ?? 0) + 1;
     });
   }
-
-  // Re-finalize allowed: rebuilds the snapshot from the CURRENT state + settings.
-  const settings = await getSettings();
-  const all = await loadAllPathologies();
-  const lookup = makeLookup(all);
-  const overrides = await loadNormalOverrides();
-  const state = normaliseState(safeParse(report.stateJson), report.studyKey, overrides);
-  const resolved = resolve(state, lookup, report.technique, overrides);
 
   // Machine stills embed into the frozen snapshot at finalization.
   const images = await db.usgReportImage.findMany({

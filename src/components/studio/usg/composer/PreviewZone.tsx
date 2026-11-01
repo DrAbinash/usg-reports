@@ -353,6 +353,8 @@ export type PersistDeps = {
   setBusy: (v: "" | "save" | "finalize" | "print") => void;
   setSerial: (v: string | undefined) => void;
   setFinalizedHere: (v: boolean) => void;
+  /** Opens the critical-communication log when signing is held for a call. */
+  setCommOpen: (v: boolean) => void;
   onSaved: () => void;
 };
 
@@ -402,7 +404,27 @@ export async function persistReport(
     if (id) await flushPendingImages(id, deps.pendingImages, deps.setPendingImages, deps.setImages);
     if (status === "finalize" && id) {
       const res = await fetch(`/api/usg/reports/${id}/finalize`, { method: "POST" });
-      if (!res.ok) throw new Error("Finalize failed");
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          code?: string;
+        };
+        if (body.code === "critical_comm_required") {
+          // Nothing is lost and nothing is hidden: the draft is stored, the
+          // report stays a draft, and the call log opens itself rather than
+          // making the doctor go looking for the banner. One press of Finalize
+          // after the entry is saved and the report signs.
+          deps.setCommOpen(true);
+          toast.message(body.error ?? "Critical finding — record the call before signing", {
+            description: "This draft is saved. Finalize again once the call is logged.",
+          });
+          return id;
+        }
+        // The server's own sentence is the useful part: "report not found" for a
+        // draft deleted in another tab is not the same problem as a gate refusal,
+        // and before this both arrived as "Finalize failed" with nothing to act on.
+        throw new Error(body.error ?? `Finalize failed (${res.status})`);
+      }
       const body = (await res.json()) as { serialNo?: number; html?: string; report?: { reportHtml?: string | null } };
       if (typeof body.serialNo === "number") deps.setSerial(formatUsgSerial(body.serialNo));
       deps.setFinalizedHere(true);

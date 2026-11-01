@@ -40,6 +40,7 @@ import { clearDraft, draftKey, loadDraft, saveDraft, snapshotDiffers, type Draft
 import { type BiradsCategory } from "@/lib/usg/birads";
 import { ComposerToolbar, ComposerHotkeys, pullFromMachine as pullFromMachineFn } from "./composer/ComposerToolbar";
 import { OrganCard, saveNormalOverride, resetNormalOverride } from "./composer/OrganCard";
+import { FindingSearch } from "./composer/FindingSearch";
 import { ImpressionZone, type PriorFinalizedRow } from "./composer/ImpressionZone";
 import {
   PreviewZone,
@@ -678,6 +679,18 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
 
   const abnormalCount = state.organs.filter((o) => selectedPathologies(o).length).length;
 
+  // For the finding search: every chip that is on anywhere in this report, and
+  // the catalog order that settles a tie between two equally good matches.
+  const selectedChipKeys = useMemo(
+    () => state.organs.flatMap((o) => selectedPathologies(o)),
+    [state.organs],
+  );
+  const chipOrder = useMemo(() => pathologies.map((p) => p.key), [pathologies]);
+  const chipOrgans = useMemo(
+    () => study.organs.map((o) => ({ key: o.key, label: o.label })),
+    [study.organs],
+  );
+
   // Push patient/study strip into the pink CARE header; clear on unmount.
   // Callbacks are ref-stable so parent inline onBack never infinite-loops the store.
   const setComposerStrip = useStudio((s) => s.setComposerStrip);
@@ -1008,6 +1021,18 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
                   {billedBanner ?? "Choose a study format from the Formats library or study picker."}
                 </p>
               </div>
+            ) : null}
+            {/* 258 findings across a dozen organs, six visible per row: the search
+                is how he reaches one without hunting for the card it lives on. */}
+            {!isFinal && study.organs.length > 0 ? (
+              <FindingSearch
+                pathologies={pathologies}
+                organs={chipOrgans}
+                order={chipOrder}
+                selectedKeys={selectedChipKeys}
+                preferredOrganKey={study.organs[focusedOrganIdx]?.key}
+                onApply={(organKey, key) => togglePathology(organKey, key)}
+              />
             ) : null}
             {study.organs.map((def, organIdx) => {
               const st = state.organs.find((o) => o.organ === def.key);

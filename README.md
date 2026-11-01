@@ -347,6 +347,8 @@ Hospital / USG Studio) stores it inside the studio — no hosting needed.
 1. **PIN in** → USG Studio shows the report list (drafts + finalized with
    their register badges)
 2. **New Report** → patient strip → pick the study → tap findings per organ
+   (`/` opens **Find a finding**: type `gall stone`, `fatty gr ii` or a mistyped
+   `calclus` and Enter puts the chip on the card it belongs to)
 3. **Preview & Print** → **Finalize** → the register number is stamped and
    announced; the report freezes but stays reprintable forever
 4. Follow-up visit? **↻ on the list row** → the full report returns as an

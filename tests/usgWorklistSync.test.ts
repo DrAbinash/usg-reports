@@ -444,7 +444,7 @@ describe("K · outage safety net (Orthanc study with no CARE row yet)", () => {
         modality: "US",
         studyInstanceUid: "1.2.840.orphan.billed",
         studyDate: recentYmd,
-        referringDoctor: "Dr Neha Priya",
+        referringDoctor: "Dr S M Roy",
         testName: "USG Whole Abdomen",
         billNumber: "B-9801",
       },

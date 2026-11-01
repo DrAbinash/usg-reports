@@ -613,7 +613,7 @@ model UsgReportTemplate {
 model UsgDoctor {
   id              String   @id @default(cuid())
   clinicId        String   @default("default")
-  name            String   // "DR SANJAY KUMAR KUNDA"
+  name            String   // "DR R K SINHA"
   specialization  String   @default("") // "NEUROSURGEON"
   degree          String   @default("") // "MBBS, MS"
   phone           String   @default("")

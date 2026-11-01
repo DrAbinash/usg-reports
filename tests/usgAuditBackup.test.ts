@@ -52,13 +52,13 @@ afterEach(async () => {
 
 async function seedClinic() {
   const patient = await db.usgPatient.create({
-    data: { id: "pat1", name: "Rani Devi", phone: "9431234567", normName: "rani devi", normPhone: "9431234567" },
+    data: { id: "pat1", name: "Sample Patientone", phone: "9431234567", normName: "sample patientone", normPhone: "9431234567" },
   });
   const report = await db.usgReport.create({
     data: {
       id: "rep1",
       patientId: patient.id,
-      patientName: "Rani Devi",
+      patientName: "Sample Patientone",
       patientAge: "30",
       patientSex: "F",
       referredBy: "Dr. Kumar",
@@ -85,7 +85,7 @@ describe("audit()", () => {
       action: "report.finalize",
       reportId: "rep1",
       serialNo: 7,
-      patientName: "Rani Devi",
+      patientName: "Sample Patientone",
       detail: "register no. USG-0007 frozen",
     });
     const rows = await db.usgAudit.findMany();

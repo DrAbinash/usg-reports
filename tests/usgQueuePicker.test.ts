@@ -23,13 +23,13 @@ describe("UsgQueuePicker contracts", () => {
 
   it("groups patients by phone when present, else name+sex", () => {
     expect(
-      patientKey({ patientName: "Asha", patientPhone: "98765-43210", patientSex: "F" }),
+      patientKey({ patientName: "Patientfourteen", patientPhone: "98765-43210", patientSex: "F" }),
     ).toBe("p:9876543210");
     expect(
-      patientKey({ patientName: "Asha Devi", patientPhone: "", patientSex: "F" }),
-    ).toBe("n:asha devi|F");
+      patientKey({ patientName: "Twin Patient15", patientPhone: "", patientSex: "F" }),
+    ).toBe("n:twin patient15|F");
     expect(
-      patientKey({ patientName: "Asha", patientPhone: "9876543210", patientSex: "F" }),
+      patientKey({ patientName: "Patientfourteen", patientPhone: "9876543210", patientSex: "F" }),
     ).toBe(
       patientKey({ patientName: "Different Name", patientPhone: "98765 43210", patientSex: "M" }),
     );

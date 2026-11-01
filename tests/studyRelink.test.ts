@@ -16,20 +16,20 @@ const sync = readFileSync("src/lib/usg/careSync.ts", "utf8");
 
 describe("samePatientName", () => {
   it("reads CARE's order and the scanner's order as one person", () => {
-    expect(samePatientName("Parween Alfi", "ALFI^PARWEEN")).toBe(true);
-    expect(samePatientName(" Alfi   Parween ", "parween alfi")).toBe(true);
+    expect(samePatientName("Patientfour Example", "PATIENTFOUR^EXAMPLE")).toBe(true);
+    expect(samePatientName(" example   patientfour ", "patientfour example")).toBe(true);
   });
 
   it("does not stretch to cover a different patient", () => {
-    expect(samePatientName("Rani Devi", "Rani Kumari")).toBe(false);
-    expect(samePatientName("Rani Devi", "Rani")).toBe(false);
+    expect(samePatientName("Sample Patientone", "Sample Patienttwo")).toBe(false);
+    expect(samePatientName("Sample Patientone", "Patientone")).toBe(false);
   });
 
   it("refuses when either side has no name at all", () => {
     // An empty header name must never match an empty bill name: that is how a
     // blank links to a blank and two strangers swap pictures.
     expect(samePatientName("", "")).toBe(false);
-    expect(samePatientName(null, "Alfi Parween")).toBe(false);
+    expect(samePatientName(null, "Example Patientfour")).toBe(false);
   });
 });
 

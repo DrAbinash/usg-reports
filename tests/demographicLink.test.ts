@@ -206,7 +206,7 @@ describe("linkOrdersByDemography — the only thing it writes", () => {
         patientAge: "28",
         patientSex: "F",
         billNumber: "B-4831",
-        referringDoctor: "Dr Neha Priya",
+        referringDoctor: "Dr S M Roy",
         testName: "USG Whole Abdomen",
         modality: "USG",
         studyDate: new Date(`${DAY}T10:30:00+05:30`),
@@ -226,7 +226,7 @@ describe("linkOrdersByDemography — the only thing it writes", () => {
     expect(stats.guessed).toBe(0);
     // A link is not an edit: the bill row keeps CARE's own values.
     expect(after.testName).toBe("USG Whole Abdomen");
-    expect(after.referringDoctor).toBe("Dr Neha Priya");
+    expect(after.referringDoctor).toBe("Dr S M Roy");
     expect(after.status).toBe("PENDING");
     expect(after.accessionNumber).toBeNull();
     expect(after.billNumber).toBe("B-4831");

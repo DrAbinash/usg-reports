@@ -7,6 +7,7 @@
  * clinic reports (whitespace normalised only) — see the PR provenance table.
  */
 import { describe, expect, test } from "vitest";
+import { REAL_PATIENT_NAMES } from "./fixtures/realPatientNames";
 import { initialState, getStudy } from "@/lib/usg/studies";
 import { USG_PATHOLOGIES_ALL } from "@/lib/usg/pathologies";
 import { USG_PATHOLOGIES_EXTRA, ECHO_RECOMMENDATIONS } from "@/lib/usg/pathologies-extra";
@@ -326,7 +327,7 @@ describe("PHI scan — seeded echo content is free of patient/machine metadata",
     /\d{2}\.\d{2}\.\d{4}/,
     /reliability of sonographic/i,
     /REBLIABILITY/i,
-    /GUNJAN|PANDEY|FARIDA|KHATOON|RAJESH|Gautam|Jaldhar|PARO|PIYUSH|ABU|SHAMA|SATRUGHAN|RUBY|BODEHI|SWETA|SAHAY|ASHA|SHARDHA|TINU|JAIN|ANSARI|ANIL KUMAR|RAMAN KUMAR|NEHA PRIYA|SADHANA|SANJAY KUMAR/i,
+    new RegExp(`\\b(${REAL_PATIENT_NAMES.join("|")})\\b`, "i"),
   ];
 
   test("echo study normals carry no PHI", () => {

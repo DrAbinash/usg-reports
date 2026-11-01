@@ -17,7 +17,7 @@ const UNKNOWN_ARGUMENT = [
   "",
   "{",
   "  data: {",
-  '    patientName: "SINDHU KUMARI",',
+  '    patientName: "TWIN PATIENTNINE",',
   '    testName: "(unnamed study)",',
   "    ~~~~~~~~",
   "  }",
@@ -32,7 +32,7 @@ describe("prismaErrorSummary", () => {
   });
 
   it("never carries the echoed patient data into the log", () => {
-    expect(prismaErrorSummary(new Error(UNKNOWN_ARGUMENT))).not.toContain("SINDHU KUMARI");
+    expect(prismaErrorSummary(new Error(UNKNOWN_ARGUMENT))).not.toContain("TWIN PATIENTNINE");
   });
 
   it("prefixes the Prisma code when there is one", () => {

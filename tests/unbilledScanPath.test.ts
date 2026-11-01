@@ -33,7 +33,7 @@ import { POST as pacsDraft } from "@/app/api/usg/reports/pacs-draft/route";
 const scan = (over: Record<string, unknown> = {}) => ({
   studyInstanceUid: "1.2.840.unbilled.1",
   accessionNumber: "ACC-SCAN-1",
-  patientName: "Rani Devi",
+  patientName: "Sample Patientone",
   patientSex: "F",
   patientAge: "34",
   referringDoctor: "Dr R K Sinha",
@@ -59,7 +59,7 @@ describe("GET /api/usg/worklist/pacs — the scan reports only what the DICOM he
     // "USG Study" used to be invented here, and this payload is POSTed back to
     // pacs-draft — so the invention landed in the database as a billed test.
     expect(body.rows[0].testName).toBe("");
-    expect(body.rows[0].patientName).toBe("Rani Devi");
+    expect(body.rows[0].patientName).toBe("Sample Patientone");
     expect(body.rows[0].referringDoctor).toBe("Dr R K Sinha");
   });
 
@@ -89,7 +89,7 @@ describe("POST /api/usg/reports/pacs-draft — a drafted scan is not a bill", ()
     const order = await db.usgCareOrder.findFirstOrThrow({
       where: { studyInstanceUid: "1.2.840.unbilled.1" },
     });
-    expect(order.patientName).toBe("Rani Devi");
+    expect(order.patientName).toBe("Sample Patientone");
     expect(order.patientAge).toBe("34");
     expect(order.patientSex).toBe("F");
     expect(order.referringDoctor).toBe("Dr R K Sinha");

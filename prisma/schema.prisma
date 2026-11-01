@@ -285,6 +285,23 @@ model UsgReport {
    */
   shareRevokedAt DateTime?
   finalizedAt   DateTime?
+  /**
+   * When this report was last signed, and reopen does not clear it. finalizedAt
+   * is nulled when a signed report is reopened so the UI treats it as a draft,
+   * which would otherwise destroy the one fact an amendment needs: the date of
+   * the page being replaced. The superseded version is stamped from here.
+   */
+  lastSignedAt  DateTime?
+  /**
+   * The text as it was when it was signed — a mirror of findings/impression/state
+   * written at finalize and never touched by a draft save. A reopened report has
+   * its live columns rewritten on every keystroke, so reading them at re-signature
+   * time would save the NEW words as the version being superseded. The page
+   * (reportHtml) survives reopen; these are its text equivalents.
+   */
+  signedFindings   String?
+  signedImpression String?
+  signedStateJson  String?
 
   // v6.9 — Follow-up reminders. When the radiologist sets followUpDate,
   // the report surfaces on the studio home and Insights as "due" on that
@@ -314,6 +331,39 @@ model UsgReport {
 
   images UsgReportImage[]
   criticalCommunications UsgCriticalCommunication[]
+  versions UsgReportVersion[]
+}
+
+// ── USG Studio — superseded signed texts (amendment history) ─────────────
+// Re-finalizing an already signed report overwrites reportHtml, findings and
+// impression in place, so the words that were on the paper the first time
+// existed nowhere except in whoever kept a printout. Medico-legally that is the
+// worst property of an amendment: the record looks like it always said this.
+//
+// One row per superseded version, written in the same transaction as the
+// overwrite, so a version cannot be lost while its replacement is saved. The
+// register number never changes (USG-0042 stays USG-0042) — what changes is the
+// text, and this table is what says so.
+model UsgReportVersion {
+  id         String   @id @default(cuid())
+  reportId   String
+  report     UsgReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  /** 1 = the text that was signed first. */
+  versionNo  Int
+  findings   String   @default("")
+  impression String   @default("")
+  stateJson  String   @default("{}")
+  /** The page as printed then, so the earlier version can be shown exactly. */
+  reportHtml String?
+  printSettingsJson String?
+  serialNo   Int?
+  /** When that version was signed. */
+  signedAt   DateTime?
+  /** When it was superseded by the next signature. */
+  amendedAt  DateTime @default(now())
+
+  @@unique([reportId, versionNo])
+  @@index([reportId])
 }
 
 // ── USG Studio — machine stills attached to a report (v5) ────────────────

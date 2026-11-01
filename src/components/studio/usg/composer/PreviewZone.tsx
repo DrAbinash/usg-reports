@@ -425,7 +425,12 @@ export async function persistReport(
         // and before this both arrived as "Finalize failed" with nothing to act on.
         throw new Error(body.error ?? `Finalize failed (${res.status})`);
       }
-      const body = (await res.json()) as { serialNo?: number; html?: string; report?: { reportHtml?: string | null } };
+      const body = (await res.json()) as {
+        serialNo?: number;
+        html?: string;
+        report?: { reportHtml?: string | null };
+        amendedFrom?: { versionNo: number; previousSignedAt: string | null } | null;
+      };
       if (typeof body.serialNo === "number") deps.setSerial(formatUsgSerial(body.serialNo));
       deps.setFinalizedHere(true);
       if (typeof body.html === "string" && body.html.trim()) {
@@ -435,7 +440,17 @@ export async function persistReport(
       }
       deps.dirtyRef.current = false;
       clearDraft(deps.dKey);
-      toast.success(`Report finalized — register no. ${formatUsgSerial(body.serialNo ?? 0)} frozen for reprint`);
+      if (body.amendedFrom) {
+        const when = body.amendedFrom.previousSignedAt
+          ? new Date(body.amendedFrom.previousSignedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+          : "earlier";
+        toast.success(
+          `Report amended — the text signed on ${when} is kept as version ${body.amendedFrom.versionNo}`,
+          { description: `Register no. ${formatUsgSerial(body.serialNo ?? 0)} unchanged; open it from the finalized view.` },
+        );
+      } else {
+        toast.success(`Report finalized — register no. ${formatUsgSerial(body.serialNo ?? 0)} frozen for reprint`);
+      }
     } else {
       deps.dirtyRef.current = false;
       toast.success("Draft saved");

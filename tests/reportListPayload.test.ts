@@ -118,12 +118,12 @@ describe("the register list payload", () => {
     expect(text.length).toBeLessThan(storedBytes / 10);
   });
 
-  it("names every column the model has, except the two a list never shows", () => {
+  it("names every column the model has, except the ones a list never shows", () => {
     const fields = schemaColumns();
     expect(fields.length).toBeGreaterThanOrEqual(20); // a parse that found nothing would pass vacuously
     expect(fields).toContain("reportHtml");
     const listed = listedColumns();
-    const excluded = ["reportHtml", "printSettingsJson"];
+    const excluded = ["reportHtml", "printSettingsJson", "signedFindings", "signedImpression", "signedStateJson"];
     for (const field of fields) {
       if (excluded.includes(field)) continue;
       expect(listed, `column ${field} is missing from LIST_COLUMNS`).toContain(field);

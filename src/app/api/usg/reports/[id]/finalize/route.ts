@@ -139,25 +139,74 @@ export async function POST(req: Request, ctx: Ctx) {
     qr ? { dataUrl: qr } : null,
   );
 
-  const updated = await db.usgReport.update({
-    where: { id },
-    data: {
-      status: "FINALIZED",
-      reportHtml: html,
-      printSettingsJson: JSON.stringify(printSettings),
-      finalizedAt: new Date(),
-      serialNo,
-      studyTitle: resolved.title,
-      findings: resolved.sections.map((s) => `${s.label}: ${s.text}`).join("\n\n"),
-      impression: resolved.impression.join("\n"),
-    },
+  // An amendment keeps the text it replaces. Re-finalizing used to overwrite
+  // reportHtml, findings and impression in place, so the words that were on the
+  // paper the first time survived nowhere except in whoever kept a printout —
+  // and the signed record then looked as if it had always said this. The
+  // superseded version is written in the SAME transaction as its replacement: a
+  // version cannot go missing while the new page is being saved, and the new
+  // page cannot be saved without the old one being kept.
+  // A report is superseded when there is a signed page to supersede — not when
+  // its status says FINALIZED, because the normal amendment path is Reopen (which
+  // keeps reportHtml and clears status + finalizedAt) then sign again. Keying on
+  // the page is what catches that path; keying on the status would silently drop
+  // the text of every report amended the way the studio actually amends one.
+  const superseded = report.reportHtml != null;
+  // What is kept is the text AS SIGNED, which after a Reopen is not what the
+  // columns hold any more: every draft save rewrites findings/impression/state,
+  // so reading them here would file the new words as the old version and leave
+  // the superseded text nowhere. The signed mirror is written at finalize and
+  // draft saves cannot touch a signed report; rows signed before it existed fall
+  // back to the columns, which were accurate at that signature.
+  const keptText = {
+    findings: report.signedFindings ?? report.findings,
+    impression: report.signedImpression ?? report.impression,
+    stateJson: report.signedStateJson ?? report.stateJson,
+  };
+  const updated = await db.$transaction(async (tx) => {
+    if (superseded) {
+      const max = await tx.usgReportVersion.aggregate({ where: { reportId: id }, _max: { versionNo: true } });
+      await tx.usgReportVersion.create({
+        data: {
+          reportId: id,
+          versionNo: (max._max.versionNo ?? 0) + 1,
+          findings: keptText.findings,
+          impression: keptText.impression,
+          stateJson: keptText.stateJson,
+          reportHtml: report.reportHtml,
+          printSettingsJson: report.printSettingsJson,
+          serialNo: report.serialNo,
+          signedAt: report.lastSignedAt ?? report.finalizedAt,
+        },
+      });
+    }
+    return tx.usgReport.update({
+      where: { id },
+      data: {
+        status: "FINALIZED",
+        reportHtml: html,
+        printSettingsJson: JSON.stringify(printSettings),
+        finalizedAt: new Date(),
+        lastSignedAt: new Date(),
+        signedFindings: resolved.sections.map((s) => `${s.label}: ${s.text}`).join("\n\n"),
+        signedImpression: resolved.impression.join("\n"),
+        signedStateJson: JSON.stringify(state),
+        serialNo,
+        studyTitle: resolved.title,
+        findings: resolved.sections.map((s) => `${s.label}: ${s.text}`).join("\n\n"),
+        impression: resolved.impression.join("\n"),
+      },
+    });
   });
+  const keptVersion = await db.usgReportVersion.count({ where: { reportId: id } });
   await audit({
-    action: "report.finalize",
+    action: superseded ? "report.amended" : "report.finalize",
     reportId: updated.id,
     serialNo,
     patientName: updated.patientName,
-    detail: `register no. ${formatUsgSerial(serialNo)} frozen — reprint only`,
+    detail: superseded
+      ? `register no. ${formatUsgSerial(serialNo)} re-signed — version ${keptVersion} of the earlier text kept`
+      : `register no. ${formatUsgSerial(serialNo)} frozen — reprint only`,
   });
 
   // v6 CARE bridge: if this report came from a bill-desk order, tell the ERP
@@ -213,7 +262,20 @@ export async function POST(req: Request, ctx: Ctx) {
     }
   }
 
-  return Response.json({ report: updated, html, serialNo, careSync });
+  return Response.json({
+    report: updated,
+    html,
+    serialNo,
+    careSync,
+    // So the composer can say what actually happened: a re-signature that keeps
+    // the earlier text is an amendment, not the same save again.
+    amendedFrom: superseded
+      ? {
+          versionNo: keptVersion,
+          previousSignedAt: (report.lastSignedAt ?? report.finalizedAt)?.toISOString() ?? null,
+        }
+      : null,
+  });
 }
 
 function safeParse(raw: string): unknown {

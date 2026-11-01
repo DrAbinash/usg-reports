@@ -8,6 +8,7 @@ export const AUDIT_LABELS: Record<string, string> = {
   "report.create": "Draft created",
   "report.update": "Draft saved",
   "report.finalize": "Report finalized",
+  "report.amended": "Signed report amended",
   "report.duplicate": "Follow-up drafted",
   "report.delete": "Report deleted",
   "image.attach": "Still attached",

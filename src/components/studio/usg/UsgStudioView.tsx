@@ -1103,10 +1103,62 @@ function ReprintOverlay({
   onFollowUp: () => void;
 }) {
   const frameRef = useRef<HTMLIFrameElement>(null);
+  // The texts this report has already been re-signed over. An amendment is a
+  // clinical event — the referral doctor may have acted on the first page — so
+  // what was signed when has to be readable, not just promised to exist in the
+  // database. The current page stays the default; the older ones are one press
+  // away, and the header says which one is on the screen.
+  const [versions, setVersions] = useState<Array<{
+    versionNo: number; impression: string; signedAt: string | null; amendedAt: string; hasPage: boolean;
+  }>>([]);
+  const [shown, setShown] = useState<{ versionNo: number; html: string } | null>(null);
+  useEffect(() => { setShown(null); }, [html]);
+  useEffect(() => {
+    let alive = true;
+    void fetch(`/api/usg/reports/${reportId}/versions`)
+      .then((r) => (r.ok ? r.json() : { versions: [] }))
+      .then((d) => { if (alive) setVersions(d.versions ?? []); })
+      .catch(() => { if (alive) setVersions([]); });
+    return () => { alive = false; };
+  }, [reportId]);
+  const openVersion = async (versionNo: number) => {
+    const r = await fetch(`/api/usg/reports/${reportId}/versions?version=${versionNo}&html=1`);
+    if (!r.ok) { toast.error("That version could not be read"); return; }
+    const d = await r.json();
+    const page = d?.version?.reportHtml;
+    if (!page) { toast.error("That version was saved without a printed page"); return; }
+    setShown({ versionNo, html: page });
+  };
+  const viewingOld = shown !== null;
+  const title = viewingOld
+    ? `Version ${shown.versionNo} — as signed ${fmtOverlayDate(versions.find((v) => v.versionNo === shown.versionNo)?.signedAt)}`
+    : `Finalized report${serial ? ` — ${serial}` : ""}`;
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background/95 backdrop-blur">
       <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-4 py-2.5">
-        <span className="text-[13px] font-bold">Finalized report{serial ? ` — ${serial}` : ""}</span>
+        <span className={"text-[13px] font-bold" + (viewingOld ? " text-amber-800" : "")}>{title}</span>
+        {versions.length > 0 && !viewingOld ? (
+          <span className="flex flex-wrap items-center gap-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">amended —</span>
+            {versions.map((v) => (
+              <Button
+                key={v.versionNo}
+                size="sm"
+                variant="outline"
+                className="h-7 border-amber-300 bg-amber-50 px-2 text-[11px] font-semibold text-amber-900 hover:bg-amber-100"
+                title={`The text signed ${fmtOverlayDate(v.signedAt)} and superseded ${fmtOverlayDate(v.amendedAt)}`}
+                onClick={() => void openVersion(v.versionNo)}
+              >
+                v{v.versionNo} · {fmtOverlayDate(v.signedAt)}
+              </Button>
+            ))}
+          </span>
+        ) : null}
+        {viewingOld ? (
+          <Button size="sm" variant="outline" className="h-7 border-amber-300 bg-amber-50 px-2 text-[11px] font-semibold text-amber-900 hover:bg-amber-100" onClick={() => setShown(null)}>
+            Back to the current page
+          </Button>
+        ) : null}
         <div className="ml-auto flex flex-wrap gap-2">
           <Button
             size="sm"
@@ -1167,9 +1219,18 @@ function ReprintOverlay({
           </Button>
         </div>
       </div>
-      <iframe ref={frameRef} title="finalized-report" srcDoc={html} className="min-h-0 flex-1 bg-white" />
+      <iframe ref={frameRef} title="finalized-report" srcDoc={shown?.html ?? html} className="min-h-0 flex-1 bg-white" />
     </div>
   );
+}
+
+/** "03 Nov 2026" for the amendment chips; "—" when a version was never dated. */
+function fmtOverlayDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? "—"
+    : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 /** The sequential register — full-screen printable view + CSV export. */

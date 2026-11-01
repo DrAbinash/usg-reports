@@ -49,6 +49,7 @@ const LIST_COLUMNS = [
   "impression",
   "status",
   "finalizedAt",
+  "lastSignedAt",
   "shareRevokedAt",
   "followUpDate",
   "followUpNote",
@@ -59,7 +60,16 @@ const LIST_COLUMNS = [
 ];
 
 /** The two frozen-document columns no list row ever carries. */
-const LIST_OMIT = { reportHtml: true, printSettingsJson: true } as const;
+const LIST_OMIT = {
+  reportHtml: true,
+  printSettingsJson: true,
+  // The signed mirror: the text as it was at signature, kept so an amendment can
+  // still show what was signed. Same reasoning as reportHtml — it belongs to one
+  // document, not to a row in a list, and it is findings/impression-sized text.
+  signedFindings: true,
+  signedImpression: true,
+  signedStateJson: true,
+} as const;
 
 export async function GET(req: Request) {
   const guard = await requireSession();

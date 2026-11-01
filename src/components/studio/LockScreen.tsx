@@ -79,8 +79,8 @@ type Branding = {
   bgUrl?: string | null;
   appTitle?: string | null;
   hospitalName?: string | null;
-  /** The studio is still on the seeded demo PIN, so setup is being re-run. */
-  demoPin?: boolean;
+  /** PIN setup is owed — either nothing set or the seeded demo PIN still in place. */
+  needsSetup?: boolean;
 };
 
 /** Fetch pre-auth branding (theme + uploaded background photo). */
@@ -89,7 +89,7 @@ function useLoginBranding(): Branding {
   useEffect(() => {
     fetch("/api/auth/state")
       .then((r) => r.json())
-      .then((d) => setB({ ...(d.loginBranding ?? {}), demoPin: d.demoPin === true }))
+      .then((d) => setB({ ...(d.loginBranding ?? {}), needsSetup: d.needsSetup === true }))
       .catch(() => {});
   }, []);
   return b;
@@ -289,11 +289,11 @@ export function SetupScreen({ onDone }: { onDone: () => void }) {
         <div className="mt-6 flex items-center gap-2">
           <ShieldCheck className="h-4 w-4" style={{ color: theme.soft }} />
           <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-            {branding.demoPin ? "Replace the demo PIN" : "Welcome — set your PIN"}
+            {branding.needsSetup ? "Replace the demo PIN" : "Welcome — set your PIN"}
           </span>
         </div>
         <p className="mt-1.5 text-[12px] leading-relaxed text-slate-500 dark:text-slate-300">
-          {branding.demoPin
+          {branding.needsSetup
             ? "This studio is still unlocked by the built-in demo PIN, which anyone could guess. Choose your own 6-digit PIN — it replaces the demo one immediately."
             : "This studio belongs to one sonologist. Your 6-digit PIN unlocks it on this device."}
         </p>

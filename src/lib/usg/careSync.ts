@@ -469,8 +469,9 @@ function nameKey(name: string | null | undefined): string | null {
  * Do these two names, from two different systems, describe one patient?
  *
  * Token for token after sorting and stripping DICOM punctuation, so CARE's
- * "Parween Alfi" and the scanner's "ALFI^parween" agree while "Rani Devi" and
- * "Rani Kumari" do not. This decides a HAND-PICKED link as well as a guessed
+ * "Example Patientfour" and the scanner's "PATIENTFOUR^EXAMPLE" agree while
+ * "Sample Patientone" and "Sample Patienttwo" do not. This decides a HAND-PICKED
+ * link as well as a guessed
  * one: choosing a study yourself is not a licence to choose another patient's.
  */
 export function samePatientName(a: string | null | undefined, b: string | null | undefined): boolean {

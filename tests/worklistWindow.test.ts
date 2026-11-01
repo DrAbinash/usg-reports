@@ -132,7 +132,25 @@ describe("worklist query path", () => {
 });
 
 describe("sync route wires the window", () => {
-  const route = readFileSync("src/app/api/usg/worklist/sync/route.ts", "utf8");
+  // v6.25 moved the work from the route into src/lib/usg/runWorklistSync.ts so the
+  // server timer can run it with no browser. These guards are about the sync, not
+  // about which file holds it, so they read both — and the pairing test below is
+  // what stops the split from becoming a way to drop the session check.
+  const shell = readFileSync("src/app/api/usg/worklist/sync/route.ts", "utf8");
+  const route = shell + readFileSync("src/lib/usg/runWorklistSync.ts", "utf8");
+
+  it("leaves the door authenticated and the work shared", () => {
+    expect(shell).toMatch(/const guard = await requireSession\(\);\s*\n\s*if \(guard\) return guard;/);
+    expect(shell).toMatch(/runWorklistSync\(\{ clinicId, fullRequested: full \}\)/);
+    // One in-flight promise, so the browser's 5-minute tick and the server's
+    // cannot both write and overwrite each other's lastError.
+    const lib = readFileSync("src/lib/usg/runWorklistSync.ts", "utf8");
+    expect(lib).toMatch(/if \(inFlight\) return inFlight;/);
+    expect(lib).not.toMatch(/requireSession/);
+    // …and the server asks for it without a browser open.
+    const instrumentation = readFileSync("src/instrumentation.ts", "utf8");
+    expect(instrumentation).toMatch(/runWorklistSync\(\{ clinicId, fullRequested: false \}\)/);
+  });
 
   it("counts stored orders before deciding between a window and a backlog read", () => {
     expect(route).toMatch(/db\.usgCareOrder\.count\(/);

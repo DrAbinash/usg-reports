@@ -182,7 +182,8 @@ export function UsgCalculators({ onInsert }: { onInsert?: (text: string) => stri
         <DialogHeader>
           <DialogTitle className="text-[15px]">Clinical calculators</DialogTitle>
           <DialogDescription className="text-[11.5px]">
-            Volumes, TI-RADS 2017 and AFI — results copy to the clipboard for any finding slot.
+            Volumes, TI-RADS 2017 and AFI — one click copies the result and writes
+            it into the organ card you were last in.
           </DialogDescription>
         </DialogHeader>
 

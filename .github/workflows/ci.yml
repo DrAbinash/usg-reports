@@ -22,6 +22,9 @@ jobs:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
     - run: npm ci
+    # Validate the schema before anything touches it: a typo in a column or a
+    # relation currently fails later, inside `db push`, on the NAS at 07:50.
+    - run: npx prisma validate
     - run: npx prisma generate
     - run: npx tsc --noEmit
     - run: npx vitest run

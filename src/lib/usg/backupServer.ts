@@ -39,6 +39,15 @@ export async function collectFullBackup(): Promise<UsgFullBackupFile> {
   const images = await db.usgReportImage.findMany({ orderBy: { sortOrder: "asc" } });
   const formFs = await db.usgFormF.findMany({ orderBy: { createdAt: "asc" } });
   const careOrders = await db.usgCareOrder.findMany({ orderBy: { createdAt: "asc" } });
+  // The five that were not in a backup at all: the signed templates, the
+  // sonologists, the saved report wording, the wording overrides and the
+  // communication log. Audit rows are capped to the newest slice because a
+  // clinic's log outgrows a nightly file long before its reports do.
+  const doctors = await db.usgDoctor.findMany({ orderBy: { createdAt: "asc" } }).catch(() => []);
+  const templates = await db.usgReportTemplate.findMany({ orderBy: { createdAt: "asc" } }).catch(() => []);
+  const wordingOverrides = await db.usgPathologyWordingOverride.findMany().catch(() => []);
+  const criticalComms = await db.usgCriticalCommunication.findMany({ orderBy: { createdAt: "asc" } }).catch(() => []);
+  const auditRows = await db.usgAudit.findMany({ orderBy: { createdAt: "desc" }, take: 5000 }).catch(() => []);
 
   const base = buildBackup(
     settings as unknown as Record<string, unknown>,
@@ -123,6 +132,7 @@ export async function collectFullBackup(): Promise<UsgFullBackupFile> {
       modality: o.modality,
       studyDate: o.studyDate?.toISOString() ?? null,
       studyInstanceUid: o.studyInstanceUid,
+      uidLinkedBy: o.uidLinkedBy ?? null,
       billingStatus: o.billingStatus,
       status: o.status,
       ignored: o.ignored,
@@ -131,6 +141,11 @@ export async function collectFullBackup(): Promise<UsgFullBackupFile> {
       careSyncedAt: o.careSyncedAt?.toISOString() ?? null,
       createdAt: o.createdAt.toISOString(),
     })),
+    doctors: doctors as unknown as Array<Record<string, unknown>>,
+    templates: templates as unknown as Array<Record<string, unknown>>,
+    wordingOverrides: wordingOverrides as unknown as Array<Record<string, unknown>>,
+    criticalComms: criticalComms as unknown as Array<Record<string, unknown>>,
+    auditRows: (auditRows as unknown as Array<Record<string, unknown>>).reverse(),
   };
 }
 
@@ -143,6 +158,9 @@ export type FullRestoreResult = {
   imagesRestored: number;
   formFsRestored: number;
   careOrdersRestored: number;
+  /** Doctors, templates, wording overrides, critical communications, audit rows —
+   *  the tables a backup used to leave behind. */
+  extraRowsRestored: number;
 };
 
 /** Apply a full-clinic backup (idempotent disaster recovery). */
@@ -157,6 +175,7 @@ export async function applyFullRestore(raw: unknown, clinicId: string = "default
     imagesRestored: 0,
     formFsRestored: 0,
     careOrdersRestored: 0,
+    extraRowsRestored: 0,
   };
 
   // Settings + customs — the same whitelist path as personalisation restore.
@@ -312,6 +331,9 @@ export async function applyFullRestore(raw: unknown, clinicId: string = "default
           modality: o.modality,
           studyDate: o.studyDate ? new Date(o.studyDate) : null,
           studyInstanceUid: o.studyInstanceUid,
+          // How the images were joined — the chip, and the flag that keeps the
+          // sync from guessing a fresh one over the doctor's own choice.
+          uidLinkedBy: o.uidLinkedBy ?? null,
           billingStatus: o.billingStatus,
           status: o.status,
           ignored: o.ignored,
@@ -328,6 +350,32 @@ export async function applyFullRestore(raw: unknown, clinicId: string = "default
     }
   }
 
+  // The five tables that used to be missing from a backup entirely: the
+  // sonologists, the signed templates, the saved report wording, the wording
+  // overrides and the communication log — plus the audit trail, which is the
+  // evidence a critical finding was phoned through. Upserted by id, and a row
+  // that will not land is skipped rather than failing the whole restore, because
+  // half a clinic beats none of it.
+  const extraModels: Array<["doctors" | "templates" | "wordingOverrides" | "criticalComms" | "auditRows", "usgDoctor" | "usgReportTemplate" | "usgPathologyWordingOverride" | "usgCriticalCommunication" | "usgAudit"]> = [
+    ["doctors", "usgDoctor"],
+    ["templates", "usgReportTemplate"],
+    ["wordingOverrides", "usgPathologyWordingOverride"],
+    ["criticalComms", "usgCriticalCommunication"],
+    ["auditRows", "usgAudit"],
+  ];
+  for (const [field, model] of extraModels) {
+    const delegate = (db as unknown as Record<string, {
+      upsert: (a: { where: { id: string }; create: object; update: object }) => Promise<unknown>;
+    }>)[model];
+    if (!delegate) continue;
+    for (const row of backup[field] ?? []) {
+      const id = String(row.id);
+      const { id: _id, ...rest } = row;
+      await delegate.upsert({ where: { id }, create: row, update: rest }).catch(() => undefined);
+      result.extraRowsRestored++;
+    }
+  }
+
   return result;
 }
 
@@ -337,6 +385,10 @@ export type BackupStatus = {
   autoBackup: boolean;
   lastNightlyAt: string | null;
   files: { name: string; bytes: number; modifiedAt: string }[];
+  /** Free space on the volume the backups land on, or null if it cannot be read.
+   *  A nightly backup that silently stops because the volume filled up is the
+   *  worst kind of absent: it looks configured. */
+  freeBytes: number | null;
 };
 
 export async function backupsDir(): Promise<string> {
@@ -362,11 +414,32 @@ export async function backupStatus(): Promise<BackupStatus> {
   } catch {
     // dir missing — no backups yet
   }
-  return { autoBackup: settings.usgAutoBackup, lastNightlyAt, files };
+  const dirForFree = backupDir();
+  return {
+    autoBackup: settings.usgAutoBackup,
+    lastNightlyAt,
+    files,
+    freeBytes: await freeBytesAt(dirForFree),
+  };
 }
 
 const isoDay = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+/** A gigabyte. Below this, writing another copy of the clinic is the thing that
+ *  fills the volume and takes the studio down mid-report. */
+const MIN_FREE_BYTES = 1024 * 1024 * 1024;
+
+/** Bytes free on the volume holding the backups, or null when the platform
+ *  cannot say — a missing stat must never be a reason to skip a backup. */
+export async function freeBytesAt(dir: string): Promise<number | null> {
+  try {
+    const s = await fs.statfs(dir);
+    return Number(s.bsize) * Number(s.bavail);
+  } catch {
+    return null;
+  }
+}
 
 /** Called from instrumentation on an interval. Writes the nightly file once
  *  per local day (after 02:00), prunes old ones. Returns the filename or null. */
@@ -380,6 +453,15 @@ export async function runNightlyBackupIfDue(now = new Date()): Promise<string | 
     const name = `${NIGHTLY_PREFIX}${day}.json`;
     const dir = await backupsDir();
     const file = path.join(dir, name);
+    const free = await freeBytesAt(dir);
+    if (free !== null && free < MIN_FREE_BYTES) {
+      // Say it where the operator will see it. A silently skipped backup is the
+      // same as no backup, with worse news at restore time.
+      console.warn(
+        `[usg-studio] nightly backup SKIPPED — ${Math.round(free / 1024 / 1024)} MB free on ${dir}; needs ${MIN_FREE_BYTES / 1024 / 1024} MB`,
+      );
+      return null;
+    }
     try {
       await fs.access(file);
       return null; // already written today

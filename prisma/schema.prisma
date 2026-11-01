@@ -143,7 +143,9 @@ model HospitalSettings {
   usgSignatureSizeMm  Float    @default(26)         // signature height in mm (12-40)
   usgPrintFontFamily  String   @default("sans-serif") // sans-serif | serif | system
   /** Nightly full-clinic backup to data/backups (v5) — off by default. */
-  usgAutoBackup     Boolean  @default(false)
+  // Default ON: the copy that silently never ran was worse than the copy he
+  // switched off. One click in Settings → Data still turns it back.
+  usgAutoBackup     Boolean  @default(true)
   /** HMAC secret for the printed-report verification QR (v5, minted once). */
   qrSecret          String?
 

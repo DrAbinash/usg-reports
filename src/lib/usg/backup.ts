@@ -205,6 +205,21 @@ export type UsgFullBackupFile = {
   formFs?: BackupFormF[];
   /** v6: bill-desk order links (worklist history; clinical workflow state). */
   careOrders?: BackupCareOrder[];
+  /**
+   * v6.25: the rest of the clinic, captured row-for-row.
+   *
+   * These five were not in a backup at all, which meant the file that is meant
+   * to rebuild the studio could not rebuild: the signed templates, the
+   * sonologists, the saved per-report wording, the wording overrides, or the
+   * communication log — and the log is the one that proves a critical finding
+   * was phoned through. Stored as plain rows (dates already ISO) so adding a
+   * sixth table later is one line, not one type.
+   */
+  doctors?: Array<Record<string, unknown>>;
+  templates?: Array<Record<string, unknown>>;
+  wordingOverrides?: Array<Record<string, unknown>>;
+  criticalComms?: Array<Record<string, unknown>>;
+  auditRows?: Array<Record<string, unknown>>;
 };
 
 export type BackupFormF = {
@@ -249,6 +264,9 @@ export type BackupCareOrder = {
   modality: string;
   studyDate: string | null;
   studyInstanceUid: string | null;
+  /** Which rule wrote that UID. Lost on restore without this: the chip and the
+   *  "do not guess over it again" flag both live here. */
+  uidLinkedBy?: string | null;
   billingStatus: string | null;
   status: string;
   ignored: boolean;
@@ -257,6 +275,18 @@ export type BackupCareOrder = {
   careSyncedAt: string | null;
   createdAt: string;
 };
+
+/**
+ * Tolerant row passthrough for the tables stored as plain rows: keep objects that
+ * have a string id, drop anything else. Deliberately not a schema — a row that a
+ * newer version of this app writes should still restore on an older one.
+ */
+function rows(v: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(v)) return [];
+  return v.filter(
+    (r): r is Record<string, unknown> => !!r && typeof r === "object" && typeof (r as Record<string, unknown>).id === "string",
+  );
+}
 
 /** Validate a full-clinic backup file; throws doctor-friendly errors. */
 export function parseFullBackup(raw: unknown): UsgFullBackupFile {
@@ -374,6 +404,7 @@ export function parseFullBackup(raw: unknown): UsgFullBackupFile {
           modality: typeof o.modality === "string" ? o.modality : "USG",
           studyDate: typeof o.studyDate === "string" ? o.studyDate : null,
           studyInstanceUid: typeof o.studyInstanceUid === "string" ? o.studyInstanceUid : null,
+          uidLinkedBy: typeof o.uidLinkedBy === "string" ? o.uidLinkedBy : null,
           billingStatus: typeof o.billingStatus === "string" ? o.billingStatus : null,
           status: typeof o.status === "string" ? o.status : "PENDING",
           ignored: o.ignored === true,
@@ -394,5 +425,10 @@ export function parseFullBackup(raw: unknown): UsgFullBackupFile {
     reports,
     formFs,
     careOrders,
+    doctors: rows(obj.doctors),
+    templates: rows(obj.templates),
+    wordingOverrides: rows(obj.wordingOverrides),
+    criticalComms: rows(obj.criticalComms),
+    auditRows: rows(obj.auditRows),
   };
 }

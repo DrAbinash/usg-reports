@@ -142,6 +142,49 @@ measurements flow in from Orthanc.
 > The ERP side needs the one-line `REPORTING_STUDIO_API_KEY=` in its
 > `.env`/compose (same key as Settings → Integrations).
 
+### Three operational answers you will want eventually
+
+**What is in a backup.** Settings → Data writes `data/backups/usg-auto-YYYY-MM-DD.json`
+once a day after 02:00 (newest 14 kept, and it now refuses when the volume has
+under 1 GB free instead of silently skipping). It carries the settings, custom
+findings, normal overrides, patients, reports with their images and frozen HTML,
+Form F records, bill-desk order links **with the rule that joined each scan to
+its bill**, the sonologist directory, the report templates, the saved per-report
+wording, the wording overrides, the critical-communication log and the last 5,000
+audit rows. It never carries the PIN hash, the CARE key, the Orthanc password, the
+Gemini key or the QR secret — those stay on the box. Keep a copy off the NAS: the
+file sits on the same volume as the database it protects.
+
+**How to step back after a bad pull.** The studio has no image tags of its own, so
+before `git pull` note the commit:
+
+```
+cd /volume1/docker/usg-reports && git rev-parse --short HEAD
+```
+
+If the new build misbehaves, `git checkout <that-sha> && sudo docker compose up -d --build studio`
+puts the previous code back. The database is not touched either way, which is also
+why a schema change that would DROP data makes the entrypoint fail at boot on
+purpose: the reports outrank the app.
+
+**Rate limiting at the proxy.** The app counts wrong PINs per client now (eight in
+ten minutes) but that counter lives in the process, so it resets on a restart and
+does not share across a re-deploy. Caddy is the durable place:
+
+```
+handle /api/auth/* {
+    rate_limit {
+        window 10m
+        limit 20
+        action status_code(429)
+    }
+}
+```
+
+Also worth setting in compose while you are in it: `STUDIO_INTERNAL_SECRET`
+(`openssl rand -hex 32`). Without it the studio mints its own into `data/` —
+which is fine — but a key you own survives a rebuilt container and a moved disk.
+
 ### Upgrading from the v1–v3 shared app
 
 If this machine previously ran the synced full radiology app from this

@@ -245,6 +245,7 @@ export function SettingsView() {
   const [backupStatus, setBackupStatus] = useState<{
     autoBackup: boolean; lastNightlyAt: string | null;
     files: { name: string; bytes: number; modifiedAt: string }[];
+    freeBytes: number | null;
   } | null>(null);
   const [autoSaving, setAutoSaving] = useState(false);
 
@@ -1517,6 +1518,13 @@ export function SettingsView() {
                           ? ` — last nightly ${new Date(backupStatus.lastNightlyAt).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}`
                           : ""
                       }`}
+                </p>
+                <p className="text-[11px] font-semibold text-muted-foreground">
+                  {backupStatus.freeBytes === null
+                    ? ""
+                    : backupStatus.freeBytes < 1024 * 1024 * 1024
+                      ? `Only ${(backupStatus.freeBytes / 1024 / 1024).toFixed(0)} MB free on this volume — the nightly backup stops below 1 GB. Clear space or download the files off the NAS.`
+                      : `${(backupStatus.freeBytes / 1024 / 1024 / 1024).toFixed(1)} GB free where the backups land.`}
                 </p>
                 {backupStatus.files.slice(0, 5).map((f) => (
                   <p key={f.name} className="flex items-center gap-2 text-[10.5px] text-faint">

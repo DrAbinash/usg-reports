@@ -56,7 +56,7 @@ describe("downloadReportPdf", () => {
     const { downloadReportPdf } = await import("../src/components/studio/usg/sharePdf");
     const result = await downloadReportPdf({
       reportId: "rep-1",
-      patientName: "Laxmi Patel",
+      patientName: "Twin Patient9",
       serial: "USG-0015",
       date: "27 Sept 2026",
     });
@@ -65,7 +65,7 @@ describe("downloadReportPdf", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(createObjectURL).toHaveBeenCalledOnce();
     expect(clicks).toEqual([
-      { download: "USG-0015-Laxmi-Patel-27 Sept 2026.pdf", href: "blob:mock-pdf" },
+      { download: "USG-0015-Twin-Patient9-27 Sept 2026.pdf", href: "blob:mock-pdf" },
     ]);
     // revokeObjectURL is deferred (setTimeout) — not asserted here.
     void revoke;

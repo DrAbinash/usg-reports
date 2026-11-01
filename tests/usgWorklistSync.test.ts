@@ -34,11 +34,11 @@ import { addCalendarDaysYmd, clinicTodayIST } from "@/lib/usg/dates";
 
 // ── fixtures ────────────────────────────────────────────────────────────────
 
-/** The EXACT verified production row (Sital Jaiswal) — blank accession. */
+/** The EXACT verified production row (Specimen Patientthree) — blank accession. */
 const PROD_ROW: CareWorklistItem = {
   worklistId: "4831",
   accessionNumber: "",
-  patientName: "Sital Jaiswal",
+  patientName: "Specimen Patientthree",
   patientAge: "26/F",
   modality: "US",
   studyDate: "2026-09-01T00:00:00.000Z",
@@ -67,7 +67,7 @@ describe("A · blank accession + StudyInstanceUID imports", () => {
     const stats = await importCareRows([PROD_ROW]);
     expect(stats.imported).toBe(1);
     const order = await db.usgCareOrder.findFirstOrThrow({ where: { careWorklistId: "4831" } });
-    expect(order.patientName).toBe("Sital Jaiswal");
+    expect(order.patientName).toBe("Specimen Patientthree");
     expect(order.accessionNumber).toBeNull(); // never synthesized
     expect(order.studyInstanceUid).toBe("1.2.276.0.26.1.1.1.2.2026.280.41706.2166193");
     expect(order.status).toBe("PENDING");
@@ -197,12 +197,12 @@ describe("D · populated-accession path still works", () => {
 describe("E · same patient name, different StudyInstanceUID → never merged", () => {
   test("two rows, same name, distinct identities stay two orders", async () => {
     const rows: CareWorklistItem[] = [
-      { worklistId: "300", accessionNumber: "", patientName: "Sital Jaiswal", modality: "US", studyInstanceUid: "1.2.276.0.1" },
-      { worklistId: "301", accessionNumber: "", patientName: "Sital Jaiswal", modality: "US", studyInstanceUid: "1.2.276.0.2" },
+      { worklistId: "300", accessionNumber: "", patientName: "Specimen Patientthree", modality: "US", studyInstanceUid: "1.2.276.0.1" },
+      { worklistId: "301", accessionNumber: "", patientName: "Specimen Patientthree", modality: "US", studyInstanceUid: "1.2.276.0.2" },
     ];
     const stats = await importCareRows(rows);
     expect(stats.imported).toBe(2);
-    expect(await db.usgCareOrder.count({ where: { patientName: "Sital Jaiswal" } })).toBe(2);
+    expect(await db.usgCareOrder.count({ where: { patientName: "Specimen Patientthree" } })).toBe(2);
 
     // Each attaches to its OWN study — no cross-patient / cross-order linking.
     const attach = await attachOrthancStudies([orthancStudy("1.2.276.0.1"), orthancStudy("1.2.276.0.2")]);
@@ -345,7 +345,7 @@ describe("J · REPORTED state is never reset by resync", () => {
     expect(stats.updatedExisting).toBe(0);
     const frozen = await db.usgCareOrder.findFirstOrThrow({ where: { id: order.id } });
     expect(frozen.status).toBe("REPORTED");
-    expect(frozen.patientName).toBe("Sital Jaiswal"); // the day's record, not overwritten
+    expect(frozen.patientName).toBe("Specimen Patientthree"); // the day's record, not overwritten
   });
 
   test("REPORTING keeps its status while demographics refresh", async () => {
@@ -366,7 +366,7 @@ describe("K · outage safety net (Orthanc study with no CARE row yet)", () => {
   // clinic's today — never as a fixed date that silently ages out of the window.
   const recentYmd = addCalendarDaysYmd(clinicTodayIST(), -1);
   const staleYmd = addCalendarDaysYmd(clinicTodayIST(), -10);
-  const orphan = (uid: string, name = "Alfi Parween", studyDate = recentYmd): OrthancUsStudyRow => ({
+  const orphan = (uid: string, name = "Example Patientfour", studyDate = recentYmd): OrthancUsStudyRow => ({
     studyInstanceUid: uid,
     accessionNumber: null,
     patientName: name,
@@ -385,7 +385,7 @@ describe("K · outage safety net (Orthanc study with no CARE row yet)", () => {
     const order = await db.usgCareOrder.findFirstOrThrow({
       where: { studyInstanceUid: "1.2.840.orphan.1" },
     });
-    expect(order.patientName).toBe("Alfi Parween");
+    expect(order.patientName).toBe("Example Patientfour");
     expect(order.status).toBe("PENDING");
     expect(order.careWorklistId).toBeNull();
     expect(order.studyDate).not.toBeNull();
@@ -440,7 +440,7 @@ describe("K · outage safety net (Orthanc study with no CARE row yet)", () => {
       {
         worklistId: "9801",
         accessionNumber: "",
-        patientName: "Alfi Parween",
+        patientName: "Example Patientfour",
         modality: "US",
         studyInstanceUid: "1.2.840.orphan.billed",
         studyDate: recentYmd,
@@ -450,10 +450,10 @@ describe("K · outage safety net (Orthanc study with no CARE row yet)", () => {
       },
     ]);
     // DICOM arrives as LAST^FIRST; the sorted-token key must still recognise it.
-    const stats = await importOrthancOrphans([orphan("1.2.840.orphan.dup", "PARWEEN ALFI")]);
+    const stats = await importOrthancOrphans([orphan("1.2.840.orphan.dup", "PATIENTFOUR EXAMPLE")]);
     expect(stats.importedFromOrthanc).toBe(0);
     expect(stats.skippedBilledRowExists).toBe(1);
-    const rows = await db.usgCareOrder.findMany({ where: { patientName: { contains: "parween" } } });
+    const rows = await db.usgCareOrder.findMany({ where: { patientName: { contains: "patientfour" } } });
     expect(rows).toHaveLength(1);
     expect(rows[0]!.careWorklistId).toBe("9801");
   });
@@ -476,13 +476,13 @@ describe("K · outage safety net (Orthanc study with no CARE row yet)", () => {
 
   test("when CARE serves the bill later, the same row adopts it — no twin", async () => {
     await importOrthancOrphans([
-      { ...orphan("1.2.840.orphan.3", "Naaz Afrin"), accessionNumber: "ACC-BRIDGE-9" },
+      { ...orphan("1.2.840.orphan.3", "Demo Patientfive"), accessionNumber: "ACC-BRIDGE-9" },
     ]);
     const stats = await importCareRows([
       {
         worklistId: "9911",
         accessionNumber: "ACC-BRIDGE-9",
-        patientName: "Naaz Afrin",
+        patientName: "Demo Patientfive",
         modality: "US",
         studyInstanceUid: "1.2.840.orphan.3",
         patientAge: "30/F",
@@ -514,7 +514,7 @@ describe("L · the StudyInstanceUID bridge into a billed row", () => {
         clinicId: "default",
         accessionNumber: null,
         careWorklistId: null,
-        patientName: "Naaz Afrin",
+        patientName: "Demo Patientfive",
         patientAge: "28",
         patientSex: "F",
         referringDoctor: "",
@@ -531,7 +531,7 @@ describe("L · the StudyInstanceUID bridge into a billed row", () => {
       {
         worklistId: "9901",
         accessionNumber: "ACC-9901",
-        patientName: "Naaz Afrin",
+        patientName: "Demo Patientfive",
         modality: "US",
         studyInstanceUid: "1.2.840.draft.1",
         patientAge: "30/F",

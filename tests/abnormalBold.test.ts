@@ -104,7 +104,7 @@ describe("formatFindingsBodyHtml — fatty liver", () => {
 
 describe("print HTML — every abnormal organ (not liver-only)", () => {
   const patient = {
-    name: "Rani Devi",
+    name: "Sample Patientone",
     age: "30",
     sex: "F",
     referredBy: "Dr. Kumar",

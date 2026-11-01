@@ -48,7 +48,7 @@ const SETTINGS = {
 };
 
 const PATIENT = {
-  name: "Rani Devi",
+  name: "Sample Patientone",
   age: "30",
   sex: "F",
   referredBy: "Dr. Kumar",
@@ -137,7 +137,7 @@ describe("USG print golden snapshots — extended referee (04–08)", () => {
   test("05 OB provisional watermark", () => {
     const html = buildUsgReportHtml(
       { ...SETTINGS, usgPrintStyle: "premium" },
-      { ...PATIENT, name: "Sita Kumari", age: "26", serial: "USG-0002", provisional: true },
+      { ...PATIENT, name: "Twin Patient12", age: "26", serial: "USG-0002", provisional: true },
       resolve(initialState("ob"), lookup, "Antenatal scan."),
     );
     expect(html).toMatch(/PROVISIONAL/i);
@@ -147,7 +147,7 @@ describe("USG print golden snapshots — extended referee (04–08)", () => {
   test("06 thyroid sidebar letterhead", () => {
     const html = buildUsgReportHtml(
       { ...SETTINGS, usgPrintStyle: "premium_sidebar" },
-      { ...PATIENT, name: "Meera Devi", age: "45", sex: "F", serial: "USG-0003" },
+      { ...PATIENT, name: "Twin Patient13", age: "45", sex: "F", serial: "USG-0003" },
       resolve(initialState("thyroid"), lookup, "High-resolution thyroid ultrasound."),
       [{ dataUrl: "data:image/png;base64,AAAA", caption: "thyroid still" }],
     );
@@ -157,7 +157,7 @@ describe("USG print golden snapshots — extended referee (04–08)", () => {
   test("07 OB BPP grid organ", () => {
     const html = buildUsgReportHtml(
       { ...SETTINGS, usgPrintStyle: "premium" },
-      { ...PATIENT, name: "Anita Devi", age: "28", serial: "USG-0004" },
+      { ...PATIENT, name: "Twin Patient14", age: "28", serial: "USG-0004" },
       resolve(initialState("ob-bpp"), lookup, "Biophysical profile scan."),
     );
     expect(html).toMatch(/grid/i);

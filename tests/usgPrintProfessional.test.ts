@@ -44,7 +44,7 @@ const BASE = {
   usgPrintStyle: "premium",
 };
 
-const PATIENT = { name: "Rani Devi", age: "26", sex: "F", referredBy: "Dr. Kumar", date: "01-Oct-2026", serial: "USG-0001" };
+const PATIENT = { name: "Sample Patientone", age: "26", sex: "F", referredBy: "Dr. Kumar", date: "01-Oct-2026", serial: "USG-0001" };
 const QR = { dataUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==" };
 
 const ob = () => resolve(initialState("ob"), lookup, "Antenatal scan.");

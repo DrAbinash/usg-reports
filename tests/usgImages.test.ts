@@ -30,7 +30,7 @@ const SETTINGS = {
   usgDeclarationLine: "",
 };
 
-const PATIENT = { name: "Rani Devi", age: "30", sex: "F", referredBy: "", date: "01-Sep-2026" };
+const PATIENT = { name: "Sample Patientone", age: "30", sex: "F", referredBy: "", date: "01-Sep-2026" };
 
 const png1x1 =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";

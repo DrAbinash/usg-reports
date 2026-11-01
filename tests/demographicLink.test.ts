@@ -29,13 +29,13 @@ import {
 
 const DAY = "2026-10-29";
 const order = (over: Partial<DemographicOrder> & { id: string }): DemographicOrder => ({
-  patientName: "Alfi Parween",
+  patientName: "Example Patientfour",
   studyDate: new Date(`${DAY}T10:30:00+05:30`),
   referringDoctor: "",
   ...over,
 });
 const study = (over: Partial<DemographicStudy> & { studyInstanceUid: string }): DemographicStudy => ({
-  patientName: "Alfi Parween",
+  patientName: "Example Patientfour",
   studyDate: DAY,
   referringDoctor: "",
   ...over,
@@ -50,8 +50,8 @@ describe("planDemographicLinks — when it links", () => {
 
   test("CARE's 'First Last' and the scanner's 'LAST^FIRST' are one patient", () => {
     const p = planDemographicLinks(
-      [order({ id: "o1", patientName: "Parween Alfi" })],
-      [study({ studyInstanceUid: "UID-1", patientName: "ALFI  parween" })],
+      [order({ id: "o1", patientName: "Patientfour Example" })],
+      [study({ studyInstanceUid: "UID-1", patientName: "PATIENTFOUR  example" })],
     );
     expect(p.links).toHaveLength(1);
   });
@@ -163,7 +163,7 @@ describe("planDemographicLinks — when it refuses", () => {
   });
 
   test("different patients never link", () => {
-    const p = planDemographicLinks([order({ id: "o1", patientName: "Sital Jaiswal" })], [study({ studyInstanceUid: "UID-1" })]);
+    const p = planDemographicLinks([order({ id: "o1", patientName: "Specimen Patientthree" })], [study({ studyInstanceUid: "UID-1" })]);
     expect(p.links).toHaveLength(0);
   });
 
@@ -202,7 +202,7 @@ describe("linkOrdersByDemography — the only thing it writes", () => {
         clinicId: "default",
         careWorklistId: "4831",
         accessionNumber: null,
-        patientName: "Alfi Parween",
+        patientName: "Example Patientfour",
         patientAge: "28",
         patientSex: "F",
         billNumber: "B-4831",
@@ -238,7 +238,7 @@ describe("linkOrdersByDemography — the only thing it writes", () => {
         clinicId: "default",
         careWorklistId: "4900",
         accessionNumber: null,
-        patientName: "Alfi Parween",
+        patientName: "Example Patientfour",
         patientAge: "28",
         patientSex: "F",
         billNumber: "B-4900",
@@ -267,7 +267,7 @@ describe("linkOrdersByDemography — the only thing it writes", () => {
       data: {
         clinicId: "default",
         careWorklistId: "4832",
-        patientName: "Sital Jaiswal",
+        patientName: "Specimen Patientthree",
         patientAge: "26",
         patientSex: "F",
         billNumber: "B-4832",
@@ -277,10 +277,10 @@ describe("linkOrdersByDemography — the only thing it writes", () => {
         status: "PENDING",
       },
     });
-    const rows = [study({ studyInstanceUid: "UID-A", patientName: "Sital Jaiswal" })];
+    const rows = [study({ studyInstanceUid: "UID-A", patientName: "Specimen Patientthree" })];
     expect((await linkOrdersByDemography(rows, "default")).linked).toBe(1);
     expect((await linkOrdersByDemography(rows, "default")).linked).toBe(0);
-    expect(await db.usgCareOrder.count({ where: { patientName: "Sital Jaiswal" } })).toBe(1);
+    expect(await db.usgCareOrder.count({ where: { patientName: "Specimen Patientthree" } })).toBe(1);
   });
 
   test("a signed report is never handed a guessed study", async () => {
@@ -337,7 +337,7 @@ describe("linkOrdersByDemography — the only thing it writes", () => {
       data: {
         clinicId: "default",
         careWorklistId: "4833",
-        patientName: "Rani Devi",
+        patientName: "Sample Patientone",
         patientAge: "34",
         patientSex: "F",
         billNumber: "B-4833",
@@ -349,13 +349,13 @@ describe("linkOrdersByDemography — the only thing it writes", () => {
     });
     const stats = await linkOrdersByDemography(
       [
-        study({ studyInstanceUid: "UID-1", patientName: "Rani Devi" }),
-        study({ studyInstanceUid: "UID-2", patientName: "Rani Devi" }),
+        study({ studyInstanceUid: "UID-1", patientName: "Sample Patientone" }),
+        study({ studyInstanceUid: "UID-2", patientName: "Sample Patientone" }),
       ],
       "default",
     );
     expect(stats.linked).toBe(0);
     expect(stats.ambiguous).toBe(1);
-    expect(await db.usgCareOrder.count({ where: { patientName: "Rani Devi", studyInstanceUid: null } })).toBe(1);
+    expect(await db.usgCareOrder.count({ where: { patientName: "Sample Patientone", studyInstanceUid: null } })).toBe(1);
   });
 });

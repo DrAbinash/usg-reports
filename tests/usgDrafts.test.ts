@@ -27,7 +27,7 @@ class FullStorage {
 
 const snap = (over: Partial<DraftSnapshot> = {}): DraftSnapshot => ({
   savedAt: 1_700_000_000_000,
-  patientName: "Rani Devi",
+  patientName: "Sample Patientone",
   patientPhone: "9431234567",
   patientAge: "30",
   patientSex: "F",
@@ -88,7 +88,7 @@ describe("dirty detection (snapshotDiffers)", () => {
   });
 
   it("flags patient field changes but not the savedAt timestamp", () => {
-    expect(snapshotDiffers(snap(), { ...snap(), patientName: "RANI DEVI" })).toBe(true);
+    expect(snapshotDiffers(snap(), { ...snap(), patientName: "SAMPLE PATIENTONE" })).toBe(true);
     const { savedAt: _ignored, ...rest } = snap({ savedAt: 999 });
     expect(snapshotDiffers(snap(), rest)).toBe(false);
   });

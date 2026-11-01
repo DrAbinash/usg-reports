@@ -12,18 +12,18 @@ import { ORPHAN_MAX_AGE_DAYS, istDayOfDate, nameDayKey } from "@/lib/usg/careSyn
 
 describe("same-patient-same-day key (the orphan dedup)", () => {
   it("ignores name token order, so CARE and DICOM agree", () => {
-    const a = nameDayKey("Alfi Parween", "2026-10-06");
-    const b = nameDayKey("PARWEEN  alfi", "2026-10-06");
+    const a = nameDayKey("Example Patientfour", "2026-10-06");
+    const b = nameDayKey("PATIENTFOUR  example", "2026-10-06");
     expect(a).toBe(b);
-    expect(a).toBe("alfi parween|2026-10-06");
+    expect(a).toBe("example patientfour|2026-10-06");
   });
 
   it("separates days, so a repeat scan is not treated as a duplicate", () => {
-    expect(nameDayKey("Alfi Parween", "2026-10-06")).not.toBe(nameDayKey("Alfi Parween", "2026-10-05"));
+    expect(nameDayKey("Example Patientfour", "2026-10-06")).not.toBe(nameDayKey("Example Patientfour", "2026-10-05"));
   });
 
   it("refuses a key without a real date or without a name", () => {
-    expect(nameDayKey("Alfi Parween", null)).toBeNull();
+    expect(nameDayKey("Example Patientfour", null)).toBeNull();
     expect(nameDayKey("", "2026-10-06")).toBeNull();
   });
 

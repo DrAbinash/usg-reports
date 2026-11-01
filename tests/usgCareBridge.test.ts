@@ -250,7 +250,7 @@ describe("Form F defaults + bill-desk prefill", () => {
     const base = defaultFormF(S);
     const f = prefillFormFFromOrder(base, {
       accessionNumber: "CARE-24101",
-      patientName: "Rina Devi",
+      patientName: "Twin Patient10",
       patientAge: "26",
       patientPhone: "9876543210",
       patientAddress: "Jasidih, Deoghar",
@@ -259,7 +259,7 @@ describe("Form F defaults + bill-desk prefill", () => {
       testName: "USG Pregnancy 3rd Trimester",
       studyDate: new Date("2026-09-01T04:30:00Z"),
     });
-    expect(f.patientName).toBe("Rina Devi");
+    expect(f.patientName).toBe("Twin Patient10");
     expect(f.age).toBe("26");
     expect(f.address).toBe("Jasidih, Deoghar");
     expect(f.mobile).toBe("9876543210");
@@ -328,7 +328,7 @@ describe("Form F ← composer state lift (GA + result)", () => {
 describe("Form F print HTML — statutory sheet", () => {
   test("renders the fixed details and escaped demographics", () => {
     const f = defaultFormF(S);
-    f.patientName = 'Rina <Devi>';
+    f.patientName = 'Sample <Patientone>';
     f.husbandFatherName = "Sohan";
     f.address = "Jasidih";
     const html = buildFormFPrintHtml(f);
@@ -340,8 +340,8 @@ describe("Form F print HTML — statutory sheet", () => {
     expect(html).toContain("DECLARATION OF PREGNANT WOMAN");
     expect(html).toContain("DECLARATION OF DOCTOR");
     // HTML-escaped so the statutory sheet can never be injected into
-    expect(html).toContain("Rina &lt;Devi&gt;");
-    expect(html).not.toContain("Rina <Devi>");
+    expect(html).toContain("Sample &lt;Patientone&gt;");
+    expect(html).not.toContain("Sample <Patientone>");
     expect(html).toContain("@page");
   });
 });

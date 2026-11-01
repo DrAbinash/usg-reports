@@ -47,7 +47,7 @@ const BASE_SETTINGS = {
   usgDeclarationLine: "declaration line",
 };
 
-const PATIENT = { name: "Rani Devi", age: "30", sex: "F", referredBy: "Dr. Kumar", date: "01-Sep-2026" };
+const PATIENT = { name: "Sample Patientone", age: "30", sex: "F", referredBy: "Dr. Kumar", date: "01-Sep-2026" };
 
 function resolvedReport(technique = "Routine transabdominal scan.") {
   return resolve(initialState("wa-female"), makeLookup(USG_PATHOLOGIES_ALL), technique);
@@ -357,7 +357,7 @@ describe("blank ERP values never blank stored demographics", () => {
   const ROW: CareWorklistItem = {
     worklistId: "9100",
     accessionNumber: "",
-    patientName: "Sital Jaiswal",
+    patientName: "Specimen Patientthree",
     patientAge: "26/F",
     patientPhone: "9800112233",
     referringDoctor: "Dr. Kumar",
@@ -388,32 +388,32 @@ describe("blank ERP values never blank stored demographics", () => {
 
 describe("latestKnownDemographics — repeat patients carry forward", () => {
   test("by registry link: the most recent report wins", async () => {
-    const pid = await linkPatient("Rani Devi", "9800112233");
+    const pid = await linkPatient("Sample Patientone", "9800112233");
     await db.usgReport.create({
-      data: { patientName: "Rani Devi", patientAge: "29", referredBy: "", patientId: pid, stateJson: "{}" },
+      data: { patientName: "Sample Patientone", patientAge: "29", referredBy: "", patientId: pid, stateJson: "{}" },
     });
     await db.usgReport.create({
-      data: { patientName: "Rani Devi", patientAge: "30", referredBy: "Dr. Kumar", patientId: pid, stateJson: "{}" },
+      data: { patientName: "Sample Patientone", patientAge: "30", referredBy: "Dr. Kumar", patientId: pid, stateJson: "{}" },
     });
-    const got = await latestKnownDemographics(pid, "Rani Devi");
+    const got = await latestKnownDemographics(pid, "Sample Patientone");
     expect(got).toEqual({ age: "30", referredBy: "Dr. Kumar" });
   });
 
   test("by exact name when the patient link is null (legacy rows)", async () => {
-    const pid = await linkPatient("Sital Jaiswal", "");
+    const pid = await linkPatient("Specimen Patientthree", "");
     await db.usgReport.create({
-      data: { patientName: "Sital Jaiswal", patientAge: "26", referredBy: "Dr. Singh", patientId: pid, stateJson: "{}" },
+      data: { patientName: "Specimen Patientthree", patientAge: "26", referredBy: "Dr. Tester", patientId: pid, stateJson: "{}" },
     });
-    const got = await latestKnownDemographics(null, "Sital Jaiswal");
-    expect(got).toEqual({ age: "26", referredBy: "Dr. Singh" });
+    const got = await latestKnownDemographics(null, "Specimen Patientthree");
+    expect(got).toEqual({ age: "26", referredBy: "Dr. Tester" });
   });
 
   test("a different patient's history is never used", async () => {
-    const other = await linkPatient("Sita Devi", "9800000000");
+    const other = await linkPatient("Mock Patientseven", "9800000000");
     await db.usgReport.create({
-      data: { patientName: "Sita Devi", patientAge: "77", referredBy: "Dr. Stranger", patientId: other, stateJson: "{}" },
+      data: { patientName: "Mock Patientseven", patientAge: "77", referredBy: "Dr. Stranger", patientId: other, stateJson: "{}" },
     });
-    const got = await latestKnownDemographics(null, "Rani Devi");
+    const got = await latestKnownDemographics(null, "Sample Patientone");
     expect(got).toEqual({ age: "", referredBy: "" });
   });
 });

@@ -12,12 +12,22 @@ type Ctx = { params: Promise<{ id: string }> };
 /** v6.10 — guard that the report belongs to the active clinic. Returns
  *  the report row on success, or a 404 Response when not found / wrong
  *  clinic (we never tell the caller "wrong clinic" — that leaks the id
- *  exists in another clinic; 404 is the safe answer). */
-async function getReportForActiveClinic(id: string) {
+ *  exists in another clinic; 404 is the safe answer).
+ *
+ *  The stills are read only when the caller is going to return them. A draft
+ *  save came through here on every debounced keystroke and pulled every
+ *  machine image — hundreds of kilobytes of base64 each — out of SQLite to
+ *  compute a `patient?.phone` it then wrote back untouched. `dataUrl` is the
+ *  single largest column in this database, and a report with four stills made
+ *  four reads of the whole picture set per minute, per open composer. */
+async function getReportForActiveClinic(id: string, opts?: { withImages?: boolean }) {
   const clinicId = await getActiveClinicId();
   const report = await db.usgReport.findUnique({
     where: { id },
-    include: { patient: true, images: { orderBy: { sortOrder: "asc" } } },
+    include: {
+      patient: true,
+      ...(opts?.withImages ? { images: { orderBy: { sortOrder: "asc" as const } } } : {}),
+    },
   });
   if (!report || report.clinicId !== clinicId) return null;
   return report;
@@ -27,7 +37,7 @@ export async function GET(_req: Request, ctx: Ctx) {
   const guard = await requireSession();
   if (guard) return guard;
   const { id } = await ctx.params;
-  const report = await getReportForActiveClinic(id);
+  const report = await getReportForActiveClinic(id, { withImages: true });
   if (!report) return Response.json({ error: "Not found" }, { status: 404 });
 
   // v6: the bill-desk order this report came from (banner, PACS pull, Form F).

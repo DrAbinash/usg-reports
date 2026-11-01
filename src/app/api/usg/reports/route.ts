@@ -15,6 +15,52 @@ function escapeLike(token: string): string {
   return token.replace(/[%_\\]/g, (c) => `\\${c}`);
 }
 
+/**
+ * The columns the register list and the search read — deliberately not `*`.
+ *
+ * `reportHtml` is the printed page with the machine stills embedded in it, and
+ * `printSettingsJson` is the layout it was printed with. Both belong to one
+ * signed document, not to a row in a list, and `SELECT *` used to ship them for
+ * up to 500 reports: opening the register, or typing a single letter into the
+ * search box, transferred a large part of the archive to redraw a table of
+ * names. The detail route (`/reports/[id]`) still returns the snapshot, because
+ * that is the screen that prints from it.
+ *
+ * `stateJson` stays: the composer's prior-study comparison parses the previous
+ * report's findings out of this same endpoint, and a test pins that.
+ *
+ * `tests/reportListPayload.test.ts` compares this list against the model in
+ * prisma/schema.prisma, so a column added to the schema is missing from the
+ * register only until that test says so.
+ */
+const LIST_COLUMNS = [
+  "id",
+  "clinicId",
+  "patientName",
+  "patientAge",
+  "patientSex",
+  "referredBy",
+  "patientId",
+  "studyKey",
+  "technique",
+  "stateJson",
+  "studyTitle",
+  "findings",
+  "impression",
+  "status",
+  "finalizedAt",
+  "shareRevokedAt",
+  "followUpDate",
+  "followUpNote",
+  "serialNo",
+  "scanDate",
+  "createdAt",
+  "updatedAt",
+];
+
+/** The two frozen-document columns no list row ever carries. */
+const LIST_OMIT = { reportHtml: true, printSettingsJson: true } as const;
+
 export async function GET(req: Request) {
   const guard = await requireSession();
   if (guard) return guard;
@@ -37,9 +83,10 @@ export async function GET(req: Request) {
     // v6.10 — scoped by clinicId so a multi-clinic install never leaks
     // cross-clinic patient names in search.
     const token = `%${escapeLike(q)}%`;
+    const cols = Prisma.raw(LIST_COLUMNS.join(", "));
     const rows = await db.$queryRaw<Array<Record<string, unknown>>>(
       statusFilter
-        ? Prisma.sql`SELECT * FROM UsgReport
+        ? Prisma.sql`SELECT ${cols} FROM UsgReport
             WHERE clinicId = ${clinicId}
               AND (patientName LIKE ${token} ESCAPE '\\'
                 OR studyTitle LIKE ${token} ESCAPE '\\'
@@ -48,7 +95,7 @@ export async function GET(req: Request) {
               AND status = ${statusFilter}
             ORDER BY createdAt DESC
             LIMIT 500`
-        : Prisma.sql`SELECT * FROM UsgReport
+        : Prisma.sql`SELECT ${cols} FROM UsgReport
             WHERE clinicId = ${clinicId}
               AND (patientName LIKE ${token} ESCAPE '\\'
                 OR studyTitle LIKE ${token} ESCAPE '\\'
@@ -76,6 +123,7 @@ export async function GET(req: Request) {
     orderBy: { createdAt: "desc" },
     take,
     include: { patient: true },
+    omit: { ...LIST_OMIT },
   });
   return Response.json({ reports });
 }

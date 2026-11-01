@@ -121,7 +121,21 @@ export const PreviewZone = memo(function PreviewZone({
           onLayoutChange={handleLayout}
           onActivate={focusOhif}
         />
-      ) : null}
+      ) : (
+        // The pane is not hidden by a layout here, it is absent because this
+        // report has no study identifier to point OHIF at — and silence read as
+        // a broken viewer. Say which it is, and what makes it come back.
+        <div
+          data-testid="viewer-unlinked-strip"
+          className="flex w-full shrink-0 items-center justify-between gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50/80 px-3 py-2 text-[11px] font-semibold text-slate-600"
+          title="The embedded viewer needs a StudyInstanceUID. It arrives with the patient's CARE bill row, or from the PACS on the next sync."
+        >
+          <span>No study linked to this report — image viewer is off</span>
+          <span className="shrink-0 font-normal text-slate-500">
+            It returns by itself once the study is linked
+          </span>
+        </div>
+      ) }
       <div
         className={letterpadClass}
         data-testid="letterpad-pane"

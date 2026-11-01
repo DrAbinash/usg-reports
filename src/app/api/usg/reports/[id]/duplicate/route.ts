@@ -23,6 +23,7 @@ export async function POST(_req: Request, ctx: Ctx) {
 
   const draft = await db.usgReport.create({
     data: {
+      clinicId: source.clinicId, // the follow-up belongs to the clinic that scanned it
       patientName: source.patientName,
       patientAge: source.patientAge,
       patientSex: source.patientSex,

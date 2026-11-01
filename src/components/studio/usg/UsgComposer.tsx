@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { UsgComposerState, UsgPathologyDef } from "@/lib/usg/types";
+import type { SameDayReport, UsgComposerState, UsgPathologyDef } from "@/lib/usg/types";
 import { USG_SEX_CHILD } from "@/lib/usg/types";
 import { USG_STUDIES, applyNormalOverrides, getStudy, initialState as freshComposerState, normalOverrideKey, type NormalOverrides } from "@/lib/usg/studies";
 import { resolveNormalBootstrapFormat } from "@/lib/usg/billedStudyType";
@@ -87,6 +87,9 @@ export type UsgReportRow = {
 };
 
 type PatientSuggestion = { id: string; name: string; phone: string; scanCount: number };
+
+/** Stable empty list: the toolbar is memoised on identity, and `?? []` re-renders it on every keystroke. */
+const NO_SAME_DAY: SameDayReport[] = [];
 
 export type UsgComposerProps = {
   pathologies: UsgPathologyDef[];
@@ -429,6 +432,31 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const isPregnancyStudy = studyKey === "ob" || studyKey === "ep";
   const isFinal = !reopenedHere && (report?.status === "FINALIZED" || finalizedHere);
   isFinalRef.current = isFinal;
+
+  // Same patient, same study, same scanning day. Nothing stops a second scan
+  // for one patient in a day (a repeat after a drain, a KUB added to an
+  // abdomen), and it should not — but each one takes its own register number,
+  // and afterwards the history shows two reports for one study day with no way
+  // to tell which is which. So the composer says it while he is still writing,
+  // and the banner opens the other report instead of just naming it.
+  const sameDayQ = useQuery<{ reports: SameDayReport[] }>({
+    queryKey: ["usg", "reports", "same-day", settledName.trim().toLowerCase(), studyKey, scanDate, report?.id ?? ""],
+    enabled: settledName.trim().length >= 2 && !!scanDate && !isFinal,
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        patientName: settledName.trim(),
+        studyKey,
+        scanDate,
+        ...(report?.id ? { exclude: report.id } : {}),
+      });
+      const r = await fetch(`/api/usg/reports/duplicates?${params.toString()}`);
+      if (!r.ok) return { reports: [] as SameDayReport[] };
+      const d = await r.json();
+      return { reports: (d.reports ?? []) as SameDayReport[] };
+    },
+  });
+  const sameDay = sameDayQ.data?.reports ?? NO_SAME_DAY;
+  const openComposerReport = useStudio((s) => s.openComposer);
 
   const initialSnap = useMemo(
     () => ({
@@ -870,6 +898,8 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
         finalizeFast={finalizeFast}
         print={print}
         settings={settings}
+        sameDay={sameDay}
+        onOpenReport={openComposerReport}
         billedBanner={billedBanner}
         normalOverrides={normalOverrides}
         state={state}

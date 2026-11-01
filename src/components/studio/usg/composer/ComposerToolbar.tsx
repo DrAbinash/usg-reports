@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { CalendarDays, Check, ChevronDown, Loader2, Maximize2, Minimize2, Phone, Settings2, Zap } from "lucide-react";
 import { MessageCircle, FileCheck2 as FileCheck2Icon, ScanLine, Link2, Link2Off } from "lucide-react";
-import type { UsgComposerState, UsgPathologyDef, UsgResolved, UsgStudyDef } from "@/lib/usg/types";
+import type { SameDayReport, UsgComposerState, UsgPathologyDef, UsgResolved, UsgStudyDef } from "@/lib/usg/types";
 import { USG_SEX_CHILD } from "@/lib/usg/types";
 import { USG_STUDIES, STUDY_GROUPS, getStudy, type NormalOverrides } from "@/lib/usg/studies";
 import { isObStudyKey } from "@/lib/usg/orderStudy";
@@ -197,6 +197,10 @@ export type ComposerToolbarProps = {
   pathologies: UsgPathologyDef[];
   patientReports: Array<{ id: number; scanDate: string | null; stateJson: string | null; studyKey: string | null; status: string }>;
   togglePathology: (organKey: string, key: string | null) => void;
+  /** Other reports for this patient, this study, this scanning day. */
+  sameDay: SameDayReport[];
+  /** Opens one of them in the composer — a warning you cannot act on is a label. */
+  onOpenReport: (id: string) => void;
   /** Amber banner when the billed procedure has no matching USG format. */
   billedBanner?: string | null;
 };
@@ -236,6 +240,8 @@ function toolbarEqual(a: ComposerToolbarProps, b: ComposerToolbarProps): boolean
     a.diffSource === b.diffSource &&
     a.pathologies === b.pathologies &&
     a.patientReports === b.patientReports &&
+    a.sameDay === b.sameDay &&
+    a.onOpenReport === b.onOpenReport &&
     a.billedBanner === b.billedBanner &&
     a.onBack === b.onBack &&
     a.persist === b.persist &&
@@ -398,7 +404,7 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
     onNameChange, patients, patientPhone, setPatientPhone, setPatientAge, studyKey, setStudyKey, setTechnique,
     setPatientSex, showTechnique, setShowTechnique, isPregnancyStudy, lmp, setLmp, lmpInfo, technique,
     restoreSnap, setRestoreSnap, restoreDraft, dKey, diffSource, pathologies, patientReports, togglePathology,
-    billedBanner,
+    billedBanner, sameDay, onOpenReport,
   } = p;
 
   // Where a calculator result should land: the organ card the doctor was last
@@ -529,6 +535,33 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
           className="border-b border-amber-300 bg-amber-50 px-3 py-1.5 text-[11px] font-semibold text-amber-900"
         >
           {billedBanner}
+        </div>
+      ) : null}
+      {/* One patient, two reports for the same study on the same day: each takes
+          its own register number and the record splits in two, which is only
+          fixable while he is still writing it. Not a block — a repeat after a
+          drain or a KUB added to an abdomen is legitimate, and he is the one who
+          knows. So it names the other report and opens it on the click. */}
+      {sameDay.length > 0 ? (
+        <div
+          role="status"
+          className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-orange-300 bg-orange-50 px-3 py-1.5 text-[11px] font-semibold text-orange-900"
+        >
+          <CalendarDays className="h-3.5 w-3.5" />
+          {sameDay.length === 1
+            ? "This patient already has a report for this study today"
+            : `This patient already has ${sameDay.length} reports for this study today`}
+          {sameDay.slice(0, 3).map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              onClick={() => onOpenReport(r.id)}
+              className="rounded border border-orange-300 bg-white/70 px-1.5 py-0.5 text-[10px] font-bold text-orange-900 underline-offset-2 hover:bg-white hover:underline"
+              title="Open that report instead of writing a second one"
+            >
+              {r.label} — open
+            </button>
+          ))}
         </div>
       ) : null}
       {/* The doctor's only evidence that this report is kept somewhere other

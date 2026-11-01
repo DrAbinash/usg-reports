@@ -245,3 +245,19 @@ export type UsgResolved = {
   impressionLines?: UsgTriadLine[];
   adviceLines?: UsgTriadLine[];
 };
+
+/**
+ * Another report for the same patient, the same study and the same scanning
+ * day, as the composer's duplicate banner receives it. `label` is written by
+ * the route so every screen says the same words about the same record.
+ */
+export type SameDayReport = {
+  id: string;
+  patientName: string;
+  studyKey: string;
+  status: string;
+  serialNo: number | null;
+  scanDate: string | null;
+  createdAt: string;
+  label: string;
+};

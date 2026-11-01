@@ -106,6 +106,15 @@ export async function PUT(req: Request, ctx: Ctx) {
     const studyKey = typeof body.studyKey === "string" && getStudy(body.studyKey) ? body.studyKey : existing.studyKey;
     const state = normaliseState(body.state, studyKey);
     stateJson = JSON.stringify(state);
+    // The state itself has to be stored, not only the text derived from it.
+    // Finalize does not print what this request computed — it re-resolves the
+    // report from `stateJson`, and the print/PDF/share all render from that
+    // snapshot. Leaving the column behind meant a draft created from the worklist
+    // (all-normal) and then edited kept signing the ALL-NORMAL page: the doctor
+    // clicked Liver abscess, the preview and the impression column said abscess,
+    // the signed sheet said "No significant abnormality detected." Measured in the
+    // running studio before this line was added.
+    data.stateJson = stateJson;
     data.studyKey = state.studyKey;
   }
   if (typeof body.technique === "string") data.technique = body.technique;

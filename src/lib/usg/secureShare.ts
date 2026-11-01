@@ -5,6 +5,7 @@
  * the opaque token — never PHI. WhatsApp uses the standard wa.me URL scheme.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { runtimeSecret } from "@/lib/runtimeSecret";
 
 export type WhatsappRouting = "patient_only" | "patient_and_doctor" | "doctor_only";
 
@@ -22,7 +23,11 @@ export function shareSigningSecret(): string {
   if (a) return a;
   const b = (process.env.SECRET_ENCRYPTION_KEY ?? "").trim();
   if (b) return b;
-  return "usg-studio-dev-share-secret-do-not-use-in-prod";
+  // Used to be the literal "usg-studio-dev-share-secret-do-not-use-in-prod",
+  // which is in a public repo and was the answer on this install because the
+  // compose file sets neither env var. Anyone who could read this file and learn
+  // one report id could mint a link to every report in the clinic.
+  return runtimeSecret();
 }
 
 export function isWhatsappRouting(v: unknown): v is WhatsappRouting {

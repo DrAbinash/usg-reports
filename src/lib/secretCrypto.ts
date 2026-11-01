@@ -18,13 +18,24 @@
  * so dev/test works without env wiring. PRODUCTION MUST set the env var —
  * the derived key is public in the source and offers no real protection.
  */
-import { createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from "crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes, timingSafeEqual } from "crypto";
+import { runtimeSecret } from "@/lib/runtimeSecret";
 
 const ENV_KEY = "SECRET_ENCRYPTION_KEY";
 const ENVELOPE_PREFIX = "v1:";
+/** The key every envelope written before this install-minted secret existed was
+ *  sealed with. Kept only so those rows still open; new writes use the real key. */
+const LEGACY_DEV_KEY = Buffer.from("usg-studio-dev-key-do-not-use-in-prod-32b!", "utf8").subarray(0, 32);
 
-/** Resolve the 32-byte AES key. Prefer env; fall back to a deterministic
- *  dev key (logged as a warning on first use so production is aware). */
+let warnedLegacy = false;
+
+/** Resolve the 32-byte AES key.
+ *
+ * `SECRET_ENCRYPTION_KEY` (64 hex) wins if he set it; otherwise the install
+ * secret minted into `data/` on first boot, hashed to 32 bytes so any string is
+ * usable. The literal that used to live here is published in this repo, so on an
+ * install that never set the env var it was not a secret at all.
+ */
 function resolveKey(): Buffer {
   const env = (process.env[ENV_KEY] ?? "").trim();
   if (env) {
@@ -35,16 +46,7 @@ function resolveKey(): Buffer {
     }
     return Buffer.from(env, "hex");
   }
-  // Dev fallback — NOT secure. Logged once via console.warn.
-  if (!process.env.USG_TEST_SUPPRESS_KEY_WARN) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[secretCrypto] ${ENV_KEY} is unset — using deterministic dev key. ` +
-        `Set the env var (64 hex chars) in production.`,
-    );
-    process.env.USG_TEST_SUPPRESS_KEY_WARN = "1";
-  }
-  return Buffer.from("usg-studio-dev-key-do-not-use-in-prod-32b!", "utf8").subarray(0, 32);
+  return createHash("sha256").update(runtimeSecret()).digest();
 }
 
 /** Encrypt a plaintext secret into a `v1:iv:ct:tag` envelope. Empty input
@@ -63,24 +65,41 @@ export function encryptSecret(plaintext: string): string {
  *  doesn't start with `v1:` is returned verbatim — this is the legacy
  *  plaintext path so rows written before encryption shipped keep working.
  *  Auth-tag mismatch returns "" (never the wrong plaintext). */
-export function decryptSecret(stored: string | null | undefined): string {
-  if (!stored) return "";
-  if (!stored.startsWith(ENVELOPE_PREFIX)) return stored; // legacy plaintext
+function openEnvelope(stored: string, key: Buffer): string | null {
   try {
     const parts = stored.slice(ENVELOPE_PREFIX.length).split(":");
-    if (parts.length !== 3) return "";
+    if (parts.length !== 3) return null;
     const iv = Buffer.from(parts[0], "hex");
     const ct = Buffer.from(parts[1], "hex");
     const tag = Buffer.from(parts[2], "hex");
-    if (!iv.length || !ct.length || tag.length !== 16) return "";
-    const key = resolveKey();
+    if (!iv.length || !ct.length || tag.length !== 16) return null;
     const decipher = createDecipheriv("aes-256-gcm", key, iv);
     decipher.setAuthTag(tag);
-    const pt = Buffer.concat([decipher.update(ct), decipher.final()]);
-    return pt.toString("utf8");
+    return Buffer.concat([decipher.update(ct), decipher.final()]).toString("utf8");
   } catch {
-    return "";
+    return null;
   }
+}
+
+export function decryptSecret(stored: string | null | undefined): string {
+  if (!stored) return "";
+  if (!stored.startsWith(ENVELOPE_PREFIX)) return stored; // legacy plaintext
+  const pt = openEnvelope(stored, resolveKey());
+  if (pt !== null) return pt;
+  // Sealed with the key that was public in the source, from before this install
+  // had one of its own. Opening it keeps his Orthanc password working across the
+  // upgrade; saving Settings again re-seals it with the real key.
+  const legacy = openEnvelope(stored, LEGACY_DEV_KEY);
+  if (legacy !== null) {
+    if (!warnedLegacy) {
+      warnedLegacy = true;
+      console.warn(
+        "[secretCrypto] a stored secret is still sealed with the old published dev key — open Settings → Integrations and press Save to re-seal it.",
+      );
+    }
+    return legacy;
+  }
+  return "";
 }
 
 /** True if the stored value is already encrypted (envelope-prefixed). */

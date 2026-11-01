@@ -25,6 +25,19 @@ services:
       - CARE_API_BASE=${CARE_API_BASE:-}
       - CARE_API_KEY=${CARE_API_KEY:-}
 
+      # Install secrets. Leave these empty and the studio mints one into data/ on
+      # first boot (chmod 600) and uses it for share-link signing and for sealing
+      # the passwords saved in Settings. That replaced a literal key that was
+      # published in this repo. Setting them here is still better, because then
+      # the key is his and not the container's; generate 64 hex with
+      # `openssl rand -hex 32`.
+      - STUDIO_INTERNAL_SECRET=${STUDIO_INTERNAL_SECRET:-}
+      - SECRET_ENCRYPTION_KEY=${SECRET_ENCRYPTION_KEY:-}
+      # Set to 1 once the studio is only ever reached over the HTTPS domain.
+      # On the LAN the app is also served over plain http, where a Secure cookie
+      # would lock everybody out, so it stays off by default.
+      - STUDIO_COOKIE_SECURE=${STUDIO_COOKIE_SECURE:-}
+
       # CARE write-back — OFF by design in this deployment (2026-10-02).
       # The Studio is the record of truth for USG reports: same-day printing,
       # no ERP copy. The ERP's /finalize refuses any worklist row that is not

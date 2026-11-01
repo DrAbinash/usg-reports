@@ -1,7 +1,7 @@
 import { ensureSeed } from "@/lib/seed";
 import { getSession } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
-import { isDemoPin, isPinSetupOutstanding } from "@/lib/pinPolicy";
+import { isPinSetupOutstanding } from "@/lib/pinPolicy";
 
 export async function GET() {
   await ensureSeed();
@@ -16,7 +16,9 @@ export async function GET() {
     // that as setup still being owed, not as a configured clinic. The same
     // predicate gates /api/auth/setup, which must be allowed to write over it.
     needsSetup: isPinSetupOutstanding(settings.pinHash),
-    demoPin: isDemoPin(settings.pinHash),
+    // `demoPin` used to be published here. It told the whole internet that the
+    // seeded 123456 still opens this door, which is the one fact a scanner was
+    // looking for; the lock screen says the same thing from `needsSetup`.
     authenticated,
     // Pre-auth branding for the lock screen (no secrets)
     loginBranding: {

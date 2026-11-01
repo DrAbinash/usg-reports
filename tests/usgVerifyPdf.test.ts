@@ -19,23 +19,25 @@ import { USG_PATHOLOGIES_ALL } from "@/lib/usg/pathologies";
 const SECRET = "0123456789abcdef0123456789abcdef";
 
 describe("verify signing", () => {
-  const input = { serialNo: 7, patientName: "Rani Devi", dateIso: "2026-08-02T10:00:00.000Z" };
+  const input = { serialNo: 7, patientName: "Sample Patientone", dateIso: "2026-08-02T10:00:00.000Z" };
 
   it("message format is serial | normalised name | day stamp", () => {
-    expect(verifyMessage(input)).toBe("USG-0007|rani devi|02 Aug 2026");
+    expect(verifyMessage(input)).toBe("USG-0007|sample patientone|02 Aug 2026");
   });
 
-  it("signing is deterministic and 8 hex chars", () => {
-    const a = signMessage("USG-0007|rani devi|02 Aug 2026", SECRET);
-    const b = signMessage("USG-0007|rani devi|02 Aug 2026", SECRET);
+  it("signing is deterministic and 12 hex chars", () => {
+    const a = signMessage("USG-0007|sample patientone|02 Aug 2026", SECRET);
+    const b = signMessage("USG-0007|sample patientone|02 Aug 2026", SECRET);
     expect(a).toBe(b);
-    expect(a).toMatch(/^[0-9a-f]{8}$/);
+    // Eight was 2^32 against a public endpoint; sheets already printed keep
+    // verifying because checkPayload still accepts the short form.
+    expect(a).toMatch(/^[0-9a-f]{12}$/);
   });
 
   it("payload round-trips through checkPayload", () => {
     const payload = buildPayload(input, SECRET);
     const result = checkPayload(payload, SECRET);
-    expect(result).toEqual({ valid: true, serialNo: 7, patientName: "rani devi", date: "02 Aug 2026" });
+    expect(result).toEqual({ valid: true, serialNo: 7, patientName: "sample patientone", date: "02 Aug 2026" });
   });
 
   it("a different secret rejects the payload", () => {
@@ -45,7 +47,7 @@ describe("verify signing", () => {
 
   it("tampering with the name or serial breaks the signature", () => {
     const payload = buildPayload(input, SECRET);
-    expect(checkPayload(payload.replace("rani devi", "sita devi"), SECRET).valid).toBe(false);
+    expect(checkPayload(payload.replace("sample patientone", "mock patientseven"), SECRET).valid).toBe(false);
     expect(checkPayload(payload.replace("USG-0007", "USG-0008"), SECRET).valid).toBe(false);
     expect(checkPayload(`${payload}x`, SECRET).valid).toBe(false);
   });
@@ -109,7 +111,7 @@ describe("report PDF", () => {
     usgDeclarationLine: "",
   };
   const resolved = resolve(initialState("wa-female"), makeLookup(USG_PATHOLOGIES_ALL), "Routine scan.");
-  const patient = { name: "Rani Devi", age: "30", sex: "F", referredBy: "Dr. Kumar", date: "02 Aug 2026", serial: formatUsgSerial(7) };
+  const patient = { name: "Sample Patientone", age: "30", sex: "F", referredBy: "Dr. Kumar", date: "02 Aug 2026", serial: formatUsgSerial(7) };
 
   it("produces a real PDF with one page and QR embedded", async () => {
     const qrPng = new Uint8Array(await QRCode.toBuffer("http://localhost:3000/verify?d=x", { margin: 1, width: 200 }));
@@ -117,7 +119,7 @@ describe("report PDF", () => {
     expect(Buffer.from(bytes.slice(0, 5)).toString()).toBe("%PDF-");
     const doc = await PDFDocument.load(bytes);
     expect(doc.getPageCount()).toBeGreaterThanOrEqual(1);
-    expect(doc.getTitle()).toContain("Rani Devi");
+    expect(doc.getTitle()).toContain("Sample Patientone");
   });
 
   it("embeds attached stills", async () => {
@@ -140,7 +142,7 @@ describe("report PDF", () => {
   it("patient details and study title reach the content streams", async () => {
     const bytes = await buildUsgReportPdf({ settings, patient, resolved });
     const text = await pdfStreamsText(bytes);
-    expect(text).toContain(hex("Rani Devi"));
+    expect(text).toContain(hex("Sample Patientone"));
     expect(text).toContain(hex("USG WHOLE ABDOMEN"));
     expect(text).toContain(hex("Dr. Sugandha"));
   });

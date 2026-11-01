@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { getQrSecret } from "@/lib/usg/qrServer";
 import { checkPayload } from "@/lib/usg/verify";
+import { VERIFY_RULE, clientKey, gated, noteAttempt, retrySeconds } from "@/lib/rateLimit";
 
 /**
  * PUBLIC report verification (v5): validate a signed payload from a printed
@@ -9,6 +10,14 @@ import { checkPayload } from "@/lib/usg/verify";
  * entry exists. Reveals only what the sheet itself shows.
  */
 export async function GET(req: Request) {
+  const key = clientKey(req, "verify");
+  const gate = gated(key, VERIFY_RULE);
+  if (gate.blocked) {
+    return Response.json(
+      { valid: false, reason: `too many attempts — try again in ${retrySeconds(gate.retryAfterMs)}s` },
+      { status: 429, headers: { "Retry-After": String(retrySeconds(gate.retryAfterMs)) } },
+    );
+  }
   const d = new URL(req.url).searchParams.get("d") ?? "";
   if (!d.trim()) {
     return Response.json({ valid: false, reason: "no payload" });
@@ -16,8 +25,12 @@ export async function GET(req: Request) {
   const secret = await getQrSecret();
   const result = checkPayload(decodeURIComponent(d), secret);
   if (!result.valid) {
+    // A forged or garbled payload is the thing being counted. The code is
+    // truncated HMAC, so without a limit this endpoint is an oracle over 2^32.
+    noteAttempt(key, false);
     return Response.json({ valid: false, reason: "signature mismatch" });
   }
+  noteAttempt(key, true);
 
   // The signed fields must also match a live register row. Status is not part of
   // the match: the serial is only ever issued at finalize and is never

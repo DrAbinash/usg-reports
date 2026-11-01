@@ -31,9 +31,18 @@ export function verifyMessage(input: VerifyPayloadInput): string {
   return `USG-${String(input.serialNo).padStart(4, "0")}|${normName(input.patientName)}|${dayStamp(input.dateIso)}`;
 }
 
-/** 8-char HMAC-SHA256 code (hex) for the message under the install secret. */
-export function signMessage(message: string, secret: string): string {
-  return createHmac("sha256", secret).update(message).digest("hex").slice(0, 8);
+/**
+ * HMAC-SHA256 code (hex) for the message under the install secret.
+ *
+ * Twelve characters, not eight. The verify endpoint is public and unthrottled
+ * until this change, and an eight-hex code is 2^32 — a machine can spend that in
+ * an afternoon and the prize is a page that answers "genuine" for a report that
+ * was never printed. Sheets already handed out carry eight, so the short form
+ * stays acceptable for them (see checkPayload) rather than invalidating a
+ * patient's printed report because the clinic got stricter.
+ */
+export function signMessage(message: string, secret: string, length = 12): string {
+  return createHmac("sha256", secret).update(message).digest("hex").slice(0, length);
 }
 
 /** Build the full payload printed in the QR: message|code. */
@@ -60,9 +69,12 @@ export function checkPayload(
   const [serial, name, date, code] = parts;
   const serialNo = Number(serial.replace(/^USG-/i, ""));
   if (!Number.isInteger(serialNo) || serialNo <= 0) return { valid: false };
-  if (!/^[0-9a-f]{8}$/i.test(code)) return { valid: false };
+  if (!/^[0-9a-f]{8}$|^[0-9a-f]{12}$/i.test(code)) return { valid: false };
   const message = `${serial}|${normName(name)}|${date}`;
-  if (signMessage(message, secret) !== code.toLowerCase()) return { valid: false };
+  const lower = code.toLowerCase();
+  // Twelve for every sheet printed from now on; eight for the ones already in
+  // patients' hands.
+  if (signMessage(message, secret, lower.length) !== lower) return { valid: false };
   return { valid: true, serialNo, patientName: name, date };
 }
 

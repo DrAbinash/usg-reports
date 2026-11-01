@@ -257,25 +257,37 @@ async function migrateLegacySecrets(row: { id: string; orthancPassword: string |
   await db.hospitalSettings.update({ where: { id: row.id }, data });
 }
 
-const SECRET_FIELDS = ["pinHash", "careApiKey", "orthancPassword", "geminiApiKey"] as const;
+const SECRET_FIELDS = ["pinHash", "careApiKey", "orthancPassword", "geminiApiKey", "qrSecret"] as const;
 
 export type MaskedSettings = Omit<HospitalSettingsRow, (typeof SECRET_FIELDS)[number]> & {
   pinSet: boolean;
   careApiKeySet: boolean;
   orthancPasswordSet: boolean;
   geminiApiKeySet: boolean;
+  qrSecretSet: boolean;
 };
 
 /** Client-safe view: secrets never leave the server, only their presence. */
 export async function getMaskedSettings(): Promise<MaskedSettings> {
   const s = await getSettings();
-  const { pinHash: _pinHash, careApiKey: _careApiKey, orthancPassword: _orthancPassword, geminiApiKey: _geminiApiKey, ...safe } = s;
+  const {
+    pinHash: _pinHash,
+    careApiKey: _careApiKey,
+    orthancPassword: _orthancPassword,
+    geminiApiKey: _geminiApiKey,
+    qrSecret: _qrSecret,
+    ...safe
+  } = s;
   return {
     ...safe,
     pinSet: !!s.pinHash,
     careApiKeySet: !!s.careApiKey,
     orthancPasswordSet: !!s.orthancPassword,
     geminiApiKeySet: !!s.geminiApiKey,
+    // The verification QR key. Whoever holds it can mint a QR that this studio's
+    // public /api/usg/verify will call genuine, so it is the one secret whose
+    // absence from this list was a forgery kit rather than a credential leak.
+    qrSecretSet: !!s.qrSecret,
   };
 }
 

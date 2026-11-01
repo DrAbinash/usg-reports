@@ -48,6 +48,11 @@ export async function createSession(trust: boolean): Promise<void> {
     sameSite: "lax",
     expires: expiresAt,
     path: "/",
+    // Off by default because this clinic also uses the studio over plain
+    // http://NAS:3040 on the LAN, where a Secure cookie means nobody can log in.
+    // Set STUDIO_COOKIE_SECURE=1 next to the HTTPS domain and the session cookie
+    // stops travelling in the clear.
+    secure: (process.env.STUDIO_COOKIE_SECURE ?? "").trim() === "1",
   });
 }
 

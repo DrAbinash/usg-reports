@@ -270,6 +270,14 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const [restoreSnap, setRestoreSnap] = useState<DraftSnapshot | null>(null);
   const [lastAutosave, setLastAutosave] = useState<number | null>(null);
   const dirtyRef = useRef(false);
+  // The newest snapshot, captured during render rather than in an effect: the
+  // last render before a view switch may never get its effects run, and that
+  // render is exactly the edit the flush is there to save.
+  const latestSnapRef = useRef<DraftSnapshot | null>(null);
+  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftKeyRef = useRef(dKey);
+  draftKeyRef.current = dKey;
+  const isFinalRef = useRef(false);
   const busyRef = useRef(busy);
   busyRef.current = busy;
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -334,11 +342,25 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   });
   const patients = patientsQ.data ?? [];
 
+  // Both queries below key on the patient's name, which the doctor types by
+  // hand: every keystroke was a new query key and a new request, so opening an
+  // OB report and typing "Paromita Sen" put fifteen GETs on a SQLite file with
+  // one writer — before the first chip was clicked. Wait for 300 ms of quiet.
+  const [settledName, setSettledName] = useState(patientName);
+  const [settledPhone, setSettledPhone] = useState(patientPhone);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSettledName(patientName);
+      setSettledPhone(patientPhone);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [patientName, patientPhone]);
+
   const patientReportsQ = useQuery({
-    queryKey: ["usg", "reports", "by-name", patientName.trim()],
-    enabled: !!patientName.trim() && isObStudyKey(state.studyKey),
+    queryKey: ["usg", "reports", "by-name", settledName.trim()],
+    enabled: !!settledName.trim() && isObStudyKey(state.studyKey),
     queryFn: async () => {
-      const r = await fetch(`/api/usg/reports?patientName=${encodeURIComponent(patientName.trim())}&limit=20`);
+      const r = await fetch(`/api/usg/reports?patientName=${encodeURIComponent(settledName.trim())}&limit=20`);
       if (!r.ok) return [] as Array<{ id: number; scanDate: string | null; stateJson: string | null; studyKey: string | null; status: string }>;
       const d = await r.json();
       return (d.reports ?? d ?? []) as Array<{ id: number; scanDate: string | null; stateJson: string | null; studyKey: string | null; status: string }>;
@@ -347,11 +369,11 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
   const patientReports = patientReportsQ.data ?? [];
 
   const priorFinalizedQ = useQuery({
-    queryKey: ["usg", "reports", "prior-finalized", patientPhone.trim(), patientName.trim().toLowerCase(), report?.id ?? ""],
-    enabled: patientPhone.trim().length >= 6 || patientName.trim().length >= 2,
+    queryKey: ["usg", "reports", "prior-finalized", settledPhone.trim(), settledName.trim().toLowerCase(), report?.id ?? ""],
+    enabled: settledPhone.trim().length >= 6 || settledName.trim().length >= 2,
     queryFn: async () => {
-      const phone = patientPhone.trim();
-      const name = patientName.trim();
+      const phone = settledPhone.trim();
+      const name = settledName.trim();
       const url =
         phone.length >= 6
           ? `/api/usg/reports?patientPhone=${encodeURIComponent(phone)}&status=FINALIZED&limit=8`
@@ -406,6 +428,7 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
 
   const isPregnancyStudy = studyKey === "ob" || studyKey === "ep";
   const isFinal = !reopenedHere && (report?.status === "FINALIZED" || finalizedHere);
+  isFinalRef.current = isFinal;
 
   const initialSnap = useMemo(
     () => ({
@@ -433,16 +456,57 @@ export function UsgComposer({ pathologies, settings, report, prefill, diffSource
     () => ({ savedAt: Date.now(), ...initialSnap, patientName, patientPhone, patientAge, patientSex, referredBy, studyKey, technique, scanDate, state }),
     [initialSnap, patientName, patientPhone, patientAge, patientSex, referredBy, studyKey, technique, scanDate, state],
   );
+  latestSnapRef.current = currentSnap;
+
+  /**
+   * Write the draft now. Compared against the mount snapshot at call time, so a
+   * flush that arrives with nothing new writes nothing — and a flush after
+   * finalisation is refused outright, because a signed report must never come
+   * back offering "Restore" on an unsaved snapshot.
+   */
+  const writeDraftNow = useCallback(() => {
+    const snap = latestSnapRef.current;
+    if (!snap || isFinalRef.current) return;
+    if (!snapshotDiffers({ ...snap, savedAt: 0 }, initialSnap)) return;
+    const at = Date.now();
+    if (saveDraft(draftKeyRef.current, { ...snap, savedAt: at })) setLastAutosave(at);
+  }, [initialSnap]);
 
   useEffect(() => {
     if (isFinal) return;
     dirtyRef.current = snapshotDiffers({ ...currentSnap, savedAt: 0 }, initialSnap);
     if (!dirtyRef.current) return;
-    const t = setTimeout(() => {
-      if (saveDraft(dKey, { ...currentSnap, savedAt: Date.now() })) setLastAutosave(Date.now());
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+    draftTimerRef.current = setTimeout(() => {
+      draftTimerRef.current = null;
+      writeDraftNow();
     }, 400);
-    return () => clearTimeout(t);
-  }, [dKey, currentSnap, isFinal, initialSnap]);
+  }, [dKey, currentSnap, isFinal, initialSnap, writeDraftNow]);
+
+  // The 400 ms window above was also the window in which a report could be
+  // lost: navigating to the register unmounts the composer, and the clinic's
+  // browser can have its hidden tab killed — each threw away the write that was
+  // in flight. localStorage from those handlers is allowed (a network call is
+  // not), so whatever is pending is flushed now rather than never.
+  useEffect(() => {
+    const flush = () => {
+      if (draftTimerRef.current) {
+        clearTimeout(draftTimerRef.current);
+        draftTimerRef.current = null;
+      }
+      writeDraftNow();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, [writeDraftNow]);
 
   useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent) => {

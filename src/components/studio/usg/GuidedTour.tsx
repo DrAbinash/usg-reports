@@ -5,7 +5,7 @@ import { X, ChevronLeft, ChevronRight, Waves, MousePointerClick, Calculator, Pri
 import { Button } from "@/components/ui/button";
 
 const STEPS = [
-  { icon: Waves, title: "The Composer", body: "Pick the study, then tap organs and tap the findings the probe found. One report per patient — drafts save themselves every second." },
+  { icon: Waves, title: "The Composer", body: "Pick the study, then tap organs and tap the findings the probe found. One report per patient — the draft is mirrored in this browser as you type, and stored with the studio when you press Ctrl+S or Save." },
   { icon: MousePointerClick, title: "Pathology Chips", body: "Chips toggle on/off, so one organ can carry several findings. Findings merge into paragraphs and the impression writes itself." },
   { icon: Calculator, title: "Bedside Calculators", body: "Hadlock biometry, LMP → GA/EDD, AFI, volumes, TI-RADS — one click each, and every result copies to the clipboard." },
   { icon: Printer, title: "Premium Print", body: "Your letterhead with logo and signature. In the print dialog tick “Background graphics” so the gradient masthead reaches paper." },

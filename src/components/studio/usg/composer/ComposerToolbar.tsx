@@ -531,6 +531,22 @@ export const ComposerToolbar = memo(function ComposerToolbar(p: ComposerToolbarP
           {billedBanner}
         </div>
       ) : null}
+      {/* The doctor's only evidence that this report is kept somewhere other
+          than the current tab. Deliberately outside the demography strip below,
+          because opening a saved report collapses that strip and the writing
+          screen is exactly when nobody is looking at the patient fields.
+          `lastAutosave` was carried through props and the memo comparator for a
+          release and never rendered. */}
+      {!isFinal && lastAutosave ? (
+        <div
+          role="status"
+          className="flex items-center gap-1 border-b border-border/60 bg-emerald-50/40 px-3 py-1 text-[10px] text-emerald-800"
+          title={`The report is mirrored in this browser 400 ms after you stop typing, and again when you switch tab or leave the page.\nLast kept: ${new Date(lastAutosave).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit" })}`}
+        >
+          <Check className="h-3 w-3" />
+          Draft kept at {new Date(lastAutosave).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })} — press Ctrl+S to store it with the studio
+        </div>
+      ) : null}
       {/* Patient/study line lives in the pink CARE header — only demography form stays here when expanded */}
       {!headerCollapsed ? (
         <div className="flex items-center gap-2 border-b border-border/60 px-3 py-1">

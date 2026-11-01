@@ -7,16 +7,6 @@ import { memo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { Sparkles } from "lucide-react";
 import type { UsgComposerState, UsgPathologyDef, UsgResolved, UsgTriadLine } from "@/lib/usg/types";
@@ -131,7 +121,6 @@ export const ImpressionZone = memo(function ImpressionZone({
   onPathologiesRefresh,
 }: ImpressionZoneProps) {
   const queryClient = useQueryClient();
-  const [confirmAutoFill, setConfirmAutoFill] = useState(false);
   const [snippetKind, setSnippetKind] = useState<"impression" | "advice" | null>(null);
   const [snippetSeed, setSnippetSeed] = useState<string>("");
 
@@ -243,11 +232,6 @@ export const ImpressionZone = memo(function ImpressionZone({
       edited: false,
     }));
 
-  const impressionHasText =
-    !!(state.impressionOverride?.trim()) ||
-    impressionLines.some((l) => l.text.trim()) ||
-    !!(state.impressionAddendum?.trim());
-
   const runAutoFill = () => {
     const selectedChips: { organKey: string; chipKey: string }[] = [];
     for (const o of state.organs) {
@@ -284,11 +268,21 @@ export const ImpressionZone = memo(function ImpressionZone({
       toast.message("Nothing to auto-fill — select chips or use a known study");
       return;
     }
+    // Only the drafted impression is replaced, so only that is worth warning
+    // about: an impression that exists because chips were selected is rebuilt by
+    // definition, and saying "replaced what you typed" when nothing was typed is
+    // how a warning stops being read.
+    const wasWritten = state.impressionOverride?.trim();
+    const replaced = !!wasWritten && wasWritten !== text.trim();
     setImpressionManual(true);
     setState((s) => ({ ...s, impressionOverride: text }));
     if (result.criticalFirst.length) {
       toast.warning("Critical finding in impression — log the referring-doctor call before finalize", {
         duration: 8000,
+      });
+    } else if (replaced) {
+      toast.message("Impression replaced with the draft from your chips — Ctrl+Z takes yours back", {
+        duration: 6000,
       });
     } else {
       toast.success("Impression auto-filled — review and edit before finalize");
@@ -393,39 +387,13 @@ export const ImpressionZone = memo(function ImpressionZone({
             variant="outline"
             className="h-7 border-sky-200 bg-sky-50/70 px-2.5 text-[10px] font-semibold text-sky-800 hover:bg-sky-100"
             title="Compose impression from selected chips + OB data (deterministic)"
-            onClick={() => {
-              if (impressionHasText) setConfirmAutoFill(true);
-              else runAutoFill();
-            }}
+            onClick={runAutoFill}
           >
             <Sparkles className="mr-1 h-3 w-3" />
             Auto-fill Impression
           </Button>
         </div>
       ) : null}
-
-      <AlertDialog open={confirmAutoFill} onOpenChange={setConfirmAutoFill}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Replace existing impression?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Auto-fill will overwrite the current impression text with a deterministic draft from
-              selected chips. You can still edit before finalize.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                setConfirmAutoFill(false);
-                runAutoFill();
-              }}
-            >
-              Replace
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       <UsgTriadZones
         impressionLines={impressionLines}
